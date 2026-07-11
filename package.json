@@ -1,0 +1,46 @@
+{
+	"name": "@nomideusz/zaur-world",
+	"version": "0.1.0",
+	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"sideEffects": false,
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"prepublishOnly": "npm run build"
+	},
+	"keywords": [
+		"canvas",
+		"sky",
+		"weather",
+		"ambient",
+		"generative",
+		"day-night",
+		"sunrise-sunset",
+		"open-meteo",
+		"background",
+		"zaur"
+	],
+	"author": "nomideusz",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/nomideusz/zaur-world.git"
+	},
+	"homepage": "https://zaur.app",
+	"publishConfig": {
+		"access": "public"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.2"
+	}
+}
