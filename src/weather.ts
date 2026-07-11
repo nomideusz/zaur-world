@@ -21,6 +21,9 @@ export interface WeatherConditions {
   /** Today's real sunrise/sunset as local decimal hours, null if unknown. */
   sunriseH: number | null;
   sunsetH: number | null;
+  /** Approximate visitor latitude in degrees — drives hemisphere-aware
+   *  seasons. Optional so hand-rolled weather sources stay valid. */
+  latitude?: number | null;
 }
 
 interface OpenMeteoCurrent {
@@ -86,6 +89,11 @@ export class WeatherClient {
     return this.state;
   }
 
+  /** Resolved approximate location (null until the first geo lookup). */
+  location(): { lat: number; lon: number } | null {
+    return this.cachedGeo ? { lat: this.cachedGeo.lat, lon: this.cachedGeo.lon } : null;
+  }
+
   private async refresh(): Promise<void> {
     try {
       const geo = await this.geo();
@@ -108,7 +116,7 @@ export class WeatherClient {
       const c = data.current;
       if (!c) return;
 
-      this.state = deriveConditions(c, data.daily);
+      this.state = { ...deriveConditions(c, data.daily), latitude: geo.lat };
       if (this.card) {
         this.card.update(formatLine(geo.city, c), this.state);
         window.setTimeout(() => this.card?.show(CARD_DURATION_MS), FIRST_SHOW_DELAY_MS);

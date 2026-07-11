@@ -9,6 +9,8 @@
 // is handled by the frosted terrain cards in CSS, not by muting the sky.
 
 import type { WeatherConditions } from "./weather.js";
+import type { TerrainProfile } from "./terrain.js";
+import type { SatellitePass } from "./satellites.js";
 
 export interface WorldState {
   width: number;
@@ -20,6 +22,10 @@ export interface WorldOptions {
   weather?: () => WeatherConditions | null;
   /** Foreground dot-grid color. Pass null to disable the grid. */
   gridColor?: string | null;
+  /** Polled for the local terrain profile; null = default rolling hills. */
+  terrain?: () => TerrainProfile | null;
+  /** Polled each frame for an active ISS pass (see SatelliteWatcher). */
+  satellites?: () => SatellitePass | null;
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
@@ -176,12 +182,30 @@ export class World {
   private shootingTimer = 90 + Math.random() * 240;
   /** 0..1 — ground wetness. Builds while it rains, dries over ~5 minutes. */
   private wetness = 0;
+  /** Terrain profile currently baked into the hill paths. */
+  private appliedTerrain: TerrainProfile | null = null;
+  /** Third distant peak line — only in properly mountainous places. */
+  private hillsPeaks: Array<[number, number]> = [];
+  private coastal = false;
+  /** Migrating V-formation (spring/autumn) — one flock at a time. */
+  private flock: { x: number; y: number } | null = null;
+  private flockTimer = 240 + Math.random() * 480;
+  /** One airplane at a time: contrail by day, blinking light by night. */
+  private plane: { x: number; y: number; dir: 1 | -1; age: number } | null = null;
+  private planeTimer = 420 + Math.random() * 900;
+  /** Stylized satellite train gliding across the night sky, rarely. */
+  private train: { x: number; y: number; vx: number; vy: number; age: number } | null = null;
+  private trainTimer = 1500 + Math.random() * 2100;
   private readonly weatherFn: () => WeatherConditions | null;
   private readonly gridColor: string | null;
+  private readonly terrainFn: () => TerrainProfile | null;
+  private readonly satFn: () => SatellitePass | null;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
     this.gridColor = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
+    this.terrainFn = opts.terrain ?? (() => null);
+    this.satFn = opts.satellites ?? (() => null);
     this.regenStars();
     this.regenClouds();
     this.regenHills();
@@ -220,8 +244,32 @@ export class World {
     this.tickSplashes(dt);
     this.tickLightning(wx, dt);
     this.tickBirds(dt);
-    this.tickShootingStar(dt, starAlpha(this.currentHour(wx)));
+    const date = new Date();
+    const h = this.currentHour(wx, date);
+    this.tickShootingStar(dt, starAlpha(h), date);
     this.tickWetness(wx, dt);
+    this.applyTerrain();
+    const m = this.seasonMonth(date, wx);
+    const migrating = m === 2 || m === 3 || m === 8 || m === 9;
+    const fairDay = (!wx || wx.precipitation === "none") && daylight(h) > 0.5;
+    this.tickFlock(dt, migrating && fairDay);
+    this.tickPlane(wx, dt);
+    this.tickTrain(dt, starAlpha(h));
+  }
+
+  /** Re-bake the hill paths when a terrain profile (async fetch) arrives. */
+  private applyTerrain(): void {
+    const t = this.terrainFn();
+    if (t && t !== this.appliedTerrain) {
+      this.appliedTerrain = t;
+      this.regenHills();
+    }
+  }
+
+  /** Calendar month shifted six months in the southern hemisphere. */
+  private seasonMonth(date: Date, wx: WeatherConditions | null): number {
+    const m = date.getMonth();
+    return (wx?.latitude ?? 50) < 0 ? (m + 6) % 12 : m;
   }
 
   /** The canonical (sun-warped) hour — see warpHour. */
@@ -263,6 +311,9 @@ export class World {
     const sa = starAlpha(h) * (1 - cloudAlpha * 0.7);
     if (sa > 0.01) this.drawStars(ctx, sa);
     if (this.shooting) this.drawShootingStar(ctx, sa);
+    if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
+    const issPass = this.satFn();
+    if (issPass && sa > 0.2) this.drawIss(ctx, issPass.progress, sa);
 
     // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
@@ -283,6 +334,10 @@ export class World {
     const heat = wx ? heatFactor(wx.temperatureC, cloudAlpha, h) : 0;
     if (heat > 0.02) this.drawHeatHaze(ctx, heat);
 
+    // A rainbow when the sun and a clearing shower share the sky.
+    const rainbowA = this.rainbowAlpha(wx, cloudAlpha, h);
+    if (rainbowA > 0.02) this.drawRainbow(ctx, h, rainbowA);
+
     // Mid + near cloud layers in front of the celestial body.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
       this.drawCloudLayer(ctx, 1, cloudAlpha, wx, h);
@@ -290,12 +345,15 @@ export class World {
     }
 
     // Pixel birds drifting across the upper sky on clear-ish days. They
-    // shelter during precipitation, and winter skies are emptier.
-    const month = date.getMonth();
+    // shelter during precipitation, and winter skies are emptier. Seasons
+    // flip with the hemisphere.
+    const month = this.seasonMonth(date, wx);
     const winter = month === 11 || month <= 1;
     const sheltering = !!wx && wx.precipitation !== "none";
     const dayA = sheltering ? 0 : dayCreatureAlpha(h) * (1 - cloudAlpha * 0.6);
     if (dayA > 0.05) this.drawBirds(ctx, dayA, winter ? 0.4 : 1);
+    if (this.flock && dayA > 0.05) this.drawFlock(ctx, dayA);
+    if (this.plane) this.drawPlane(ctx, h);
 
     // Fireflies near the lower sky band on clear nights — May to September;
     // fireflies in a January frost would break the spell.
@@ -933,11 +991,20 @@ export class World {
     }
   }
 
-  /** Two-layer horizon silhouette. The path is sampled once at resize time. */
+  /** Horizon silhouette, shaped by the local terrain profile when present. */
   private regenHills(): void {
     const { width, height } = this.state;
-    this.hillsFar = hillPath(7331, height * 0.62, height * 0.028, 22, width);
-    this.hillsNear = hillPath(919, height * 0.74, height * 0.036, 16, width);
+    const t = this.appliedTerrain;
+    const relief = t?.relief ?? 130; // default: gentle rolling hills
+    this.coastal = t?.coastal ?? false;
+    // Plains stay low; alpine relief pushes taller, busier ridgelines.
+    let amp = Math.min(2.4, 0.45 + relief / 320);
+    if (this.coastal) amp *= 0.55; // coasts read flat toward the water
+    const seg = relief > 500 ? 30 : 22;
+    this.hillsFar = hillPath(7331, height * 0.62, height * 0.028 * amp, seg, width);
+    this.hillsNear = hillPath(919, height * 0.74, height * 0.036 * amp, Math.max(16, seg - 6), width);
+    this.hillsPeaks =
+      relief > 550 ? hillPath(2718, height * 0.56, height * 0.05 * amp, 34, width) : [];
   }
 
   private regenBirds(): void {
@@ -987,10 +1054,28 @@ export class World {
     const farRGB = lerpRGB(bottomRGB, bg, 0.62);
     const nearRGB = lerpRGB(bottomRGB, bg, 0.84);
 
+    if (this.hillsPeaks.length > 0) {
+      ctx.fillStyle = rgbToCss(lerpRGB(bottomRGB, bg, 0.45));
+      fillHillPath(ctx, this.hillsPeaks, width, height);
+    }
     ctx.fillStyle = rgbToCss(farRGB);
     fillHillPath(ctx, this.hillsFar, width, height);
+    if (this.coastal) this.drawSeaBand(ctx);
     ctx.fillStyle = rgbToCss(nearRGB);
     fillHillPath(ctx, this.hillsNear, width, height);
+  }
+
+  /** Pale shimmering strip where the far ridge meets the water. */
+  private drawSeaBand(ctx: CanvasRenderingContext2D): void {
+    const { width, height } = this.state;
+    const t = performance.now() / 1000;
+    const y = height * 0.655;
+    const grad = ctx.createLinearGradient(0, y, 0, y + height * 0.05);
+    const a = 0.1 + 0.03 * Math.sin(t * 0.8);
+    grad.addColorStop(0, `rgba(210, 225, 240, ${a.toFixed(3)})`);
+    grad.addColorStop(1, "rgba(210, 225, 240, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, width, height * 0.05);
   }
 
   private drawAurora(ctx: CanvasRenderingContext2D, alpha: number): void {
@@ -1054,7 +1139,7 @@ export class World {
     }
   }
 
-  private tickShootingStar(dt: number, starA: number): void {
+  private tickShootingStar(dt: number, starA: number, date: Date): void {
     if (this.shooting) {
       this.shooting.age += dt;
       this.shooting.x += this.shooting.vx * dt;
@@ -1065,7 +1150,8 @@ export class World {
     if (starA < 0.5) return; // only when the stars are properly out
     this.shootingTimer -= dt;
     if (this.shootingTimer <= 0) {
-      this.shootingTimer = 120 + Math.random() * 300; // one every 2–7 minutes
+      // Meteor-shower peaks multiply the base one-every-2–7-minutes rate.
+      this.shootingTimer = (120 + Math.random() * 300) / meteorRate(date);
       const { width, height } = this.state;
       const speed = 420 + Math.random() * 240;
       const angle = Math.PI * (0.12 + Math.random() * 0.16); // shallow descent
@@ -1135,6 +1221,173 @@ export class World {
     }
   }
 
+  private tickFlock(dt: number, migrating: boolean): void {
+    const { width } = this.state;
+    if (this.flock) {
+      this.flock.x += width * 0.02 * dt; // ~50 s to cross
+      if (this.flock.x > width * 1.3) this.flock = null;
+      return;
+    }
+    if (!migrating) return;
+    this.flockTimer -= dt;
+    if (this.flockTimer <= 0) {
+      this.flockTimer = 240 + Math.random() * 480; // every 4–12 min in season
+      this.flock = {
+        x: -width * 0.25,
+        y: this.state.height * (0.1 + Math.random() * 0.12),
+      };
+    }
+  }
+
+  private drawFlock(ctx: CanvasRenderingContext2D, alpha: number): void {
+    const f = this.flock;
+    if (!f) return;
+    ctx.fillStyle = `rgba(20, 20, 28, ${(0.75 * alpha).toFixed(3)})`;
+    const t = performance.now() / 1000;
+    // A V of seven, wingbeats staggered down each arm.
+    for (let i = -3; i <= 3; i++) {
+      const bx = f.x - Math.abs(i) * 14;
+      const by = f.y + Math.abs(i) * 7 + i * 1.5;
+      const flap = Math.sin(t * 7 + i * 0.9);
+      if (flap > 0) {
+        ctx.fillRect((bx | 0) - 4, (by | 0) - 1, 4, 1);
+        ctx.fillRect(bx | 0, (by | 0) - 1, 4, 1);
+      } else {
+        ctx.fillRect((bx | 0) - 4, by | 0, 4, 1);
+        ctx.fillRect(bx | 0, by | 0, 4, 1);
+      }
+    }
+  }
+
+  private tickPlane(wx: WeatherConditions | null, dt: number): void {
+    const { width, height } = this.state;
+    if (this.plane) {
+      this.plane.age += dt;
+      this.plane.x += this.plane.dir * width * 0.012 * dt; // ~80 s to cross
+      if (this.plane.x < -width * 0.2 || this.plane.x > width * 1.2) this.plane = null;
+      return;
+    }
+    // Planes stay grounded (visually) in storms and heavy cover.
+    if (wx && (cloudAlphaFor(wx) > 0.5 || wx.thunder)) return;
+    this.planeTimer -= dt;
+    if (this.planeTimer <= 0) {
+      this.planeTimer = 420 + Math.random() * 900; // one every 7–22 min
+      const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+      this.plane = {
+        x: dir === 1 ? -width * 0.05 : width * 1.05,
+        y: height * (0.08 + Math.random() * 0.14),
+        dir,
+        age: 0,
+      };
+    }
+  }
+
+  private drawPlane(ctx: CanvasRenderingContext2D, h: number): void {
+    const p = this.plane;
+    if (!p) return;
+    const day = daylight(h);
+    const { width } = this.state;
+    if (day > 0.3) {
+      // Contrail: brightest just behind the plane, dissolving downwind.
+      const trailLen = Math.min(width * 0.35, p.age * width * 0.012);
+      const tx = p.x - p.dir * trailLen;
+      const grad = ctx.createLinearGradient(tx, p.y, p.x, p.y);
+      grad.addColorStop(0, "rgba(255, 255, 255, 0)");
+      grad.addColorStop(1, `rgba(255, 255, 255, ${(0.3 * day).toFixed(3)})`);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(tx, p.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(230, 235, 245, ${(0.8 * day).toFixed(3)})`;
+      ctx.fillRect((p.x - 1) | 0, (p.y - 1) | 0, 3, 2);
+    } else {
+      // Night: a slow blinking navigation light crossing the sky.
+      const blink = Math.sin(p.age * 6) > 0.4 ? 1 : 0.15;
+      ctx.fillStyle = `rgba(255, 210, 190, ${(0.8 * blink).toFixed(3)})`;
+      ctx.fillRect(p.x | 0, p.y | 0, 2, 2);
+    }
+  }
+
+  private tickTrain(dt: number, starA: number): void {
+    if (this.train) {
+      this.train.age += dt;
+      this.train.x += this.train.vx * dt;
+      this.train.y += this.train.vy * dt;
+      if (this.train.age > 40) this.train = null;
+      return;
+    }
+    if (starA < 0.5) return;
+    this.trainTimer -= dt;
+    if (this.trainTimer <= 0) {
+      this.trainTimer = 1500 + Math.random() * 2100; // every 25–60 min
+      const { width, height } = this.state;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const speed = width / 35; // a satellite glide, not a meteor streak
+      this.train = {
+        x: dir === 1 ? -width * 0.1 : width * 1.1,
+        y: height * (0.08 + Math.random() * 0.2),
+        vx: speed * dir,
+        vy: speed * 0.12,
+        age: 0,
+      };
+    }
+  }
+
+  /** A short pearl-string of satellites — the classic just-launched train. */
+  private drawTrain(ctx: CanvasRenderingContext2D, alpha: number): void {
+    const tr = this.train;
+    if (!tr) return;
+    const len = Math.hypot(tr.vx, tr.vy);
+    const ux = tr.vx / len;
+    const uy = tr.vy / len;
+    const spacing = 9;
+    for (let i = 0; i < 7; i++) {
+      const a = alpha * (0.55 - i * 0.05);
+      ctx.fillStyle = `rgba(235, 238, 248, ${a.toFixed(3)})`;
+      ctx.fillRect((tr.x - ux * spacing * i) | 0, (tr.y - uy * spacing * i) | 0, 1, 1);
+    }
+  }
+
+  /** The real ISS: a bright steady dot arcing across, fading at each end. */
+  private drawIss(ctx: CanvasRenderingContext2D, progress: number, alpha: number): void {
+    const { width, height } = this.state;
+    const x = width * (-0.05 + progress * 1.1);
+    const y = height * 0.3 - Math.sin(progress * Math.PI) * height * 0.18;
+    const a = Math.sin(progress * Math.PI) * alpha;
+    ctx.fillStyle = `rgba(255, 250, 235, ${(0.95 * a).toFixed(3)})`;
+    ctx.fillRect(x | 0, y | 0, 2, 2);
+    ctx.fillStyle = `rgba(255, 250, 235, ${(0.25 * a).toFixed(3)})`;
+    ctx.fillRect((x - 1) | 0, (y - 1) | 0, 4, 4);
+  }
+
+  private rainbowAlpha(wx: WeatherConditions | null, cloudAlpha: number, h: number): number {
+    // Appears as the shower clears: ground still wet, rain stopped, sun out.
+    if (!wx || wx.precipitation === "rain") return 0;
+    if (h < SUN_RISE + 0.3 || h > SUN_SET - 0.3) return 0;
+    return this.wetness * Math.max(0, 1 - cloudAlpha * 1.6) * 0.5;
+  }
+
+  private drawRainbow(ctx: CanvasRenderingContext2D, h: number, alpha: number): void {
+    const { width, height } = this.state;
+    // Anchored opposite the sun: mirror the sun's x across the screen.
+    const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+    const cx = width - width * (0.08 + t * 0.84);
+    const cy = height * 0.95;
+    const r = Math.min(width, height) * 0.55;
+    const bands = ["255,60,60", "255,150,40", "250,230,70", "90,200,90", "70,140,235", "150,90,220"];
+    ctx.save();
+    ctx.lineWidth = Math.max(2, r * 0.016);
+    for (let i = 0; i < bands.length; i++) {
+      ctx.strokeStyle = `rgba(${bands[i]}, ${(alpha * 0.35).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - i * ctx.lineWidth, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private drawFireflies(ctx: CanvasRenderingContext2D, alpha: number): void {
     if (this.fireflies.length === 0) return;
     const t = performance.now() / 1000;
@@ -1186,6 +1439,23 @@ function auroraAlpha(h: number): number {
   if (h > 19 && h < 21) return (h - 19) / 2;
   if (h > 4 && h < 6) return 1 - (h - 4) / 2;
   return 0;
+}
+
+/**
+ * Shooting-star frequency multiplier around major meteor-shower peaks
+ * (day-of-year ±3): Quadrantids, Lyrids, Eta Aquariids, Perseids,
+ * Orionids, Geminids.
+ */
+function meteorRate(date: Date): number {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const doy = Math.floor((date.getTime() - start) / 86_400_000);
+  const peaks: Array<[number, number]> = [
+    [3, 4], [112, 2], [126, 2], [224, 5], [294, 2], [348, 6],
+  ];
+  for (const [p, rate] of peaks) {
+    if (Math.abs(doy - p) <= 3) return rate;
+  }
+  return 1;
 }
 
 /** Heat-haze strength: ramps 27→35°C, needs daylight and a clear-ish sky. */

@@ -19,7 +19,31 @@ named Zaur walks on the day's news under it.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
   winter), fireflies on summer nights, aurora veils in deep night, shooting
   stars a few minutes apart, heat haze above 27 °C, and ground that stays
-  visibly wet for a few minutes after rain stops.
+  visibly wet for a few minutes after rain stops. Seasons flip with the
+  visitor's hemisphere.
+- **A believable traffic of sky objects** — airplanes with dissolving
+  contrails by day and blinking navigation lights by night, migrating
+  V-formations in spring and autumn, a stylized satellite train gliding
+  over rarely at night, a rainbow when the sun meets a clearing shower,
+  and shooting-star rates that spike on real meteor-shower peaks
+  (Perseids, Geminids, Quadrantids, Lyrids, Eta Aquariids, Orionids).
+
+## Optional extras
+
+```ts
+createWorld(canvas, {
+  terrain: true,     // shape the horizon from real nearby elevations
+  satellites: true,  // show the real ISS when it passes near the visitor
+});
+```
+
+- **`terrain`** samples elevations in a ~40 km ring around the visitor (one
+  cached Open-Meteo call): plains get low rolling hills, alpine regions get
+  tall jagged ridges with a third distant peak line, and coastlines flatten
+  toward a shimmering sea band.
+- **`satellites`** polls wheretheiss.at (keyless) every two minutes and,
+  when the ISS is genuinely within ~1200 km, plays a bright dot arcing
+  across the night sky — the same pass you could walk outside and watch.
 
 ## Usage
 
@@ -76,6 +100,7 @@ createWorld(canvas, {
     isDay: true,
     windSpeed: 18,         // km/h
     temperatureC: 21,
+    latitude: 50.1,        // optional; flips seasons south of the equator
     sunriseH: 4.5,         // local decimal hours, null = built-in defaults
     sunsetH: 21.0,
   }),
@@ -101,8 +126,10 @@ With default options the package calls two public endpoints from the
 visitor's browser: [geojs.io](https://www.geojs.io) once per session for
 approximate IP location (cached in `localStorage`), and
 [Open-Meteo](https://open-meteo.com) every 15 minutes for current conditions
-and sun times. No keys, no cookies, nothing sent beyond the IP request
-itself. Pass your own `weather` function to make zero network calls.
+and sun times. `terrain: true` adds one cached Open-Meteo elevation call;
+`satellites: true` polls [wheretheiss.at](https://wheretheiss.at) every two
+minutes. No keys, no cookies, nothing sent beyond the IP request itself.
+Pass your own `weather` function to make zero network calls.
 
 ## License
 
