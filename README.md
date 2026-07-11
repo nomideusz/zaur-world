@@ -27,6 +27,12 @@ named Zaur walks on the day's news under it.
   over rarely at night, a rainbow when the sun meets a clearing shower,
   and shooting-star rates that spike on real meteor-shower peaks
   (Perseids, Geminids, Quadrantids, Lyrids, Eta Aquariids, Orionids).
+- **The real Venus** — an evening or morning star tracking its actual
+  584-day cycle (computed from orbital elements, accurate to ~1°): bright
+  and steady low in the west after sunset, or ahead of the sunrise, and
+  gone near conjunction. Bats flit through the dusk on summer evenings,
+  and a warm dome of city light sits beyond the ridge at night — brighter
+  under overcast, the way clouds really bounce a town's light back down.
 
 ## Optional extras
 

@@ -147,6 +147,14 @@ interface ShootingStar {
   life: number;
 }
 
+interface Bat {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  flapPhase: number;
+}
+
 interface Firefly {
   /** Stable per-firefly column offset. */
   bx: number;
@@ -196,6 +204,8 @@ export class World {
   /** Stylized satellite train gliding across the night sky, rarely. */
   private train: { x: number; y: number; vx: number; vy: number; age: number } | null = null;
   private trainTimer = 1500 + Math.random() * 2100;
+  /** Summer-dusk bats — erratic flitting silhouettes. */
+  private bats: Bat[] = [];
   private readonly weatherFn: () => WeatherConditions | null;
   private readonly gridColor: string | null;
   private readonly terrainFn: () => TerrainProfile | null;
@@ -211,6 +221,7 @@ export class World {
     this.regenHills();
     this.regenBirds();
     this.regenFireflies();
+    this.regenBats();
   }
 
   resize(state: WorldState): void {
@@ -220,6 +231,7 @@ export class World {
     this.regenHills();
     this.regenBirds();
     this.regenFireflies();
+    this.regenBats();
     this.drops = [];
     this.splashes = [];
     this.dropsKind = "none";
@@ -255,6 +267,7 @@ export class World {
     this.tickFlock(dt, migrating && fairDay);
     this.tickPlane(wx, dt);
     this.tickTrain(dt, starAlpha(h));
+    if (duskAlpha(h) > 0) this.tickBats(dt);
   }
 
   /** Re-bake the hill paths when a terrain profile (async fetch) arrives. */
@@ -315,6 +328,9 @@ export class World {
     const issPass = this.satFn();
     if (issPass && sa > 0.2) this.drawIss(ctx, issPass.progress, sa);
 
+    // Venus — evening or morning star per its real 584-day cycle.
+    this.drawVenus(ctx, h, date, cloudAlpha);
+
     // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
       this.drawCloudLayer(ctx, 0, cloudAlpha, wx, h);
@@ -322,6 +338,11 @@ export class World {
 
     // Sun (by day) or moon (by night) arcing across the sky.
     this.drawCelestial(ctx, h, 1 - cloudAlpha * 0.55, date);
+
+    // Warm dome of city light beyond the ridge — the visitor's IP resolved
+    // to a town, after all. Overcast makes it stronger: clouds bounce the
+    // light back down, exactly like a real city night.
+    this.drawCityGlow(ctx, h, cloudAlpha);
 
     // Distant horizon silhouettes — derived from the bottom sky color so they
     // always sit *between* the sky and the foreground cloud band.
@@ -360,6 +381,10 @@ export class World {
     const flySeason = month >= 4 && month <= 8 ? 1 : 0;
     const flyA = fireflyAlpha(h) * flySeason * (1 - cloudAlpha * 0.85);
     if (flyA > 0.05) this.drawFireflies(ctx, flyA);
+
+    // Bats own the brief dusk window on summer evenings.
+    const batA = duskAlpha(h) * flySeason * (1 - cloudAlpha * 0.7);
+    if (batA > 0.05) this.drawBats(ctx, batA);
 
     // Fog haze — gradient overlay denser near the ground.
     if (wx?.fog) this.drawFog(ctx);
@@ -1388,6 +1413,124 @@ export class World {
     ctx.restore();
   }
 
+  private regenBats(): void {
+    let seed = 606;
+    const rand = (): number => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    const count = Math.max(4, Math.round(this.state.width / 220));
+    this.bats = [];
+    for (let i = 0; i < count; i++) {
+      this.bats.push({
+        x: rand() * this.state.width,
+        y: this.state.height * (0.25 + rand() * 0.3),
+        vx: (rand() - 0.5) * 60,
+        vy: (rand() - 0.5) * 30,
+        flapPhase: rand() * Math.PI * 2,
+      });
+    }
+  }
+
+  private tickBats(dt: number): void {
+    const { width, height } = this.state;
+    const top = height * 0.18;
+    const bottom = height * 0.6;
+    for (const b of this.bats) {
+      // Erratic flight: constant random steering, clamped speed, soft walls.
+      b.vx += (Math.random() - 0.5) * 260 * dt;
+      b.vy += (Math.random() - 0.5) * 200 * dt;
+      const speed = Math.hypot(b.vx, b.vy);
+      const max = 75;
+      if (speed > max) {
+        b.vx = (b.vx / speed) * max;
+        b.vy = (b.vy / speed) * max;
+      }
+      if (b.y < top) b.vy += 60 * dt;
+      if (b.y > bottom) b.vy -= 60 * dt;
+      b.x = ((b.x + b.vx * dt) % width + width) % width;
+      b.y += b.vy * dt;
+      b.flapPhase += dt * 14; // frantic little wingbeats
+    }
+  }
+
+  private drawBats(ctx: CanvasRenderingContext2D, alpha: number): void {
+    ctx.fillStyle = `rgba(12, 12, 18, ${(0.8 * alpha).toFixed(3)})`;
+    for (const b of this.bats) {
+      const ix = b.x | 0;
+      const iy = b.y | 0;
+      ctx.fillRect(ix, iy, 1, 1); // body
+      if (Math.sin(b.flapPhase) > 0) {
+        ctx.fillRect(ix - 2, iy - 1, 2, 1);
+        ctx.fillRect(ix + 1, iy - 1, 2, 1);
+      } else {
+        ctx.fillRect(ix - 2, iy + 1, 2, 1);
+        ctx.fillRect(ix + 1, iy + 1, 2, 1);
+      }
+    }
+  }
+
+  private drawVenus(
+    ctx: CanvasRenderingContext2D,
+    h: number,
+    date: Date,
+    cloudAlpha: number,
+  ): void {
+    const v = venusState(date);
+    if (v.elong < 12) return; // lost in the sun's glare near conjunction
+    // How long it stays up after sunset (or before sunrise), canonical hours.
+    const visH = (v.elong / 47) * 3.0;
+    let p: number; // 0 = highest (at twilight start), 1 = setting/vanishing
+    let x: number;
+    const { width, height } = this.state;
+    if (v.evening) {
+      const dt = h - SUN_SET;
+      if (dt < 0.15 || dt > visH) return;
+      p = dt / visH;
+      x = width * 0.88; // low in the west, where the sun went down
+    } else {
+      const dt = SUN_RISE - h;
+      if (dt < 0.15 || dt > visH) return;
+      p = dt / visH;
+      x = width * 0.12; // morning star, ahead of the sunrise
+    }
+    const y = height * (0.4 + p * 0.22);
+    // Needs a darkening sky; fades as it sinks; hidden by cloud.
+    const twilight = Math.min(1, (v.evening ? h - SUN_SET : SUN_RISE - h) / 0.5);
+    const a = twilight * (1 - p * 0.5) * (1 - cloudAlpha) * 0.95;
+    if (a < 0.03) return;
+    const ix = x | 0;
+    const iy = y | 0;
+    // Bright and steady — planets don't twinkle.
+    ctx.fillStyle = `rgba(255, 252, 240, ${a.toFixed(3)})`;
+    ctx.fillRect(ix, iy, 2, 2);
+    ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.35).toFixed(3)})`;
+    ctx.fillRect(ix - 1, iy, 1, 2);
+    ctx.fillRect(ix + 2, iy, 1, 2);
+    ctx.fillRect(ix, iy - 1, 2, 1);
+    ctx.fillRect(ix, iy + 2, 2, 1);
+  }
+
+  private drawCityGlow(
+    ctx: CanvasRenderingContext2D,
+    h: number,
+    cloudAlpha: number,
+  ): void {
+    const night = 1 - daylight(h);
+    if (night < 0.3) return;
+    const { width, height } = this.state;
+    const cx = width * 0.3;
+    const cy = height * 0.68;
+    const r = width * 0.22;
+    const a = 0.09 * night * (0.6 + cloudAlpha * 0.8);
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, `rgba(255, 178, 108, ${a.toFixed(3)})`);
+    grad.addColorStop(0.6, `rgba(255, 150, 90, ${(a * 0.4).toFixed(3)})`);
+    grad.addColorStop(1, "rgba(255, 140, 80, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+
   private drawFireflies(ctx: CanvasRenderingContext2D, alpha: number): void {
     if (this.fireflies.length === 0) return;
     const t = performance.now() / 1000;
@@ -1479,6 +1622,34 @@ function dayCreatureAlpha(h: number): number {
   if (h < SUN_RISE + 1) return (h - (SUN_RISE - 0.5)) / 1.5;
   if (h > SUN_SET - 1) return Math.max(0, ((SUN_SET + 0.5) - h) / 1.5);
   return 1;
+}
+
+/** Bat window: the ~80 minutes of deepening dusk right after sunset. */
+function duskAlpha(h: number): number {
+  const dt = h - SUN_SET;
+  if (dt <= 0 || dt >= 1.4) return 0;
+  return Math.sin((dt / 1.4) * Math.PI);
+}
+
+/**
+ * Venus from mean orbital elements (circular orbits, J2000). Elongation is
+ * accurate to a few degrees — plenty to know whether Venus is currently an
+ * evening star, a morning star, or lost near conjunction.
+ */
+function venusState(date: Date): { elong: number; evening: boolean } {
+  const d = (date.getTime() - Date.UTC(2000, 0, 1, 12)) / 86_400_000;
+  const LE = ((100.46 + 0.9856474 * d) * Math.PI) / 180;
+  const LV = ((181.98 + 1.6021302 * d) * Math.PI) / 180;
+  const ex = Math.cos(LE);
+  const ey = Math.sin(LE);
+  const gx = 0.723 * Math.cos(LV) - ex;
+  const gy = 0.723 * Math.sin(LV) - ey;
+  const sunLon = Math.atan2(-ey, -ex);
+  const venLon = Math.atan2(gy, gx);
+  let diff = venLon - sunLon;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return { elong: Math.abs((diff * 180) / Math.PI), evening: diff > 0 };
 }
 
 /** Firefly alpha — only after dark and not at the deepest part of night. */
