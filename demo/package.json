@@ -1,0 +1,17 @@
+{
+	"name": "zaur-world-demo",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "pnpm -w run build && vite",
+		"build": "pnpm -w run build && vite build",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@nomideusz/zaur-world": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^5.7.2",
+		"vite": "^6.2.0"
+	}
+}

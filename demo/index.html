@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta
+			name="description"
+			content="A living ambient sky for any web page — real sunrise and sunset, live weather, seasons, and small delights on a single canvas. Zero dependencies."
+		/>
+		<title>zaur-world — a living ambient sky</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Sans+3:wght@400;500;600&display=swap"
+			rel="stylesheet"
+		/>
+		<link rel="stylesheet" href="/src/style.css" />
+	</head>
+	<body>
+		<canvas id="sky" aria-hidden="true"></canvas>
+
+		<header class="brand">
+			<p class="eyebrow">npm · zero dependencies</p>
+			<h1>zaur-world</h1>
+			<p class="tagline">Live sky for your location, hour, and weather.</p>
+		</header>
+
+		<footer class="chrome">
+			<div class="toggles" role="group" aria-label="Optional features">
+				<label class="pill">
+					<input type="checkbox" id="opt-terrain" checked />
+					<span>Terrain</span>
+				</label>
+				<label class="pill">
+					<input type="checkbox" id="opt-satellites" checked />
+					<span>ISS</span>
+				</label>
+			</div>
+
+			<details class="install">
+				<summary>Install</summary>
+				<pre class="code"><code>npm install @nomideusz/zaur-world</code></pre>
+				<pre class="code"><code>import { createWorld } from "@nomideusz/zaur-world";
+
+const canvas = document.querySelector("canvas")!;
+const sky = createWorld(canvas, {
+  terrain: true,
+  satellites: true,
+});
+
+sky.destroy(); // on unmount</code></pre>
+			</details>
+
+			<nav class="links" aria-label="Related links">
+				<a href="https://www.npmjs.com/package/@nomideusz/zaur-world">npm</a>
+				<a href="https://github.com/nomideusz/zaur-world">GitHub</a>
+				<a href="https://dino.zaur.app">dino.zaur.app</a>
+			</nav>
+		</footer>
+
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>

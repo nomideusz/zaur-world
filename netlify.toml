@@ -1,0 +1,14 @@
+[build]
+  command = "corepack enable && pnpm install && pnpm run demo:build"
+  publish = "demo/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_VERSION = "9.15.9"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

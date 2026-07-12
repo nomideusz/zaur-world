@@ -14,9 +14,12 @@
 		"dist"
 	],
 	"sideEffects": false,
+	"packageManager": "pnpm@9.15.9",
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
-		"prepublishOnly": "npm run build"
+		"demo:dev": "pnpm run build && pnpm --filter zaur-world-demo dev",
+		"demo:build": "pnpm run build && pnpm --filter zaur-world-demo build",
+		"prepublishOnly": "pnpm run build"
 	},
 	"keywords": [
 		"canvas",
