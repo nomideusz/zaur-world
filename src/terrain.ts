@@ -16,17 +16,21 @@ const RING_DEG = 0.35; // ~39 km of latitude
 
 export async function fetchTerrain(
   lat: number,
-  lon: number
+  lon: number,
+  opts: { cache?: boolean } = {}
 ): Promise<TerrainProfile | null> {
+  const useCache = opts.cache !== false;
   const key = `${lat.toFixed(1)},${lon.toFixed(1)}`;
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const j = JSON.parse(cached) as { key?: string; profile?: TerrainProfile };
-      if (j.key === key && j.profile) return j.profile;
+  if (useCache) {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const j = JSON.parse(cached) as { key?: string; profile?: TerrainProfile };
+        if (j.key === key && j.profile) return j.profile;
+      }
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
   }
 
   // Center plus a ring of 8 samples, longitude widened toward the poles.
@@ -52,10 +56,12 @@ export async function fetchTerrain(
       relief: Math.max(...el) - Math.min(...el),
       coastal: Math.min(...el) <= 0,
     };
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ key, profile }));
-    } catch {
-      /* private mode */
+    if (useCache) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ key, profile }));
+      } catch {
+        /* private mode */
+      }
     }
     return profile;
   } catch {

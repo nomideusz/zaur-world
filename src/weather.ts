@@ -3,6 +3,9 @@
 // that fades in and back out on its own, and the World reads `conditions()`
 // each frame to tint the sky with clouds and precipitation.
 
+import { deriveConditions } from "./weather-logic.js";
+import type { OpenMeteoCurrent, OpenMeteoDaily } from "./weather-logic.js";
+
 export type Cloudiness = 0 | 1 | 2; // none / scattered / overcast
 export type Precipitation = "none" | "rain" | "snow";
 
@@ -26,18 +29,17 @@ export interface WeatherConditions {
   latitude?: number | null;
 }
 
-interface OpenMeteoCurrent {
-  temperature_2m: number;
-  apparent_temperature?: number;
-  weather_code: number;
-  is_day?: number;
-  precipitation?: number;
-  wind_speed_10m?: number;
+export interface GeoLocation {
+  lat: number;
+  lon: number;
+  city?: string;
 }
 
-interface OpenMeteoDaily {
-  sunrise?: string[];
-  sunset?: string[];
+export type WeatherCardPosition = "top-right" | "top-left" | "bottom-right" | "bottom-left";
+
+export interface WeatherCardOptions {
+  parent: HTMLElement;
+  position?: WeatherCardPosition;
 }
 
 interface Geo {
@@ -55,8 +57,16 @@ const FALLBACK_GEO: Geo = { lat: 51.5074, lon: -0.1278, city: "London" };
 const GEO_CACHE_KEY = "zaur-world-geo";
 
 export interface WeatherClientOptions {
-  /** Host element for the small ambient weather card. Omit for no card. */
+  /** @deprecated Use `weatherCard.parent` instead. */
   cardParent?: HTMLElement | null;
+  /** Small ambient weather card host and placement. */
+  weatherCard?: WeatherCardOptions;
+  /** Skip IP geolocation — use this fixed location instead. */
+  geo?: GeoLocation;
+  /** Persist geo in localStorage between visits. Default true. */
+  cache?: boolean;
+  /** Called when conditions change after a successful fetch. */
+  onConditionsChange?: (conditions: WeatherConditions) => void;
 }
 
 export class WeatherClient {
@@ -64,13 +74,23 @@ export class WeatherClient {
   private cachedGeo: Geo | null = null;
   private readonly card: WeatherCard | null;
   private readonly timers: number[] = [];
+  private readonly cache: boolean;
+  private readonly onChange: ((conditions: WeatherConditions) => void) | null;
 
   constructor(opts: WeatherClientOptions = {}) {
-    this.card = opts.cardParent ? new WeatherCard(opts.cardParent) : null;
+    this.cache = opts.cache !== false;
+    this.onChange = opts.onConditionsChange ?? null;
+    const cardOpts = opts.weatherCard ?? (opts.cardParent ? { parent: opts.cardParent } : null);
+    this.card = cardOpts ? new WeatherCard(cardOpts) : null;
+    if (opts.geo) {
+      this.cachedGeo = {
+        lat: opts.geo.lat,
+        lon: opts.geo.lon,
+        city: opts.geo.city ?? "your area",
+      };
+    }
     void this.refresh();
     this.timers.push(window.setInterval(() => void this.refresh(), REFRESH_MS));
-    // Re-show occasionally even when the data hasn't changed, so a long-
-    // running session keeps the visual cue around.
     if (this.card) {
       this.timers.push(
         window.setInterval(() => this.card?.show(CARD_DURATION_MS), REPEAT_SHOW_INTERVAL_MS)
@@ -94,7 +114,12 @@ export class WeatherClient {
     return this.cachedGeo ? { lat: this.cachedGeo.lat, lon: this.cachedGeo.lon } : null;
   }
 
-  private async refresh(): Promise<void> {
+  /** Re-fetch weather (e.g. when the tab becomes visible again). */
+  refresh(): Promise<void> {
+    return this.fetchWeather();
+  }
+
+  private async fetchWeather(): Promise<void> {
     try {
       const geo = await this.geo();
       const url = new URL("https://api.open-meteo.com/v1/forecast");
@@ -116,7 +141,10 @@ export class WeatherClient {
       const c = data.current;
       if (!c) return;
 
-      this.state = { ...deriveConditions(c, data.daily), latitude: geo.lat };
+      const next = { ...deriveConditions(c, data.daily), latitude: geo.lat };
+      const changed = !this.state || !conditionsEqual(this.state, next);
+      this.state = next;
+      if (changed) this.onChange?.(next);
       if (this.card) {
         this.card.update(formatLine(geo.city, c), this.state);
         window.setTimeout(() => this.card?.show(CARD_DURATION_MS), FIRST_SHOW_DELAY_MS);
@@ -128,12 +156,9 @@ export class WeatherClient {
 
   private async geo(): Promise<Geo> {
     if (this.cachedGeo) return this.cachedGeo;
-    // geojs.io: free, CORS-open, no key. (ipapi.co discontinued free access —
-    // it returns a paywall message, which is how everyone ended up in London.)
     try {
       const res = await fetchWithTimeout("https://get.geojs.io/v1/ip/geo.json");
       if (res.ok) {
-        // geojs returns lat/lon as strings.
         const j = (await res.json()) as {
           latitude?: string | number;
           longitude?: string | number;
@@ -147,10 +172,12 @@ export class WeatherClient {
             lon,
             city: typeof j.city === "string" && j.city.length > 0 ? j.city : "your area",
           };
-          try {
-            localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(this.cachedGeo));
-          } catch {
-            /* private mode */
+          if (this.cache) {
+            try {
+              localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(this.cachedGeo));
+            } catch {
+              /* private mode */
+            }
           }
           return this.cachedGeo;
         }
@@ -158,22 +185,39 @@ export class WeatherClient {
     } catch {
       /* fall through */
     }
-    // A remembered location from a previous visit beats teleporting to London.
-    try {
-      const saved = localStorage.getItem(GEO_CACHE_KEY);
-      if (saved) {
-        const g = JSON.parse(saved) as Partial<Geo>;
-        if (Number.isFinite(g.lat) && Number.isFinite(g.lon) && typeof g.city === "string") {
-          this.cachedGeo = { lat: g.lat as number, lon: g.lon as number, city: g.city };
-          return this.cachedGeo;
+    if (this.cache) {
+      try {
+        const saved = localStorage.getItem(GEO_CACHE_KEY);
+        if (saved) {
+          const g = JSON.parse(saved) as Partial<Geo>;
+          if (Number.isFinite(g.lat) && Number.isFinite(g.lon) && typeof g.city === "string") {
+            this.cachedGeo = { lat: g.lat as number, lon: g.lon as number, city: g.city };
+            return this.cachedGeo;
+          }
         }
+      } catch {
+        /* fall through */
       }
-    } catch {
-      /* fall through */
     }
     this.cachedGeo = FALLBACK_GEO;
     return this.cachedGeo;
   }
+}
+
+function conditionsEqual(a: WeatherConditions, b: WeatherConditions): boolean {
+  return (
+    a.cloudiness === b.cloudiness &&
+    a.precipitation === b.precipitation &&
+    a.intensity === b.intensity &&
+    a.thunder === b.thunder &&
+    a.fog === b.fog &&
+    a.isDay === b.isDay &&
+    a.windSpeed === b.windSpeed &&
+    a.temperatureC === b.temperatureC &&
+    a.sunriseH === b.sunriseH &&
+    a.sunsetH === b.sunsetH &&
+    a.latitude === b.latitude
+  );
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -184,55 +228,6 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-/**
- * "2026-07-11T04:34" → 4.57. With timezone=auto Open-Meteo returns local
- * wall-clock strings, so slicing avoids any Date/timezone round-trip.
- */
-function isoToHour(s: string | undefined): number | null {
-  if (!s || s.length < 16) return null;
-  const h = Number(s.slice(11, 13));
-  const m = Number(s.slice(14, 16));
-  return Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null;
-}
-
-function deriveConditions(c: OpenMeteoCurrent, daily?: OpenMeteoDaily): WeatherConditions {
-  const code = c.weather_code;
-  const isDay = c.is_day !== 0;
-  const precipMm = c.precipitation ?? 0;
-
-  let cloudiness: Cloudiness = 0;
-  if ([1, 2].includes(code)) cloudiness = 1;
-  else if (code === 3 || (code >= 45 && code <= 99)) cloudiness = 2;
-
-  let precipitation: Precipitation = "none";
-  if (
-    [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code)
-  ) {
-    precipitation = "rain";
-  } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
-    precipitation = "snow";
-  }
-
-  // Map roughly: light → 0.35, moderate → 0.65, heavy → 0.95
-  let intensity = 0.4;
-  if ([55, 65, 67, 75, 82, 86, 99].includes(code)) intensity = 0.95;
-  else if ([53, 63, 73, 81, 96].includes(code)) intensity = 0.65;
-  else if (precipMm >= 1) intensity = Math.min(0.9, 0.35 + precipMm * 0.05);
-
-  return {
-    cloudiness,
-    precipitation,
-    intensity,
-    thunder: [95, 96, 99].includes(code),
-    fog: [45, 48].includes(code),
-    isDay,
-    windSpeed: c.wind_speed_10m ?? 0,
-    temperatureC: c.temperature_2m,
-    sunriseH: isoToHour(daily?.sunrise?.[0]),
-    sunsetH: isoToHour(daily?.sunset?.[0]),
-  };
 }
 
 function formatLine(city: string, c: OpenMeteoCurrent): string {
@@ -298,17 +293,18 @@ class WeatherCard {
   private readonly el: HTMLDivElement;
   private hideTimer: number | null = null;
 
-  constructor(parent: HTMLElement) {
+  constructor(opts: WeatherCardOptions) {
     injectStylesOnce();
     this.el = document.createElement("div");
     this.el.className = "wx-card";
+    if (opts.position) this.el.dataset.position = opts.position;
     this.el.setAttribute("role", "status");
     this.el.setAttribute("aria-live", "polite");
     this.el.innerHTML = `
       <span class="wx-card__icon" aria-hidden="true">☁</span>
       <span class="wx-card__line"></span>
     `;
-    parent.appendChild(this.el);
+    opts.parent.appendChild(this.el);
   }
 
   update(line: string, conditions: WeatherConditions): void {
@@ -371,6 +367,9 @@ function injectStylesOnce(): void {
       z-index: 12;
       max-width: min(64vw, 320px);
     }
+    .wx-card[data-position="top-left"] { top: 14px; right: auto; left: 14px; }
+    .wx-card[data-position="bottom-right"] { top: auto; bottom: 14px; right: 14px; }
+    .wx-card[data-position="bottom-left"] { top: auto; bottom: 14px; right: auto; left: 14px; }
     .wx-card--visible {
       opacity: 1;
       transform: translateY(0);
@@ -386,3 +385,5 @@ function injectStylesOnce(): void {
   `;
   document.head.appendChild(style);
 }
+
+export { deriveConditions, isoToHour } from "./weather-logic.js";

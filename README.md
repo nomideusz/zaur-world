@@ -5,6 +5,8 @@ A living ambient sky for any web page, on a single `<canvas>`. Zero dependencies
 Born as the backdrop of [dino.zaur.app](https://dino.zaur.app), where a small dinosaur
 named Zaur walks on the day's news under it.
 
+**[Live demo](https://zaur-world.netlify.app)** · `pnpm run demo:dev` in this repo
+
 ## What it renders
 
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
@@ -90,11 +92,28 @@ Content layered above the sky reads best on a translucent "frosted" panel:
 
 ```ts
 createWorld(canvas, {
-  // Show the small "Krakow: clear skies, 24°C" status card in this element.
-  weatherCardParent: document.body,
+  // Show the small "Krakow: clear skies, 24°C" status card.
+  weatherCard: { parent: document.body, position: "top-right" },
 
   // Foreground graph-paper dot grid; null disables it.
   gridColor: "rgba(232, 228, 216, 0.06)",
+
+  // Fixed location — skips IP geolocation.
+  geo: { lat: 50.06, lon: 19.94, city: "Kraków" },
+
+  // React to weather without polling.
+  onConditionsChange(wx) {
+    document.body.classList.toggle("theme-day", wx.isDay);
+  },
+
+  // Performance preset: "auto" | "low" | "high" (default "auto").
+  quality: "auto",
+
+  // Pause rendering while the tab is hidden (default true).
+  pauseWhenHidden: true,
+
+  // Wall clock override for demos and screenshots.
+  time: () => new Date("2026-07-12T19:30:00"),
 
   // Bring your own weather (disables all network calls).
   weather: () => ({
@@ -113,14 +132,34 @@ createWorld(canvas, {
 });
 ```
 
+### React
+
+```tsx
+import { useEffect, useRef } from "react";
+import { createWorld } from "@nomideusz/zaur-world";
+
+export function Sky() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const sky = createWorld(canvas, { terrain: true });
+    return () => sky.destroy();
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0 }} />;
+}
+```
+
 Reacting to conditions elsewhere in your UI:
 
 ```ts
-const sky = createWorld(canvas);
-setInterval(() => {
-  const wx = sky.conditions();
-  if (wx) document.body.classList.toggle("theme-day", wx.isDay);
-}, 1000);
+const sky = createWorld(canvas, {
+  onConditionsChange(wx) {
+    document.body.classList.toggle("theme-day", wx.isDay);
+  },
+});
 ```
 
 `World` and `WeatherClient` are also exported individually if you want to own
@@ -136,6 +175,19 @@ and sun times. `terrain: true` adds one cached Open-Meteo elevation call;
 `satellites: true` polls [wheretheiss.at](https://wheretheiss.at) every two
 minutes. No keys, no cookies, nothing sent beyond the IP request itself.
 Pass your own `weather` function to make zero network calls.
+
+See [CHANGELOG.md](./CHANGELOG.md) for version history.
+
+`localStorage` keys used when caching is enabled (default): `zaur-world-geo`,
+`zaur-world-terrain`. Pass `cache: false` to disable persistence.
+
+## Development
+
+```bash
+pnpm install
+pnpm test          # unit tests
+pnpm run demo:dev  # local demo
+```
 
 ## License
 

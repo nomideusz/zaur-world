@@ -11,6 +11,16 @@
 import type { WeatherConditions } from "./weather.js";
 import type { TerrainProfile } from "./terrain.js";
 import type { SatellitePass } from "./satellites.js";
+import type { ResolvedQuality } from "./quality.js";
+import {
+  SUN_RISE,
+  SUN_SET,
+  warpHour,
+  auroraLatFactor,
+  meteorRate,
+  venusState,
+  lunarPhase,
+} from "./solar.js";
 
 export interface WorldState {
   width: number;
@@ -26,6 +36,10 @@ export interface WorldOptions {
   terrain?: () => TerrainProfile | null;
   /** Polled each frame for an active ISS pass (see SatelliteWatcher). */
   satellites?: () => SatellitePass | null;
+  /** Wall clock override for demos and tests. */
+  time?: () => Date;
+  /** Performance / effects preset (resolved before passing in). */
+  quality?: ResolvedQuality;
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
@@ -55,38 +69,9 @@ const SKY: SkyKeyframe[] = [
   { hour: 22,   top: rgb("#12132e"), bottom: rgb("#1e2242") }, // night
 ];
 
-// Canonical sun window (decimal hours). Everything in this file — sky
-// keyframes, the sun arc, stars, birds, fireflies — is keyed to this
-// canonical clock. warpHour() maps the *real* solar day (from the weather
-// service's sunrise/sunset) onto it, so the whole world tracks the actual
-// sun with no per-feature changes: long summer evenings, short winter days.
-const SUN_RISE = 5.8;
-const SUN_SET = 18.2;
-
-/**
- * Piecewise-linear time warp: real sunrise → SUN_RISE, real sunset →
- * SUN_SET, night stretched/compressed to fill the rest. Identity when sun
- * times are unknown or degenerate (polar day/night).
- */
-function warpHour(h: number, rise: number | null, set: number | null): number {
-  if (rise == null || set == null) return h;
-  const dayLen = set - rise;
-  if (dayLen < 1 || dayLen > 23) return h;
-  if (h >= rise && h <= set) {
-    return SUN_RISE + ((h - rise) / dayLen) * (SUN_SET - SUN_RISE);
-  }
-  const nightLen = 24 - dayLen;
-  const sinceSet = (h - set + 24) % 24;
-  return (SUN_SET + (sinceSet / nightLen) * (24 - SUN_SET + SUN_RISE)) % 24;
-}
+// Canonical sun window — see solar.ts for SUN_RISE / SUN_SET and warpHour().
 
 const GRID_PX = 24;
-
-// Reference new moon: 2000-01-06 18:14 UTC. Used to derive lunar phase from
-// the wall clock — keeps the moon in sync with the actual sky outside.
-const MOON_REF_MS = Date.UTC(2000, 0, 6, 18, 14);
-const MOON_SYNODIC_MS = 29.530588 * 86_400_000;
-
 interface Star {
   x: number;
   y: number;
@@ -210,12 +195,22 @@ export class World {
   private readonly gridColor: string | null;
   private readonly terrainFn: () => TerrainProfile | null;
   private readonly satFn: () => SatellitePass | null;
+  private readonly timeFn: () => Date;
+  private readonly particleScale: number;
+  private readonly ambientEffects: number;
+  private readonly showGrid: boolean;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
-    this.gridColor = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
+    const q = opts.quality;
+    this.particleScale = q?.particleScale ?? 1;
+    this.ambientEffects = q?.ambientEffects ?? 1;
+    this.showGrid = q?.showGrid ?? true;
+    const baseGrid = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
+    this.gridColor = this.showGrid ? baseGrid : null;
     this.terrainFn = opts.terrain ?? (() => null);
     this.satFn = opts.satellites ?? (() => null);
+    this.timeFn = opts.time ?? (() => new Date());
     this.regenStars();
     this.regenClouds();
     this.regenHills();
@@ -256,7 +251,7 @@ export class World {
     this.tickSplashes(dt);
     this.tickLightning(wx, dt);
     this.tickBirds(dt);
-    const date = new Date();
+    const date = this.now();
     const h = this.currentHour(wx, date);
     this.tickShootingStar(dt, starAlpha(h), date);
     this.tickWetness(wx, dt);
@@ -285,15 +280,20 @@ export class World {
     return (wx?.latitude ?? 50) < 0 ? (m + 6) % 12 : m;
   }
 
+  private now(): Date {
+    return this.timeFn();
+  }
+
   /** The canonical (sun-warped) hour — see warpHour. */
-  private currentHour(wx: WeatherConditions | null, date = new Date()): number {
-    const hReal = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  private currentHour(wx: WeatherConditions | null, date?: Date): number {
+    const d = date ?? this.now();
+    const hReal = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     return warpHour(hReal, wx?.sunriseH ?? null, wx?.sunsetH ?? null);
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
     const { width, height } = this.state;
-    const date = new Date();
+    const date = this.now();
     const wx = this.weatherFn();
     // All drawing below runs on the warped (canonical) clock — see warpHour.
     const h = this.currentHour(wx, date);
@@ -317,7 +317,7 @@ export class World {
 
     // Aurora bands at deep night when the sky is reasonably clear — drawn
     // before stars so it reads as a soft veil behind them.
-    const auroraA = auroraAlpha(h) * (1 - cloudAlpha * 0.85);
+    const auroraA = auroraAlpha(h) * auroraLatFactor(wx?.latitude) * (1 - cloudAlpha * 0.85);
     if (auroraA > 0.01) this.drawAurora(ctx, auroraA);
 
     // Stars (only at night-ish hours; heavy clouds also dim them).
@@ -819,7 +819,7 @@ export class World {
   private drawLightning(ctx: CanvasRenderingContext2D): void {
     const { width, height } = this.state;
     // Screen-wide brightening — capped so it stays moody, not flashbang.
-    const flashAlpha = this.lightningIntensity * 0.22;
+    const flashAlpha = this.lightningIntensity * 0.22 * this.ambientEffects;
     ctx.fillStyle = `rgba(220, 220, 240, ${flashAlpha.toFixed(3)})`;
     ctx.fillRect(0, 0, width, height);
 
@@ -976,7 +976,7 @@ export class World {
     }
     const isRain = wx.precipitation === "rain";
     const baseCount = Math.round((this.state.width * this.state.height) / (isRain ? 12_000 : 18_000));
-    const count = Math.round(baseCount * (0.4 + wx.intensity));
+    const count = Math.round(baseCount * (0.4 + wx.intensity) * this.particleScale);
     this.drops = [];
     for (let i = 0; i < count; i++) {
       // Snow flake size distribution: lots of tiny, few medium — feels natural.
@@ -1173,10 +1173,11 @@ export class World {
       return;
     }
     if (starA < 0.5) return; // only when the stars are properly out
+    if (this.ambientEffects < 0.05) return;
     this.shootingTimer -= dt;
     if (this.shootingTimer <= 0) {
       // Meteor-shower peaks multiply the base one-every-2–7-minutes rate.
-      this.shootingTimer = (120 + Math.random() * 300) / meteorRate(date);
+      this.shootingTimer = (120 + Math.random() * 300) / (meteorRate(date) * this.ambientEffects);
       const { width, height } = this.state;
       const speed = 420 + Math.random() * 240;
       const angle = Math.PI * (0.12 + Math.random() * 0.16); // shallow descent
@@ -1584,23 +1585,6 @@ function auroraAlpha(h: number): number {
   return 0;
 }
 
-/**
- * Shooting-star frequency multiplier around major meteor-shower peaks
- * (day-of-year ±3): Quadrantids, Lyrids, Eta Aquariids, Perseids,
- * Orionids, Geminids.
- */
-function meteorRate(date: Date): number {
-  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
-  const doy = Math.floor((date.getTime() - start) / 86_400_000);
-  const peaks: Array<[number, number]> = [
-    [3, 4], [112, 2], [126, 2], [224, 5], [294, 2], [348, 6],
-  ];
-  for (const [p, rate] of peaks) {
-    if (Math.abs(doy - p) <= 3) return rate;
-  }
-  return 1;
-}
-
 /** Heat-haze strength: ramps 27→35°C, needs daylight and a clear-ish sky. */
 function heatFactor(tempC: number, cloudAlpha: number, h: number): number {
   const t = (tempC - 27) / 8;
@@ -1631,27 +1615,6 @@ function duskAlpha(h: number): number {
   return Math.sin((dt / 1.4) * Math.PI);
 }
 
-/**
- * Venus from mean orbital elements (circular orbits, J2000). Elongation is
- * accurate to a few degrees — plenty to know whether Venus is currently an
- * evening star, a morning star, or lost near conjunction.
- */
-function venusState(date: Date): { elong: number; evening: boolean } {
-  const d = (date.getTime() - Date.UTC(2000, 0, 1, 12)) / 86_400_000;
-  const LE = ((100.46 + 0.9856474 * d) * Math.PI) / 180;
-  const LV = ((181.98 + 1.6021302 * d) * Math.PI) / 180;
-  const ex = Math.cos(LE);
-  const ey = Math.sin(LE);
-  const gx = 0.723 * Math.cos(LV) - ex;
-  const gy = 0.723 * Math.sin(LV) - ey;
-  const sunLon = Math.atan2(-ey, -ex);
-  const venLon = Math.atan2(gy, gx);
-  let diff = venLon - sunLon;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return { elong: Math.abs((diff * 180) / Math.PI), evening: diff > 0 };
-}
-
 /** Firefly alpha — only after dark and not at the deepest part of night. */
 function fireflyAlpha(h: number): number {
   if (h >= 19.5 && h < 23) return Math.min(1, (h - 19.5) / 1.5);
@@ -1672,16 +1635,6 @@ function horizonGlowStrength(h: number): number {
   // Smooth ease-out from peak at d=0 down to 0 at d=1.2
   const t = 1 - d / 1.2;
   return t * t;
-}
-
-/**
- * Lunar phase as a fraction in [0, 1): 0 = new, 0.25 = first qtr, 0.5 = full,
- * 0.75 = last qtr. Computed from the synodic month against a known new moon
- * reference, accurate to within a few hours which is plenty for visuals.
- */
-function lunarPhase(date: Date): number {
-  const elapsed = date.getTime() - MOON_REF_MS;
-  return ((elapsed % MOON_SYNODIC_MS) + MOON_SYNODIC_MS) % MOON_SYNODIC_MS / MOON_SYNODIC_MS;
 }
 
 /** Build a procedural lightning bolt path: zig-zag from the cloud band downward. */
