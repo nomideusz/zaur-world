@@ -72,3 +72,19 @@ export function lunarPhase(date: Date): number {
 	const elapsed = date.getTime() - MOON_REF_MS;
 	return (((elapsed % MOON_SYNODIC_MS) + MOON_SYNODIC_MS) % MOON_SYNODIC_MS) / MOON_SYNODIC_MS;
 }
+
+/**
+ * Subtle golden warmth on summer-afternoon skies within ~15 days of solstice.
+ * Hemisphere-aware via latitude sign.
+ */
+export function solsticeWarmth(date: Date, latitude = 50): number {
+	const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+	const doy = Math.floor((date.getTime() - start) / 86_400_000);
+	const peak = latitude >= 0 ? 172 : 355;
+	let dist = Math.abs(doy - peak);
+	if (dist > 182) dist = 365 - dist;
+	if (dist > 15) return 0;
+	const h = date.getHours() + date.getMinutes() / 60;
+	if (h < 10 || h > 18) return 0;
+	return 0.08 * (1 - dist / 15);
+}

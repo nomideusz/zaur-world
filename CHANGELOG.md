@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-13
+
+### Added
+
+- `capture()` on the world handle — snapshot the canvas as a data URL
+- `geolocation: true` — browser location fallback when IP geolocation fails
+- `useZaurWorld()` React hook (`@nomideusz/zaur-world/react`)
+- Subpath exports: `@nomideusz/zaur-world/weather`, `/solar`, `/react`
+- ISS pass prediction via ground-track extrapolation (not just a single snapshot)
+- Solstice warmth — subtle golden sky tint near summer solstice afternoons
+- `solsticeWarmth()` helper exported from the main entry
+- `terrain` / `satellites` work with a fixed `geo` option (no weather client required)
+
+### Changed
+
+- Split `world.ts` internals into `color`, `sky-math`, and `hills` modules
+- Dot grid rendered via a tiled canvas pattern (cheaper per frame)
+- ISS polls every 90s and can schedule passes up to ~15 minutes ahead
+
+### Tests
+
+- Satellite pass prediction and solstice warmth
+
 ## [0.4.0] - 2026-07-13
 
 ### Added
@@ -62,7 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase-accurate moon, golden-hour lit clouds, seasons, fireflies, shooting stars, wet ground
 - Zero runtime dependencies; framework-agnostic API
 
-[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nomideusz/zaur-world/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nomideusz/zaur-world/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nomideusz/zaur-world/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nomideusz/zaur-world/compare/v0.1.0...v0.2.0

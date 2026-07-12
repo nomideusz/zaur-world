@@ -112,6 +112,9 @@ createWorld(canvas, {
   // Pause rendering while the tab is hidden (default true).
   pauseWhenHidden: true,
 
+  // Browser geolocation fallback when IP lookup fails (opt-in).
+  geolocation: true,
+
   // Wall clock override for demos and screenshots.
   time: () => new Date("2026-07-12T19:30:00"),
 
@@ -135,6 +138,17 @@ createWorld(canvas, {
 ### React
 
 ```tsx
+import { useZaurWorld } from "@nomideusz/zaur-world/react";
+
+export function Sky() {
+  const { canvasRef } = useZaurWorld({ terrain: true, satellites: true });
+  return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0 }} />;
+}
+```
+
+Or without the hook:
+
+```tsx
 import { useEffect, useRef } from "react";
 import { createWorld } from "@nomideusz/zaur-world";
 
@@ -150,6 +164,20 @@ export function Sky() {
 
   return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0 }} />;
 }
+```
+
+### Subpath imports
+
+```ts
+import { deriveConditions } from "@nomideusz/zaur-world/weather";
+import { warpHour, solsticeWarmth } from "@nomideusz/zaur-world/solar";
+```
+
+### Snapshot
+
+```ts
+const sky = createWorld(canvas);
+const png = sky.capture("image/png");
 ```
 
 Reacting to conditions elsewhere in your UI:

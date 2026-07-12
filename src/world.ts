@@ -12,6 +12,20 @@ import type { WeatherConditions } from "./weather.js";
 import type { TerrainProfile } from "./terrain.js";
 import type { SatellitePass } from "./satellites.js";
 import type { ResolvedQuality } from "./quality.js";
+import type { RGB } from "./color.js";
+import { rgb, rgbToCss, desatRGB, lerpRGB, clampByte } from "./color.js";
+import { fillHillPath, generateBolt, hillPath } from "./hills.js";
+import {
+  cloudAlphaFor,
+  starAlpha,
+  auroraAlpha,
+  heatFactor,
+  daylight,
+  dayCreatureAlpha,
+  duskAlpha,
+  fireflyAlpha,
+  horizonGlowStrength,
+} from "./sky-math.js";
 import {
   SUN_RISE,
   SUN_SET,
@@ -20,6 +34,7 @@ import {
   meteorRate,
   venusState,
   lunarPhase,
+  solsticeWarmth,
 } from "./solar.js";
 
 export interface WorldState {
@@ -43,8 +58,6 @@ export interface WorldOptions {
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
-
-type RGB = [number, number, number];
 
 interface SkyKeyframe {
   /** Hour of day, 0..24. KEYFRAMES must be sorted ascending. */
@@ -199,6 +212,7 @@ export class World {
   private readonly particleScale: number;
   private readonly ambientEffects: number;
   private readonly showGrid: boolean;
+  private gridPattern: CanvasPattern | null = null;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
@@ -217,6 +231,7 @@ export class World {
     this.regenBirds();
     this.regenFireflies();
     this.regenBats();
+    this.regenGridPattern();
   }
 
   resize(state: WorldState): void {
@@ -227,6 +242,7 @@ export class World {
     this.regenBirds();
     this.regenFireflies();
     this.regenBats();
+    this.regenGridPattern();
     this.drops = [];
     this.splashes = [];
     this.dropsKind = "none";
@@ -302,6 +318,11 @@ export class World {
     // genuinely blue and a stormy one genuinely leaden — weather owns the mood.
     const cloudAlpha = wx ? cloudAlphaFor(wx) : 0;
     let [topRGB, bottomRGB] = this.skyAt(h);
+    const warmth = solsticeWarmth(date, wx?.latitude ?? 50);
+    if (warmth > 0) {
+      bottomRGB = lerpRGB(bottomRGB, [240, 170, 100], warmth);
+      topRGB = lerpRGB(topRGB, [255, 200, 140], warmth * 0.35);
+    }
     if (cloudAlpha > 0) {
       topRGB = desatRGB(topRGB, cloudAlpha * 0.55);
       bottomRGB = desatRGB(bottomRGB, cloudAlpha * 0.55);
@@ -396,15 +417,25 @@ export class World {
     // Lightning: brief screen-wide flash + procedural bolt during thunder.
     if (this.lightningIntensity > 0) this.drawLightning(ctx);
 
-    // Quiet graph-paper dot grid on top
-    if (this.gridColor) {
-      ctx.fillStyle = this.gridColor;
-      for (let y = GRID_PX; y < height; y += GRID_PX) {
-        for (let x = GRID_PX; x < width; x += GRID_PX) {
-          ctx.fillRect(x, y, 1, 1);
-        }
-      }
+    // Quiet graph-paper dot grid on top (tiled pattern — cheap per frame).
+    if (this.gridPattern) {
+      ctx.fillStyle = this.gridPattern;
+      ctx.fillRect(0, 0, width, height);
     }
+  }
+
+  /** Bake the dot grid into a repeating pattern (regenerated on resize). */
+  private regenGridPattern(): void {
+    this.gridPattern = null;
+    if (!this.gridColor || !this.showGrid) return;
+    const tile = document.createElement("canvas");
+    tile.width = GRID_PX;
+    tile.height = GRID_PX;
+    const tctx = tile.getContext("2d");
+    if (!tctx) return;
+    tctx.fillStyle = this.gridColor;
+    tctx.fillRect(0, 0, 1, 1);
+    this.gridPattern = tctx.createPattern(tile, "repeat");
   }
 
   /** Returns interpolated [top, bottom] sky colors for a given decimal hour. */
@@ -1549,173 +1580,4 @@ export class World {
       }
     }
   }
-}
-
-/**
- * Cloud overlay strength for the current conditions. 0 means no draw,
- * 1 means full opacity. Heavier cloudiness, thunder, and active rain all
- * push this higher; intensity adds a small extra weight.
- */
-function cloudAlphaFor(wx: WeatherConditions): number {
-  let a = 0;
-  if (wx.cloudiness === 1) a = 0.35;
-  else if (wx.cloudiness === 2) a = 0.65;
-  if (wx.thunder) a = Math.max(a, 0.85);
-  if (wx.precipitation === "rain") a = Math.max(a, 0.55);
-  if (wx.precipitation === "snow") a = Math.max(a, 0.5);
-  return Math.min(1, a + wx.intensity * 0.1);
-}
-
-/**
- * Star visibility curve. 1.0 from late evening through deep night, fading
- * symmetrically at dusk/dawn so the transition matches the sky gradient.
- */
-function starAlpha(h: number): number {
-  if (h >= 20 || h <= 4) return 1;
-  if (h > 18 && h < 20) return (h - 18) / 2; // dusk fade-in
-  if (h > 4 && h < 6) return 1 - (h - 4) / 2; // dawn fade-out
-  return 0;
-}
-
-/** Aurora visibility — strongest in the deep-night window, off by day. */
-function auroraAlpha(h: number): number {
-  if (h >= 21 || h <= 4) return 1;
-  if (h > 19 && h < 21) return (h - 19) / 2;
-  if (h > 4 && h < 6) return 1 - (h - 4) / 2;
-  return 0;
-}
-
-/** Heat-haze strength: ramps 27→35°C, needs daylight and a clear-ish sky. */
-function heatFactor(tempC: number, cloudAlpha: number, h: number): number {
-  const t = (tempC - 27) / 8;
-  if (t <= 0) return 0;
-  return Math.min(1, t) * daylight(h) * (1 - cloudAlpha);
-}
-
-/** Daylight factor, 0 at night → 1 in full day, easing through twilight. */
-function daylight(h: number): number {
-  if (h <= SUN_RISE - 1 || h >= SUN_SET + 1) return 0;
-  if (h < SUN_RISE + 1) return (h - (SUN_RISE - 1)) / 2;
-  if (h > SUN_SET - 1) return ((SUN_SET + 1) - h) / 2;
-  return 1;
-}
-
-/** Daytime creature alpha (birds) — eases in/out around the working day. */
-function dayCreatureAlpha(h: number): number {
-  if (h <= SUN_RISE - 0.5 || h >= SUN_SET + 0.5) return 0;
-  if (h < SUN_RISE + 1) return (h - (SUN_RISE - 0.5)) / 1.5;
-  if (h > SUN_SET - 1) return Math.max(0, ((SUN_SET + 0.5) - h) / 1.5);
-  return 1;
-}
-
-/** Bat window: the ~80 minutes of deepening dusk right after sunset. */
-function duskAlpha(h: number): number {
-  const dt = h - SUN_SET;
-  if (dt <= 0 || dt >= 1.4) return 0;
-  return Math.sin((dt / 1.4) * Math.PI);
-}
-
-/** Firefly alpha — only after dark and not at the deepest part of night. */
-function fireflyAlpha(h: number): number {
-  if (h >= 19.5 && h < 23) return Math.min(1, (h - 19.5) / 1.5);
-  if (h >= 23 || h < 1) return 1;
-  if (h >= 1 && h < 3) return 1 - (h - 1) / 2;
-  return 0;
-}
-
-/**
- * Sunrise / sunset horizon glow strength, 0..1. Peaks for ~30 minutes
- * around SUN_RISE and SUN_SET and falls off either side.
- */
-function horizonGlowStrength(h: number): number {
-  const dRise = Math.abs(h - SUN_RISE);
-  const dSet = Math.abs(h - SUN_SET);
-  const d = Math.min(dRise, dSet);
-  if (d > 1.2) return 0;
-  // Smooth ease-out from peak at d=0 down to 0 at d=1.2
-  const t = 1 - d / 1.2;
-  return t * t;
-}
-
-/** Build a procedural lightning bolt path: zig-zag from the cloud band downward. */
-function generateBolt(w: number, h: number): Array<[number, number]> {
-  const startX = w * (0.18 + Math.random() * 0.64);
-  const segments = 7 + Math.floor(Math.random() * 5);
-  const targetY = h * (0.32 + Math.random() * 0.28);
-  const stepY = targetY / segments;
-  const path: Array<[number, number]> = [[startX, 0]];
-  let x = startX;
-  let y = 0;
-  for (let i = 0; i < segments; i++) {
-    y += stepY;
-    x += (Math.random() - 0.5) * 22;
-    path.push([x, y]);
-  }
-  return path;
-}
-
-/**
- * Build a procedural ridgeline as a polyline, sampled across the world's
- * width. Each layer is seeded so its silhouette is stable between frames.
- */
-function hillPath(
-  seed: number,
-  baseY: number,
-  amp: number,
-  segments: number,
-  width: number,
-): Array<[number, number]> {
-  let s = seed;
-  const r = (): number => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-  const pts: Array<[number, number]> = [];
-  for (let i = 0; i <= segments; i++) {
-    const x = (i / segments) * width;
-    const y = baseY + Math.sin(i * 0.7 + r() * 3) * amp + r() * amp * 0.4;
-    pts.push([x, y]);
-  }
-  return pts;
-}
-
-/** Close a ridgeline polyline down to the bottom of the canvas and fill it. */
-function fillHillPath(
-  ctx: CanvasRenderingContext2D,
-  pts: Array<[number, number]>,
-  width: number,
-  height: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  for (const [x, y] of pts) ctx.lineTo(x, y);
-  ctx.lineTo(width, height);
-  ctx.closePath();
-  ctx.fill();
-}
-
-// ── Color helpers ────────────────────────────────────────────────────────
-
-function rgb(hex: string): RGB {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
-function rgbToCss(c: RGB): string {
-  return `rgb(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0})`;
-}
-
-/** Mix a color toward its own luminance gray — overcast-sky desaturation. */
-function desatRGB(c: RGB, k: number): RGB {
-  const l = c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
-  return lerpRGB(c, [l, l, l], k);
-}
-
-function lerpRGB(a: RGB, b: RGB, t: number): RGB {
-  const k = Math.max(0, Math.min(1, t));
-  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
-}
-
-function clampByte(v: number): number {
-  return Math.max(0, Math.min(255, Math.round(v)));
 }

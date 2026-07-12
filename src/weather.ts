@@ -67,6 +67,11 @@ export interface WeatherClientOptions {
   cache?: boolean;
   /** Called when conditions change after a successful fetch. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
+  /**
+   * After IP geolocation fails, ask the browser for precise location.
+   * Requires user consent. Default false.
+   */
+  geolocation?: boolean;
 }
 
 export class WeatherClient {
@@ -76,18 +81,24 @@ export class WeatherClient {
   private readonly timers: number[] = [];
   private readonly cache: boolean;
   private readonly onChange: ((conditions: WeatherConditions) => void) | null;
+  private readonly useGeolocation: boolean;
+  private readonly seedGeo: Geo | null;
 
   constructor(opts: WeatherClientOptions = {}) {
     this.cache = opts.cache !== false;
     this.onChange = opts.onConditionsChange ?? null;
+    this.useGeolocation = opts.geolocation === true;
     const cardOpts = opts.weatherCard ?? (opts.cardParent ? { parent: opts.cardParent } : null);
     this.card = cardOpts ? new WeatherCard(cardOpts) : null;
     if (opts.geo) {
-      this.cachedGeo = {
+      this.seedGeo = {
         lat: opts.geo.lat,
         lon: opts.geo.lon,
         city: opts.geo.city ?? "your area",
       };
+      this.cachedGeo = this.seedGeo;
+    } else {
+      this.seedGeo = null;
     }
     void this.refresh();
     this.timers.push(window.setInterval(() => void this.refresh(), REFRESH_MS));
@@ -156,6 +167,10 @@ export class WeatherClient {
 
   private async geo(): Promise<Geo> {
     if (this.cachedGeo) return this.cachedGeo;
+    if (this.seedGeo) {
+      this.cachedGeo = this.seedGeo;
+      return this.cachedGeo;
+    }
     try {
       const res = await fetchWithTimeout("https://get.geojs.io/v1/ip/geo.json");
       if (res.ok) {
@@ -185,6 +200,20 @@ export class WeatherClient {
     } catch {
       /* fall through */
     }
+    if (this.useGeolocation) {
+      const browser = await this.browserGeo();
+      if (browser) {
+        this.cachedGeo = browser;
+        if (this.cache) {
+          try {
+            localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(this.cachedGeo));
+          } catch {
+            /* private mode */
+          }
+        }
+        return this.cachedGeo;
+      }
+    }
     if (this.cache) {
       try {
         const saved = localStorage.getItem(GEO_CACHE_KEY);
@@ -201,6 +230,24 @@ export class WeatherClient {
     }
     this.cachedGeo = FALLBACK_GEO;
     return this.cachedGeo;
+  }
+
+  private browserGeo(): Promise<Geo | null> {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            city: "your area",
+          }),
+        () => resolve(null),
+        { timeout: 12_000, maximumAge: 600_000 }
+      );
+    });
   }
 }
 

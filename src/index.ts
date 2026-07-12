@@ -38,11 +38,13 @@ export {
   lunarPhase,
   meteorRate,
   auroraLatFactor,
+  solsticeWarmth,
   SUN_RISE,
   SUN_SET,
 } from "./solar.js";
 export { resolveQuality, type Quality, type ResolvedQuality } from "./quality.js";
 export { prefersReducedMotion } from "./motion.js";
+export { angularDistanceDeg, predictIssPass } from "./satellite-math.js";
 
 export interface CreateWorldOptions {
   /** Host element for the small ambient weather card. Omit for no card. */
@@ -61,6 +63,11 @@ export interface CreateWorldOptions {
   geo?: GeoLocation;
   /** Persist geo in localStorage. Default true. */
   cache?: boolean;
+  /**
+   * After IP geolocation fails, ask the browser for precise location.
+   * Requires user consent. Default false.
+   */
+  geolocation?: boolean;
   /** Called when live weather conditions change. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
   /** Wall clock override for demos, screenshots, and tests. */
@@ -76,6 +83,8 @@ export interface CreateWorldOptions {
 export interface WorldHandle {
   world: World;
   conditions: () => WeatherConditions | null;
+  /** Snapshot the current canvas frame as a data URL. */
+  capture(type?: string, quality?: number): string;
   destroy: () => void;
 }
 
@@ -101,19 +110,24 @@ export function createWorld(
         weatherCard: opts.weatherCard,
         geo: opts.geo,
         cache: opts.cache,
+        geolocation: opts.geolocation,
         onConditionsChange: opts.onConditionsChange,
       });
   const conditions = opts.weather ?? (() => client?.conditions() ?? null);
 
+  const location = (): { lat: number; lon: number } | null => {
+    if (opts.geo) return { lat: opts.geo.lat, lon: opts.geo.lon };
+    return client?.location() ?? null;
+  };
+
   let terrainProfile: TerrainProfile | null = null;
-  if (opts.terrain && client) {
-    void waitForGeo(client).then(async (g) => {
+  if (opts.terrain) {
+    void resolveLocation(location, client).then(async (g) => {
       if (g) terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
     });
   }
 
-  const watcher =
-    opts.satellites && client ? new SatelliteWatcher(() => client.location()) : null;
+  const watcher = opts.satellites ? new SatelliteWatcher(location) : null;
 
   const world = new World(
     { width: canvas.clientWidth || 1, height: canvas.clientHeight || 1 },
@@ -183,6 +197,9 @@ export function createWorld(
   return {
     world,
     conditions,
+    capture(type = "image/png", quality?: number): string {
+      return canvas.toDataURL(type, quality);
+    },
     destroy(): void {
       stopLoop();
       window.removeEventListener("resize", applySize);
@@ -193,13 +210,15 @@ export function createWorld(
   };
 }
 
-async function waitForGeo(
-  client: WeatherClient,
+async function resolveLocation(
+  location: () => { lat: number; lon: number } | null,
+  client: WeatherClient | null,
   tries = 30
 ): Promise<{ lat: number; lon: number } | null> {
   for (let i = 0; i < tries; i++) {
-    const g = client.location();
+    const g = location();
     if (g) return g;
+    if (!client) return null;
     await new Promise((r) => setTimeout(r, 1000));
   }
   return null;
