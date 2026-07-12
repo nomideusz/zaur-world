@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-13
+
+### Added
+
+- Hot-toggle API on `WorldHandle`: `setTerrain`, `setSatellites`, `setSatelliteDemo`, `setWeatherCard`, `setGrid`, `setTime`, `setQuality`, `setStormPreview`, `setFireflies`
+- `fireflies` option (default `true`) — summer-evening fireflies in the lower sky band
+- Demo controls panel with grouped switches, quality presets, and golden-hour offset slider
+
+### Fixed
+
+- Toggling terrain or ISS no longer remounts the world (no weather flash or cloud reset)
+- Terrain off now correctly restores default hills
+- Weather card toggle pins the card visible instead of letting it auto-fade
+- Dot grid toggle independent of quality preset
+- Quality changes no longer reset cloud positions unless canvas size or DPR cap changes
+- ISS demo passes visible in daylight; `setDemo()` on `SatelliteWatcher`
+
+### Changed
+
+- Demo panel collapsed by default; Apple-style switches; fixed-height status line
+
 ## [0.5.0] - 2026-07-13
 
 ### Added

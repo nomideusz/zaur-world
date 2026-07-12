@@ -57,6 +57,11 @@ export interface CreateWorldOptions {
   terrain?: boolean;
   /** Show the real ISS when it passes near the visitor. Default false. */
   satellites?: boolean;
+  /**
+   * Schedule sample ISS arcs when no real pass is active (for demos).
+   * Only applies when `satellites` is enabled.
+   */
+  satelliteDemo?: boolean;
   /** Custom weather source — replaces the built-in client (no network calls). */
   weather?: () => WeatherConditions | null;
   /** Skip IP geolocation; use this location for weather, terrain, and seasons. */
@@ -78,6 +83,8 @@ export interface CreateWorldOptions {
   maxDpr?: number;
   /** Pause the render loop while the tab is hidden. Default true. */
   pauseWhenHidden?: boolean;
+  /** Summer-evening fireflies in the lower sky band. Default true. */
+  fireflies?: boolean;
 }
 
 export interface WorldHandle {
@@ -85,6 +92,26 @@ export interface WorldHandle {
   conditions: () => WeatherConditions | null;
   /** Snapshot the current canvas frame as a data URL. */
   capture(type?: string, quality?: number): string;
+  /** Toggle real-elevation horizon shaping without remounting. */
+  setTerrain(enabled: boolean): void;
+  /** Toggle ISS tracking without remounting. */
+  setSatellites(enabled: boolean): void;
+  /** Toggle sample ISS arcs when no real pass is active. */
+  setSatelliteDemo(enabled: boolean): void;
+  /** Show or hide the ambient weather card. */
+  setWeatherCard(visible: boolean): void;
+  /** Toggle the foreground dot grid. */
+  setGrid(enabled: boolean): void;
+  /** Override the wall clock, or pass undefined to use real time again. */
+  setTime(fn?: () => Date): void;
+  /** Switch performance preset without remounting. */
+  setQuality(quality: Quality): void;
+  /** Preview storm clouds, rain, and lightning using live weather as a base. */
+  setStormPreview(enabled: boolean): void;
+  /** Toggle summer-evening fireflies in the lower sky band. */
+  setFireflies(enabled: boolean): void;
+  /** Current terrain profile, or null while loading / disabled. */
+  terrainProfile(): TerrainProfile | null;
   destroy: () => void;
 }
 
@@ -113,31 +140,71 @@ export function createWorld(
         geolocation: opts.geolocation,
         onConditionsChange: opts.onConditionsChange,
       });
-  const conditions = opts.weather ?? (() => client?.conditions() ?? null);
+
+  let stormPreview = false;
+  const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
+  const conditions = (): WeatherConditions | null => {
+    const live = liveConditions();
+    if (!stormPreview) return live;
+    const base: WeatherConditions = live ?? {
+      cloudiness: 0,
+      precipitation: "none",
+      intensity: 0,
+      thunder: false,
+      fog: false,
+      isDay: true,
+      windSpeed: 12,
+      temperatureC: 18,
+      sunriseH: 6.5,
+      sunsetH: 19,
+    };
+    return {
+      ...base,
+      cloudiness: 2,
+      precipitation: "rain",
+      intensity: Math.max(0.8, base.intensity),
+      thunder: true,
+      fog: false,
+      windSpeed: Math.max(28, base.windSpeed),
+    };
+  };
 
   const location = (): { lat: number; lon: number } | null => {
     if (opts.geo) return { lat: opts.geo.lat, lon: opts.geo.lon };
     return client?.location() ?? null;
   };
 
+  let terrainEnabled = opts.terrain === true;
   let terrainProfile: TerrainProfile | null = null;
-  if (opts.terrain) {
-    void resolveLocation(location, client).then(async (g) => {
-      if (g) terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
-    });
-  }
+  let satellitesEnabled = opts.satellites === true;
+  let satelliteDemo = opts.satelliteDemo === true;
+  let watcher: SatelliteWatcher | null = null;
 
-  const watcher = opts.satellites ? new SatelliteWatcher(location) : null;
+  const loadTerrain = async (): Promise<void> => {
+    const g = await resolveLocation(location, client);
+    if (g && terrainEnabled) {
+      terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
+    }
+  };
+
+  const ensureWatcher = (): void => {
+    if (watcher) return;
+    watcher = new SatelliteWatcher(location, { demo: satelliteDemo });
+  };
+
+  if (terrainEnabled) void loadTerrain();
+  if (satellitesEnabled) ensureWatcher();
 
   const world = new World(
     { width: canvas.clientWidth || 1, height: canvas.clientHeight || 1 },
     {
       weather: conditions,
       gridColor: opts.gridColor,
-      terrain: () => terrainProfile,
-      satellites: watcher ? () => watcher.current() : undefined,
+      terrain: () => (terrainEnabled ? terrainProfile : null),
+      satellites: () => (satellitesEnabled ? watcher?.current() ?? null : null),
       time: opts.time,
       quality: resolvedQuality,
+      fireflies: opts.fireflies !== false,
     }
   );
 
@@ -152,6 +219,17 @@ export function createWorld(
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     world.resize({ width: w, height: h });
+  };
+
+  const applyQualityPreset = (quality: Quality): void => {
+    const next = resolveQuality(quality);
+    if (opts.maxDpr != null) next.maxDpr = opts.maxDpr;
+    const dprChanged = resolvedQuality.maxDpr !== next.maxDpr;
+    resolvedQuality.maxDpr = next.maxDpr;
+    resolvedQuality.particleScale = next.particleScale;
+    resolvedQuality.ambientEffects = next.ambientEffects;
+    world.applyQuality(next);
+    if (dprChanged) applySize();
   };
   applySize();
   window.addEventListener("resize", applySize);
@@ -199,6 +277,51 @@ export function createWorld(
     conditions,
     capture(type = "image/png", quality?: number): string {
       return canvas.toDataURL(type, quality);
+    },
+    setTerrain(enabled: boolean): void {
+      if (terrainEnabled === enabled) return;
+      terrainEnabled = enabled;
+      if (!enabled) {
+        terrainProfile = null;
+        return;
+      }
+      if (!terrainProfile) void loadTerrain();
+    },
+    setSatellites(enabled: boolean): void {
+      if (satellitesEnabled === enabled) return;
+      satellitesEnabled = enabled;
+      if (!enabled) {
+        watcher?.destroy();
+        watcher = null;
+        return;
+      }
+      ensureWatcher();
+    },
+    setSatelliteDemo(enabled: boolean): void {
+      if (satelliteDemo === enabled) return;
+      satelliteDemo = enabled;
+      watcher?.setDemo(enabled);
+    },
+    setWeatherCard(visible: boolean): void {
+      client?.setCardVisible(visible);
+    },
+    setGrid(enabled: boolean): void {
+      world.setGrid(enabled);
+    },
+    setTime(fn?: () => Date): void {
+      world.setTime(fn);
+    },
+    setQuality(quality: Quality): void {
+      applyQualityPreset(quality);
+    },
+    setStormPreview(enabled: boolean): void {
+      stormPreview = enabled;
+    },
+    setFireflies(enabled: boolean): void {
+      world.setFireflies(enabled);
+    },
+    terrainProfile(): TerrainProfile | null {
+      return terrainEnabled ? terrainProfile : null;
     },
     destroy(): void {
       stopLoop();

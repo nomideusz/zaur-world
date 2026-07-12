@@ -130,6 +130,11 @@ export class WeatherClient {
     return this.fetchWeather();
   }
 
+  /** Show or hide the ambient weather card. */
+  setCardVisible(visible: boolean): void {
+    this.card?.setVisible(visible);
+  }
+
   private async fetchWeather(): Promise<void> {
     try {
       const geo = await this.geo();
@@ -339,6 +344,8 @@ function describeWeather(code: number, isDay: boolean): string {
 class WeatherCard {
   private readonly el: HTMLDivElement;
   private hideTimer: number | null = null;
+  /** `pinned` = always visible; `ambient` = peek then fade; `hidden` = off. */
+  private mode: "ambient" | "pinned" | "hidden" = "ambient";
 
   constructor(opts: WeatherCardOptions) {
     injectStylesOnce();
@@ -367,12 +374,34 @@ class WeatherCard {
   }
 
   show(durationMs: number): void {
+    if (this.mode === "hidden") return;
+    this.el.hidden = false;
     this.el.classList.add("wx-card--visible");
+    if (this.mode === "pinned") {
+      if (this.hideTimer !== null) window.clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+      return;
+    }
     if (this.hideTimer !== null) window.clearTimeout(this.hideTimer);
     this.hideTimer = window.setTimeout(() => {
       this.el.classList.remove("wx-card--visible");
       this.hideTimer = null;
     }, durationMs);
+  }
+
+  setVisible(visible: boolean): void {
+    this.mode = visible ? "pinned" : "hidden";
+    if (this.hideTimer !== null) {
+      window.clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    if (this.mode === "hidden") {
+      this.el.classList.remove("wx-card--visible");
+      this.el.hidden = true;
+      return;
+    }
+    this.el.hidden = false;
+    this.el.classList.add("wx-card--visible");
   }
 }
 

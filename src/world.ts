@@ -55,6 +55,8 @@ export interface WorldOptions {
   time?: () => Date;
   /** Performance / effects preset (resolved before passing in). */
   quality?: ResolvedQuality;
+  /** Summer-evening fireflies in the lower sky band. Default true. */
+  fireflies?: boolean;
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
@@ -205,23 +207,28 @@ export class World {
   /** Summer-dusk bats — erratic flitting silhouettes. */
   private bats: Bat[] = [];
   private readonly weatherFn: () => WeatherConditions | null;
-  private readonly gridColor: string | null;
+  private readonly baseGridColor: string | null;
+  private gridColor: string | null;
   private readonly terrainFn: () => TerrainProfile | null;
   private readonly satFn: () => SatellitePass | null;
-  private readonly timeFn: () => Date;
-  private readonly particleScale: number;
-  private readonly ambientEffects: number;
-  private readonly showGrid: boolean;
+  private timeFn: () => Date;
+  private particleScale: number;
+  private ambientEffects: number;
+  private showGrid: boolean;
+  private gridEnabled: boolean;
   private gridPattern: CanvasPattern | null = null;
+  private firefliesEnabled: boolean;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
+    this.firefliesEnabled = opts.fireflies !== false;
     const q = opts.quality;
     this.particleScale = q?.particleScale ?? 1;
     this.ambientEffects = q?.ambientEffects ?? 1;
     this.showGrid = q?.showGrid ?? true;
-    const baseGrid = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
-    this.gridColor = this.showGrid ? baseGrid : null;
+    this.gridEnabled = this.showGrid;
+    this.baseGridColor = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
+    this.gridColor = this.gridEnabled && this.baseGridColor ? this.baseGridColor : null;
     this.terrainFn = opts.terrain ?? (() => null);
     this.satFn = opts.satellites ?? (() => null);
     this.timeFn = opts.time ?? (() => new Date());
@@ -235,7 +242,10 @@ export class World {
   }
 
   resize(state: WorldState): void {
+    const sizeChanged =
+      this.state.width !== state.width || this.state.height !== state.height;
     this.state = state;
+    if (!sizeChanged) return;
     this.regenStars();
     this.regenClouds();
     this.regenHills();
@@ -254,6 +264,29 @@ export class World {
   }
   get height(): number {
     return this.state.height;
+  }
+
+  /** Toggle the foreground dot grid without remounting. */
+  setGrid(enabled: boolean): void {
+    this.gridEnabled = enabled;
+    this.gridColor = enabled && this.baseGridColor ? this.baseGridColor : null;
+    this.regenGridPattern();
+  }
+
+  /** Override the wall clock, or pass undefined to use real time again. */
+  setTime(fn?: () => Date): void {
+    this.timeFn = fn ?? (() => new Date());
+  }
+
+  /** Update particle density and ambient effect scaling. */
+  applyQuality(q: ResolvedQuality): void {
+    this.particleScale = q.particleScale;
+    this.ambientEffects = q.ambientEffects;
+  }
+
+  /** Toggle summer-evening fireflies without remounting. */
+  setFireflies(enabled: boolean): void {
+    this.firefliesEnabled = enabled;
   }
 
   // The world is fully driven by the wall clock — nothing to advance per frame
@@ -281,10 +314,10 @@ export class World {
     if (duskAlpha(h) > 0) this.tickBats(dt);
   }
 
-  /** Re-bake the hill paths when a terrain profile (async fetch) arrives. */
+  /** Re-bake the hill paths when a terrain profile (async fetch) arrives or clears. */
   private applyTerrain(): void {
     const t = this.terrainFn();
-    if (t && t !== this.appliedTerrain) {
+    if (t !== this.appliedTerrain) {
       this.appliedTerrain = t;
       this.regenHills();
     }
@@ -347,7 +380,10 @@ export class World {
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
     const issPass = this.satFn();
-    if (issPass && sa > 0.2) this.drawIss(ctx, issPass.progress, sa);
+    if (issPass) {
+      const issA = issPass.demo ? Math.max(sa, 0.4) : sa;
+      if (issA > 0.2) this.drawIss(ctx, issPass.progress, issA);
+    }
 
     // Venus — evening or morning star per its real 584-day cycle.
     this.drawVenus(ctx, h, date, cloudAlpha);
@@ -400,7 +436,9 @@ export class World {
     // Fireflies near the lower sky band on clear nights — May to September;
     // fireflies in a January frost would break the spell.
     const flySeason = month >= 4 && month <= 8 ? 1 : 0;
-    const flyA = fireflyAlpha(h) * flySeason * (1 - cloudAlpha * 0.85);
+    const flyA = this.firefliesEnabled
+      ? fireflyAlpha(h) * flySeason * (1 - cloudAlpha * 0.85)
+      : 0;
     if (flyA > 0.05) this.drawFireflies(ctx, flyA);
 
     // Bats own the brief dusk window on summer evenings.
@@ -427,7 +465,7 @@ export class World {
   /** Bake the dot grid into a repeating pattern (regenerated on resize). */
   private regenGridPattern(): void {
     this.gridPattern = null;
-    if (!this.gridColor || !this.showGrid) return;
+    if (!this.gridColor || !this.gridEnabled) return;
     const tile = document.createElement("canvas");
     tile.width = GRID_PX;
     tile.height = GRID_PX;
@@ -1053,14 +1091,16 @@ export class World {
     const t = this.appliedTerrain;
     const relief = t?.relief ?? 130; // default: gentle rolling hills
     this.coastal = t?.coastal ?? false;
-    // Plains stay low; alpine relief pushes taller, busier ridgelines.
-    let amp = Math.min(2.4, 0.45 + relief / 320);
+    // Real elevation data gets a stronger silhouette than the procedural default.
+    let amp = t
+      ? Math.min(3.2, 0.6 + relief / 240)
+      : Math.min(2.4, 0.45 + relief / 320);
     if (this.coastal) amp *= 0.55; // coasts read flat toward the water
-    const seg = relief > 500 ? 30 : 22;
+    const seg = relief > 450 ? 30 : 22;
     this.hillsFar = hillPath(7331, height * 0.62, height * 0.028 * amp, seg, width);
     this.hillsNear = hillPath(919, height * 0.74, height * 0.036 * amp, Math.max(16, seg - 6), width);
     this.hillsPeaks =
-      relief > 550 ? hillPath(2718, height * 0.56, height * 0.05 * amp, 34, width) : [];
+      relief > 420 ? hillPath(2718, height * 0.56, height * 0.05 * amp, 34, width) : [];
   }
 
   private regenBirds(): void {

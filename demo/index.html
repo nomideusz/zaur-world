@@ -26,16 +26,189 @@
 		</header>
 
 		<footer class="chrome">
-			<div class="toggles" role="group" aria-label="Optional features">
-				<label class="pill">
-					<input type="checkbox" id="opt-terrain" checked />
-					<span>Terrain</span>
-				</label>
-				<label class="pill">
-					<input type="checkbox" id="opt-satellites" checked />
-					<span>ISS</span>
-				</label>
-			</div>
+			<details class="demo-panel">
+				<summary class="demo-panel-trigger">Demo controls</summary>
+
+				<div class="demo-panel-body">
+					<p class="panel-intro">
+						Optional layers and previews. Changes apply instantly — no reload,
+						no sky flash.
+					</p>
+
+					<section class="control-group">
+						<h2 class="group-label">Layers</h2>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-terrain">
+								<span class="control-title">Real terrain</span>
+								<span class="control-desc"
+									>Horizon shaped from nearby elevations.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-terrain" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-weather-card">
+								<span class="control-title">Weather card</span>
+								<span class="control-desc"
+									>Live conditions readout (top-right).</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-weather-card" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-grid">
+								<span class="control-title">Dot grid</span>
+								<span class="control-desc"
+									>Foreground graph-paper overlay.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-grid" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+					</section>
+
+					<section class="control-group">
+						<h2 class="group-label">Space</h2>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-satellites">
+								<span class="control-title">ISS tracking</span>
+								<span class="control-desc"
+									>Real station when overhead (often at night).</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-satellites" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+
+						<div class="control-row control-row--nested" id="row-sat-demo">
+							<label class="control-text" for="opt-sat-demo">
+								<span class="control-title">Sample passes</span>
+								<span class="control-desc"
+									>Demo arc ~12 s after enable, then every ~7 min.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-sat-demo" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+					</section>
+
+					<section class="control-group">
+						<h2 class="group-label">Life</h2>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-fireflies">
+								<span class="control-title">Fireflies</span>
+								<span class="control-desc"
+									>Blinking dots on clear summer evenings.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-fireflies" checked />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+					</section>
+
+					<section class="control-group">
+						<h2 class="group-label">Previews</h2>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-golden-hour">
+								<span class="control-title">Golden hour</span>
+								<span class="control-desc"
+									>Freeze the clock before sunset.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-golden-hour" />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+
+						<div class="slider-row" id="row-golden-offset">
+							<label class="slider-label" for="opt-golden-offset"
+								>Minutes before sunset</label
+							>
+							<div class="slider-field">
+								<input
+									type="range"
+									id="opt-golden-offset"
+									min="15"
+									max="90"
+									step="15"
+									value="30"
+									disabled
+								/>
+								<output id="golden-offset-val" for="opt-golden-offset"
+									>30 min</output
+								>
+							</div>
+						</div>
+
+						<div class="control-row">
+							<label class="control-text" for="opt-storm">
+								<span class="control-title">Storm</span>
+								<span class="control-desc"
+									>Heavy clouds, rain, and lightning.</span
+								>
+							</label>
+							<label class="switch">
+								<input type="checkbox" id="opt-storm" />
+								<span class="switch-track" aria-hidden="true"></span>
+							</label>
+						</div>
+					</section>
+
+					<section class="control-group">
+						<h2 class="group-label">Rendering</h2>
+
+						<div class="control-row control-row--stacked">
+							<div class="control-text">
+								<span class="control-title">Quality</span>
+								<span class="control-desc"
+									>Canvas DPR, particles, and ambient effects.</span
+								>
+							</div>
+							<div class="segmented" role="radiogroup" aria-label="Quality preset">
+								<input
+									type="radio"
+									name="quality"
+									id="qual-auto"
+									value="auto"
+									checked
+								/>
+								<label for="qual-auto">Auto</label>
+								<input type="radio" name="quality" id="qual-high" value="high" />
+								<label for="qual-high">High</label>
+								<input type="radio" name="quality" id="qual-low" value="low" />
+								<label for="qual-low">Low</label>
+							</div>
+						</div>
+					</section>
+
+					<div class="panel-status" aria-live="polite">
+						<p class="extras-status" id="extras-status">
+							Live sky — no overrides active
+						</p>
+					</div>
+				</div>
+			</details>
 
 			<details class="install">
 				<summary>Install</summary>

@@ -112,6 +112,9 @@ createWorld(canvas, {
   // Pause rendering while the tab is hidden (default true).
   pauseWhenHidden: true,
 
+  // Summer-evening fireflies in the lower sky (default true).
+  fireflies: true,
+
   // Browser geolocation fallback when IP lookup fails (opt-in).
   geolocation: true,
 
