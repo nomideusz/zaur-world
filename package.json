@@ -1,6 +1,6 @@
 {
 	"name": "@nomideusz/zaur-world",
-	"version": "0.7.0",
+	"version": "0.7.1",
 	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
 	"type": "module",
 	"exports": {
@@ -39,7 +39,7 @@
 		"test": "pnpm run build:types && node --test test/*.test.mjs",
 		"demo:dev": "pnpm run build:types && pnpm --filter zaur-world-demo dev",
 		"demo:build": "pnpm run build && pnpm --filter zaur-world-demo build",
-		"prepublishOnly": "pnpm run build && pnpm test"
+		"prepublishOnly": "pnpm test && pnpm run build"
 	},
 	"keywords": [
 		"canvas",
