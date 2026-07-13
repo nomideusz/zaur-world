@@ -1,0 +1,209 @@
+/** Self-contained atmosphere overlays drawn over the sky gradient. */
+
+import { daylight, horizonGlowStrength } from "./sky-math.js";
+import { SUN_RISE, SUN_SET } from "./solar.js";
+
+export function drawHorizonGlow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  h: number
+): void {
+  const strength = horizonGlowStrength(h);
+  if (strength <= 0.02) return;
+  const onLeft = h < 12;
+  const cx = onLeft ? width * 0.18 : width * 0.82;
+  const cy = height * 0.62;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(width, height) * 0.7);
+  const a = (0.32 * strength).toFixed(3);
+  grad.addColorStop(0, `rgba(255, 150, 70, ${a})`);
+  grad.addColorStop(0.35, `rgba(240, 110, 60, ${(0.2 * strength).toFixed(3)})`);
+  grad.addColorStop(0.7, `rgba(160, 70, 80, ${(0.1 * strength).toFixed(3)})`);
+  grad.addColorStop(1, "rgba(60, 30, 60, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+}
+
+export function drawFog(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, "rgba(180, 184, 196, 0.04)");
+  grad.addColorStop(0.55, "rgba(190, 192, 202, 0.18)");
+  grad.addColorStop(1, "rgba(200, 200, 210, 0.32)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  const t = performance.now() / 1000;
+  const bandY = height * (0.55 + Math.sin(t * 0.06) * 0.04);
+  const bandH = height * 0.18;
+  const band = ctx.createLinearGradient(0, bandY - bandH, 0, bandY + bandH);
+  band.addColorStop(0, "rgba(210, 212, 220, 0)");
+  band.addColorStop(0.5, "rgba(210, 212, 220, 0.10)");
+  band.addColorStop(1, "rgba(210, 212, 220, 0)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, bandY - bandH, width, bandH * 2);
+}
+
+export function drawWetSheen(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  wetness: number
+): void {
+  const a = 0.22 * wetness;
+  const grad = ctx.createLinearGradient(0, height * 0.82, 0, height);
+  grad.addColorStop(0, "rgba(180, 200, 230, 0)");
+  grad.addColorStop(0.55, `rgba(170, 195, 230, ${(a * 0.45).toFixed(3)})`);
+  grad.addColorStop(1, `rgba(200, 220, 245, ${a.toFixed(3)})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, height * 0.82, width, height * 0.18);
+
+  // Specular glints — wet ground catches the sky.
+  if (wetness > 0.35) {
+    const t = performance.now() / 1000;
+    const n = Math.round(8 + wetness * 14);
+    for (let i = 0; i < n; i++) {
+      const x = ((i * 97 + t * 12) % width + width) % width;
+      const y = height * (0.88 + ((i * 13) % 10) / 100);
+      const ga = (0.08 + wetness * 0.12) * (0.5 + 0.5 * Math.sin(t * 2 + i));
+      ctx.fillStyle = `rgba(230, 240, 255, ${ga.toFixed(3)})`;
+      ctx.fillRect(x | 0, y | 0, 2, 1);
+    }
+  }
+}
+
+/** Cold-clear frost sparkle along the lower sky / ridge. */
+export function drawFrost(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  frost: number
+): void {
+  if (frost < 0.05) return;
+  const band = ctx.createLinearGradient(0, height * 0.72, 0, height);
+  band.addColorStop(0, "rgba(200, 220, 245, 0)");
+  band.addColorStop(1, `rgba(210, 230, 255, ${(0.1 * frost).toFixed(3)})`);
+  ctx.fillStyle = band;
+  ctx.fillRect(0, height * 0.72, width, height * 0.28);
+
+  const t = performance.now() / 1000;
+  const n = Math.round(20 + frost * 40);
+  for (let i = 0; i < n; i++) {
+    const x = ((i * 67 + Math.sin(t * 0.2 + i) * 8) % width + width) % width;
+    const y = height * (0.78 + ((i * 19) % 20) / 100);
+    const a = frost * (0.25 + 0.35 * Math.abs(Math.sin(t * 1.5 + i * 0.7)));
+    ctx.fillStyle = `rgba(235, 245, 255, ${a.toFixed(3)})`;
+    ctx.fillRect(x | 0, y | 0, 1, 1);
+  }
+}
+
+export function drawHeatHaze(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  k: number
+): void {
+  const t = performance.now() / 1000;
+  for (let i = 0; i < 2; i++) {
+    const y = height * (0.6 + i * 0.07) + Math.sin(t * (0.8 + i * 0.3) + i * 2) * 3;
+    const bandH = height * 0.05;
+    const grad = ctx.createLinearGradient(0, y - bandH, 0, y + bandH);
+    grad.addColorStop(0, "rgba(255, 232, 180, 0)");
+    grad.addColorStop(0.5, `rgba(255, 232, 180, ${(0.05 * k).toFixed(3)})`);
+    grad.addColorStop(1, "rgba(255, 232, 180, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y - bandH, width, bandH * 2);
+  }
+}
+
+export function drawAurora(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  alpha: number
+): void {
+  const t = performance.now() / 1000;
+  const bands: Array<[number, number, number]> = [
+    [120, 200, 180],
+    [100, 180, 210],
+    [180, 140, 200],
+  ];
+  for (let band = 0; band < bands.length; band++) {
+    const [r, g, b] = bands[band];
+    const peak = (0.1 + 0.04 * Math.sin(t * 0.5 + band)) * alpha;
+    const grad = ctx.createLinearGradient(0, height * 0.1, 0, height * 0.5);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+    grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${peak.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    const baseY = height * 0.12 + band * Math.max(18, height * 0.04);
+    ctx.moveTo(0, baseY);
+    for (let x = 0; x <= width; x += 20) {
+      const y = baseY + Math.sin(x * 0.012 + t * 0.3 + band) * 22;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(width, height * 0.5);
+    ctx.lineTo(0, height * 0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+export function drawCityGlow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  h: number,
+  cloudAlpha: number
+): void {
+  const night = 1 - daylight(h);
+  if (night < 0.3) return;
+  const cx = width * 0.3;
+  const cy = height * 0.68;
+  const r = width * 0.22;
+  const a = 0.09 * night * (0.6 + cloudAlpha * 0.8);
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, `rgba(255, 178, 108, ${a.toFixed(3)})`);
+  grad.addColorStop(0.6, `rgba(255, 150, 90, ${(a * 0.4).toFixed(3)})`);
+  grad.addColorStop(1, "rgba(255, 140, 80, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+}
+
+export function drawRainbow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  h: number,
+  alpha: number
+): void {
+  const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+  const cx = width - width * (0.08 + t * 0.84);
+  const cy = height * 0.95;
+  const r = Math.min(width, height) * 0.55;
+  const bands = ["255,60,60", "255,150,40", "250,230,70", "90,200,90", "70,140,235", "150,90,220"];
+  ctx.save();
+  ctx.lineWidth = Math.max(2, r * 0.016);
+  for (let i = 0; i < bands.length; i++) {
+    ctx.strokeStyle = `rgba(${bands[i]}, ${(alpha * 0.35).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - i * ctx.lineWidth, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function drawSeaBand(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number
+): void {
+  const t = performance.now() / 1000;
+  const y = height * 0.655;
+  const grad = ctx.createLinearGradient(0, y, 0, y + height * 0.05);
+  const a = 0.1 + 0.03 * Math.sin(t * 0.8);
+  grad.addColorStop(0, `rgba(210, 225, 240, ${a.toFixed(3)})`);
+  grad.addColorStop(1, "rgba(210, 225, 240, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, y, width, height * 0.05);
+}

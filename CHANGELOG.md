@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-13
+
+### Added
+
+- `WorldHandle.pause()` / `resume()` — manual render-loop control (independent of tab visibility)
+- `WeatherClient.whenLocated()` — promise that resolves once approximate location is known
+- `applyWeatherPreview()` helper exported for weather look layering
+- React hook returns `worldRef` alongside `canvasRef` for imperative API access
+- `birds` / `bats` options and `setBirds` / `setBats` — toggle day birds (incl. migrating flocks) and dusk bats like fireflies
+- Demo: compact chip-based Tweaks panel (replaces tall per-row switch list)
+- Richer golden hour (dedicated sky keyframes, hotter cloud undersides, stronger horizon glow)
+- Wetter post-rain ground with specular glints; frost sparkle on cold clear nights
+- Calendar moments: busier meteor showers, brighter full moons, hard-frost detection, ISS in atmosphere
+- `atmosphere()` / `onAtmosphereChange` / CSS `--zw-*` vars + `data-zw-*` on the document (page lives under the weather)
+- `captureMoment()` — PNG with burned-in caption (`Kraków · 21:14 · golden hour`)
+
+### Changed
+
+- Canvas sizing uses `ResizeObserver` (hero / non-viewport canvases resize correctly)
+- `@nomideusz/zaur-world/auto` waits for `DOMContentLoaded` when `document.body` is missing
+- `quality: "auto"` re-evaluates when reduced-motion or the mobile breakpoint changes
+- Terrain loading awaits geo resolution instead of polling for up to 30 seconds
+- ISS poll uses an 8s abort timeout (same pattern as weather fetches)
+- `weatherCardParent` and `setStormPreview` marked `@deprecated` (use `weatherCard` / `setWeatherPreview`)
+- Split celestial and atmosphere drawing out of `world.ts` into `world-celestial` / `world-atmosphere`
+- Publish build minifies ESM output; README size claim updated to measured ~17 kB min+gzip
+- Demo brand mark redesigned (horizon glyph + Syne / IBM Plex Mono); Tweaks panel scrolls so status text stays readable
+
 ## [0.6.0] - 2026-07-13
 
 ### Added
@@ -121,7 +149,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase-accurate moon, golden-hour lit clouds, seasons, fireflies, shooting stars, wet ground
 - Zero runtime dependencies; framework-agnostic API
 
-[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/nomideusz/zaur-world/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/nomideusz/zaur-world/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/nomideusz/zaur-world/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/nomideusz/zaur-world/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nomideusz/zaur-world/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nomideusz/zaur-world/compare/v0.2.0...v0.3.0

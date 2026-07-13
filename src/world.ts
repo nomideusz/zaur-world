@@ -13,7 +13,7 @@ import type { TerrainProfile } from "./terrain.js";
 import type { SatellitePass } from "./satellites.js";
 import type { ResolvedQuality } from "./quality.js";
 import type { RGB } from "./color.js";
-import { rgb, rgbToCss, desatRGB, lerpRGB, clampByte } from "./color.js";
+import { rgb, rgbToCss, desatRGB, lerpRGB } from "./color.js";
 import { fillHillPath, generateBolt, hillPath } from "./hills.js";
 import {
   cloudAlphaFor,
@@ -32,10 +32,26 @@ import {
   warpHour,
   auroraLatFactor,
   meteorRate,
-  venusState,
-  lunarPhase,
   solsticeWarmth,
+  lunarPhase,
 } from "./solar.js";
+import {
+  drawAurora,
+  drawCityGlow,
+  drawFog,
+  drawFrost,
+  drawHeatHaze,
+  drawHorizonGlow,
+  drawRainbow,
+  drawSeaBand,
+  drawWetSheen,
+} from "./world-atmosphere.js";
+import {
+  drawCelestial,
+  drawStars,
+  drawVenus,
+  type Star,
+} from "./world-celestial.js";
 
 export interface WorldState {
   width: number;
@@ -55,6 +71,10 @@ export interface WorldOptions {
   time?: () => Date;
   /** Performance / effects preset (resolved before passing in). */
   quality?: ResolvedQuality;
+  /** Day birds and seasonal migrating V-formations. Default true. */
+  birds?: boolean;
+  /** Summer-dusk bats. Default true. */
+  bats?: boolean;
   /** Summer-evening fireflies in the lower sky band. Default true. */
   fireflies?: boolean;
 }
@@ -73,27 +93,22 @@ interface SkyKeyframe {
 // Sky color stops across a 24-hour day. The narrator interpolates between
 // adjacent keyframes so transitions are smooth, not steppy.
 const SKY: SkyKeyframe[] = [
-  { hour:  0,   top: rgb("#0d1026"), bottom: rgb("#1c2144") }, // deep night (rich navy)
-  { hour:  5,   top: rgb("#2b2350"), bottom: rgb("#7a3d5e") }, // pre-dawn (indigo → plum)
-  { hour:  6.5, top: rgb("#5f56a6"), bottom: rgb("#f0956a") }, // dawn (lavender → golden peach)
-  { hour:  9,   top: rgb("#3e8ede"), bottom: rgb("#b8e0f8") }, // morning (clear blue)
-  { hour: 13,   top: rgb("#2e83e0"), bottom: rgb("#a6d9f7") }, // midday (cerulean)
-  { hour: 16,   top: rgb("#4f86c9"), bottom: rgb("#f2c88e") }, // afternoon (blue going golden)
-  { hour: 18,   top: rgb("#53387f"), bottom: rgb("#ef7440") }, // dusk (violet → fire)
-  { hour: 20,   top: rgb("#241d4e"), bottom: rgb("#64346a") }, // evening (indigo → violet)
+  { hour:  0,   top: rgb("#0d1026"), bottom: rgb("#1c2144") }, // deep night
+  { hour:  5,   top: rgb("#2b2350"), bottom: rgb("#7a3d5e") }, // pre-dawn
+  { hour:  6.5, top: rgb("#5f56a6"), bottom: rgb("#f0956a") }, // dawn
+  { hour:  9,   top: rgb("#3e8ede"), bottom: rgb("#b8e0f8") }, // morning
+  { hour: 13,   top: rgb("#2e83e0"), bottom: rgb("#a6d9f7") }, // midday
+  { hour: 16,   top: rgb("#4f86c9"), bottom: rgb("#f2c88e") }, // afternoon warming
+  { hour: 17.4, top: rgb("#6a4a8a"), bottom: rgb("#ff9a4a") }, // golden hour peak
+  { hour: 18.2, top: rgb("#53387f"), bottom: rgb("#ef5a28") }, // sunset fire
+  { hour: 19.2, top: rgb("#3a2868"), bottom: rgb("#c45a4a") }, // civil dusk
+  { hour: 20.5, top: rgb("#241d4e"), bottom: rgb("#64346a") }, // evening
   { hour: 22,   top: rgb("#12132e"), bottom: rgb("#1e2242") }, // night
 ];
 
 // Canonical sun window — see solar.ts for SUN_RISE / SUN_SET and warpHour().
 
 const GRID_PX = 24;
-interface Star {
-  x: number;
-  y: number;
-  brightness: number;
-  twinklePhase: number;
-}
-
 interface Cloud {
   /** Anchor x in [0, 1] of world width — wraps at edges. */
   x: number;
@@ -217,10 +232,14 @@ export class World {
   private showGrid: boolean;
   private gridEnabled: boolean;
   private gridPattern: CanvasPattern | null = null;
+  private birdsEnabled: boolean;
+  private batsEnabled: boolean;
   private firefliesEnabled: boolean;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
+    this.birdsEnabled = opts.birds !== false;
+    this.batsEnabled = opts.bats !== false;
     this.firefliesEnabled = opts.fireflies !== false;
     const q = opts.quality;
     this.particleScale = q?.particleScale ?? 1;
@@ -296,6 +315,17 @@ export class World {
     }
   }
 
+  /** Toggle day birds and migrating flocks without remounting. */
+  setBirds(enabled: boolean): void {
+    this.birdsEnabled = enabled;
+    if (!enabled) this.flock = null;
+  }
+
+  /** Toggle summer-dusk bats without remounting. */
+  setBats(enabled: boolean): void {
+    this.batsEnabled = enabled;
+  }
+
   /** Toggle summer-evening fireflies without remounting. */
   setFireflies(enabled: boolean): void {
     this.firefliesEnabled = enabled;
@@ -311,7 +341,7 @@ export class World {
     this.tickDrops(wx, dt);
     this.tickSplashes(dt);
     this.tickLightning(wx, dt);
-    this.tickBirds(dt);
+    if (this.birdsEnabled) this.tickBirds(dt);
     const date = this.now();
     const h = this.currentHour(wx, date);
     this.tickShootingStar(dt, starAlpha(h), date);
@@ -320,10 +350,10 @@ export class World {
     const m = this.seasonMonth(date, wx);
     const migrating = m === 2 || m === 3 || m === 8 || m === 9;
     const fairDay = (!wx || wx.precipitation === "none") && daylight(h) > 0.5;
-    this.tickFlock(dt, migrating && fairDay);
+    if (this.birdsEnabled) this.tickFlock(dt, migrating && fairDay);
     this.tickPlane(wx, dt);
     this.tickTrain(dt, starAlpha(h));
-    if (duskAlpha(h) > 0) this.tickBats(dt);
+    if (this.batsEnabled && duskAlpha(h) > 0) this.tickBats(dt);
   }
 
   /** Re-bake the hill paths when a terrain profile (async fetch) arrives or clears. */
@@ -333,6 +363,11 @@ export class World {
       this.appliedTerrain = t;
       this.regenHills();
     }
+  }
+
+  /** Ground wetness 0..1 — for atmosphere CSS / captions. */
+  getWetness(): number {
+    return this.wetness;
   }
 
   /** Calendar month shifted six months in the southern hemisphere. */
@@ -372,6 +407,13 @@ export class World {
       topRGB = desatRGB(topRGB, cloudAlpha * 0.55);
       bottomRGB = desatRGB(bottomRGB, cloudAlpha * 0.55);
     }
+    // Full moon nights lift the whole sky a touch — you can feel the silver.
+    const moonIllum = (1 - Math.cos(lunarPhase(date) * Math.PI * 2)) / 2;
+    if (moonIllum > 0.85 && daylight(h) < 0.2) {
+      const lift = (moonIllum - 0.85) / 0.15 * 0.12 * (1 - cloudAlpha * 0.6);
+      topRGB = lerpRGB(topRGB, [40, 48, 78], lift);
+      bottomRGB = lerpRGB(bottomRGB, [55, 62, 95], lift);
+    }
     const grad = ctx.createLinearGradient(0, 0, 0, height);
     grad.addColorStop(0, rgbToCss(topRGB));
     grad.addColorStop(1, rgbToCss(bottomRGB));
@@ -379,16 +421,16 @@ export class World {
     ctx.fillRect(0, 0, width, height);
 
     // Horizon glow at sunrise/sunset — soft warm wash low on the screen.
-    this.drawHorizonGlow(ctx, h);
+    drawHorizonGlow(ctx, width, height, h);
 
     // Aurora bands at deep night when the sky is reasonably clear — drawn
     // before stars so it reads as a soft veil behind them.
     const auroraA = auroraAlpha(h) * auroraLatFactor(wx?.latitude) * (1 - cloudAlpha * 0.85);
-    if (auroraA > 0.01) this.drawAurora(ctx, auroraA);
+    if (auroraA > 0.01) drawAurora(ctx, width, height, auroraA);
 
     // Stars (only at night-ish hours; heavy clouds also dim them).
     const sa = starAlpha(h) * (1 - cloudAlpha * 0.7);
-    if (sa > 0.01) this.drawStars(ctx, sa);
+    if (sa > 0.01) drawStars(ctx, this.stars, sa);
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
     const issPass = this.satFn();
@@ -398,7 +440,7 @@ export class World {
     }
 
     // Venus — evening or morning star per its real 584-day cycle.
-    this.drawVenus(ctx, h, date, cloudAlpha);
+    drawVenus(ctx, width, height, h, date, cloudAlpha);
 
     // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
@@ -406,27 +448,36 @@ export class World {
     }
 
     // Sun (by day) or moon (by night) arcing across the sky.
-    this.drawCelestial(ctx, h, 1 - cloudAlpha * 0.55, date);
+    drawCelestial(ctx, width, height, h, 1 - cloudAlpha * 0.55, date);
 
     // Warm dome of city light beyond the ridge — the visitor's IP resolved
     // to a town, after all. Overcast makes it stronger: clouds bounce the
     // light back down, exactly like a real city night.
-    this.drawCityGlow(ctx, h, cloudAlpha);
+    drawCityGlow(ctx, width, height, h, cloudAlpha);
 
     // Distant horizon silhouettes — derived from the bottom sky color so they
     // always sit *between* the sky and the foreground cloud band.
     this.drawHills(ctx, h, bottomRGB);
 
     // Rain-slicked ground: a low reflective sheen that lingers after a shower.
-    if (this.wetness > 0.02) this.drawWetSheen(ctx);
+    if (this.wetness > 0.02) drawWetSheen(ctx, width, height, this.wetness);
+
+    // Hard frost sparkle on cold clear nights and early mornings.
+    const frost =
+      wx && wx.temperatureC <= 0
+        ? Math.min(1, -wx.temperatureC / 8) *
+          (1 - cloudAlpha * 0.7) *
+          (h >= 20 || h < 9 ? 1 : h < 11 ? 1 - (h - 9) / 2 : 0)
+        : 0;
+    if (frost > 0.05) drawFrost(ctx, width, height, frost);
 
     // Hot, clear afternoons get a faint shimmer hovering over the horizon.
     const heat = wx ? heatFactor(wx.temperatureC, cloudAlpha, h) : 0;
-    if (heat > 0.02) this.drawHeatHaze(ctx, heat);
+    if (heat > 0.02) drawHeatHaze(ctx, width, height, heat);
 
     // A rainbow when the sun and a clearing shower share the sky.
     const rainbowA = this.rainbowAlpha(wx, cloudAlpha, h);
-    if (rainbowA > 0.02) this.drawRainbow(ctx, h, rainbowA);
+    if (rainbowA > 0.02) drawRainbow(ctx, width, height, h, rainbowA);
 
     // Mid + near cloud layers in front of the celestial body.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
@@ -440,7 +491,11 @@ export class World {
     const month = this.seasonMonth(date, wx);
     const winter = month === 11 || month <= 1;
     const sheltering = !!wx && wx.precipitation !== "none";
-    const dayA = sheltering ? 0 : dayCreatureAlpha(h) * (1 - cloudAlpha * 0.6);
+    const dayA = this.birdsEnabled
+      ? sheltering
+        ? 0
+        : dayCreatureAlpha(h) * (1 - cloudAlpha * 0.6)
+      : 0;
     if (dayA > 0.05) this.drawBirds(ctx, dayA, winter ? 0.4 : 1);
     if (this.flock && dayA > 0.05) this.drawFlock(ctx, dayA);
     if (this.plane) this.drawPlane(ctx, h);
@@ -454,11 +509,13 @@ export class World {
     if (flyA > 0.05) this.drawFireflies(ctx, flyA);
 
     // Bats own the brief dusk window on summer evenings.
-    const batA = duskAlpha(h) * flySeason * (1 - cloudAlpha * 0.7);
+    const batA = this.batsEnabled
+      ? duskAlpha(h) * flySeason * (1 - cloudAlpha * 0.7)
+      : 0;
     if (batA > 0.05) this.drawBats(ctx, batA);
 
     // Fog haze — gradient overlay denser near the ground.
-    if (wx?.fog) this.drawFog(ctx);
+    if (wx?.fog) drawFog(ctx, width, height);
 
     // Rain / snow particles in front of the clouds.
     if (this.drops.length > 0) this.drawDrops(ctx);
@@ -508,267 +565,11 @@ export class World {
     return [lerpRGB(prev.top, next.top, t), lerpRGB(prev.bottom, next.bottom, t)];
   }
 
-  private drawHorizonGlow(ctx: CanvasRenderingContext2D, h: number): void {
-    // Strongest in the half-hour around sunrise/sunset, fading either side.
-    const strength = horizonGlowStrength(h);
-    if (strength <= 0.02) return;
-    const { width, height } = this.state;
-    // Anchor the glow on whichever horizon the sun is near.
-    const onLeft = h < 12;
-    const cx = onLeft ? width * 0.18 : width * 0.82;
-    const cy = height * 0.62;
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(width, height) * 0.7);
-    const a = (0.18 * strength).toFixed(3);
-    grad.addColorStop(0, `rgba(220, 130, 90, ${a})`);
-    grad.addColorStop(0.5, `rgba(160, 80, 90, ${(0.10 * strength).toFixed(3)})`);
-    grad.addColorStop(1, "rgba(60, 30, 60, 0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, width, height);
-  }
 
-  private drawStars(ctx: CanvasRenderingContext2D, alpha: number): void {
-    const t = performance.now() / 1000;
-    for (const s of this.stars) {
-      const twinkle = 0.65 + 0.35 * Math.sin(t * 1.4 + s.twinklePhase);
-      const a = s.brightness * twinkle * alpha;
-      ctx.fillStyle = `rgba(232, 228, 216, ${a.toFixed(3)})`;
-      const ix = s.x | 0;
-      const iy = s.y | 0;
-      ctx.fillRect(ix, iy, 1, 1);
-      // The brighter ones get a 2-pixel "flare" so the field looks varied.
-      if (s.brightness > 0.75) ctx.fillRect(ix + 1, iy, 1, 1);
-    }
-  }
 
-  private drawCelestial(
-    ctx: CanvasRenderingContext2D,
-    h: number,
-    dim: number,
-    date: Date
-  ): void {
-    const isSun = h >= SUN_RISE && h <= SUN_SET;
 
-    let t: number;
-    if (isSun) {
-      t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-    } else {
-      // Moon arcs from sunset (h = SUN_SET) through midnight to sunrise next day.
-      let moonH = h - SUN_SET;
-      if (moonH < 0) moonH += 24;
-      const moonSpan = 24 - SUN_SET + SUN_RISE; // hours moon is up
-      t = moonH / moonSpan;
-    }
 
-    const x = this.state.width * (0.08 + t * 0.84);
-    const baseY = this.state.height * 0.22;
-    const arcHeight = this.state.height * 0.13;
-    const y = baseY - Math.sin(t * Math.PI) * arcHeight;
 
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.2, dim);
-
-    if (isSun) {
-      // How close the sun is to the horizon (0 = noon, 1 = at horizon).
-      const horizonness = Math.min(1, Math.abs(t - 0.5) * 2);
-      this.drawSun(ctx, x, y, horizonness);
-    } else {
-      this.drawMoon(ctx, x, y, date);
-    }
-
-    ctx.restore();
-  }
-
-  private drawSun(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    horizonness: number,
-  ): void {
-    // Bigger near the horizon — matches the design (r=30 at noon, r=36 low),
-    // sells the atmospheric magnification you actually see at sunrise/sunset.
-    const r = 28 + 8 * horizonness;
-    // Color shifts from warm gold at noon to deep orange near the horizon.
-    const ease = horizonness * horizonness;
-    const discR = clampByte(248 - 4 * ease);
-    const discG = clampByte(208 - 64 * ease);
-    const discB = clampByte(138 - 84 * ease);
-    const glowR = clampByte(255);
-    const glowG = clampByte(210 - 30 * ease);
-    const glowB = clampByte(140 - 40 * ease);
-
-    // Stacked halo arcs — five concentric warm rings, biggest+faintest first,
-    // smallest+strongest last. Reads cleaner than a single radial blur and
-    // matches the rest of the pixel-flavoured style.
-    for (let i = 4; i >= 0; i--) {
-      const a = 0.05 + (4 - i) * 0.02;
-      ctx.fillStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${a.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r * (1 + i * 0.6), 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Sun rays — only fade in when the sun is low (horizon scattering effect).
-    if (horizonness > 0.4) {
-      const rayAlpha = (horizonness - 0.4) * 0.30;
-      ctx.strokeStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${rayAlpha.toFixed(3)})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      const rayCount = 10;
-      const innerR = r * 1.7;
-      const outerR = r * 5.5;
-      for (let i = 0; i < rayCount; i++) {
-        // Slight phase from the wall clock so rays drift instead of rigidly
-        // pointing — a barely-perceptible shimmer.
-        const a = (i / rayCount) * Math.PI * 2 + performance.now() * 0.00004;
-        const cx = Math.cos(a);
-        const sy = Math.sin(a);
-        ctx.moveTo(x + cx * innerR, y + sy * innerR);
-        ctx.lineTo(x + cx * outerR, y + sy * outerR);
-      }
-      ctx.stroke();
-    }
-
-    // Disc with a touch of limb darkening: an off-center radial gradient
-    // produces a subtle "lit from above-left" feel without being cartoonish.
-    const discGrad = ctx.createRadialGradient(
-      x - r * 0.3, y - r * 0.3, r * 0.2,
-      x, y, r,
-    );
-    discGrad.addColorStop(0, rgbToCss([
-      clampByte(discR + 12), clampByte(discG + 12), clampByte(discB + 8),
-    ]));
-    discGrad.addColorStop(1, rgbToCss([discR, discG, discB]));
-    ctx.fillStyle = discGrad;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  private drawMoon(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    date: Date
-  ): void {
-    const r = 18;
-    const phase = lunarPhase(date); // 0..1
-    const illum = (1 - Math.cos(phase * Math.PI * 2)) / 2; // 0..1
-    const waxing = phase < 0.5;
-
-    // Stacked halo arcs — four concentric cool rings; brighter near the disc,
-    // fading outward. A full moon nudges every layer up a touch so it really
-    // glows. Mirrors the stacked-arc style we use for the sun.
-    const haloBoost = 0.04 * illum;
-    for (let i = 3; i >= 0; i--) {
-      const a = 0.04 + (3 - i) * 0.02 + haloBoost;
-      ctx.fillStyle = `rgba(220, 222, 235, ${a.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r * (1 + i * 0.7), 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Earthshine: the dark side faintly visible when the moon is a thin crescent.
-    // Strongest near new moon, gone by first quarter.
-    const earthshine = Math.max(0, 0.28 - illum) / 0.28;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Dark side base color (with earthshine boost).
-    const darkR = clampByte(36 + 18 * earthshine);
-    const darkG = clampByte(38 + 18 * earthshine);
-    const darkB = clampByte(54 + 22 * earthshine);
-    const darkCss = rgbToCss([darkR, darkG, darkB]);
-    ctx.fillStyle = darkCss;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
-
-    // Lit hemisphere as a half-rect (clipped to disc).
-    const litCss = "#e2e3eb";
-    ctx.fillStyle = litCss;
-    if (waxing) {
-      ctx.fillRect(x, y - r, r, r * 2);
-    } else {
-      ctx.fillRect(x - r, y - r, r, r * 2);
-    }
-
-    // Terminator: an ellipse that bulges into either the lit or dark half
-    // depending on whether we're past first/last quarter.
-    const ellipseRx = r * Math.abs(1 - 2 * illum);
-    if (illum < 0.5) {
-      // Less than half lit — shadow ellipse extends into the lit half.
-      ctx.fillStyle = darkCss;
-      ctx.beginPath();
-      ctx.ellipse(x, y, ellipseRx, r, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (illum > 0.5) {
-      // More than half lit — lit ellipse extends into the dark half.
-      ctx.fillStyle = litCss;
-      ctx.beginPath();
-      ctx.ellipse(x, y, ellipseRx, r, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Surface detail — craters with subtle highlight rims. Drawn after the
-    // shadow so the dark hemisphere naturally hides any craters that fall on it.
-    this.drawCraters(ctx, x, y, r, waxing, illum);
-
-    // Limb darkening — soft dark vignette around the edge gives the disc volume.
-    const limbGrad = ctx.createRadialGradient(x, y, r * 0.85, x, y, r);
-    limbGrad.addColorStop(0, "rgba(0,0,0,0)");
-    limbGrad.addColorStop(1, "rgba(20, 18, 28, 0.40)");
-    ctx.fillStyle = limbGrad;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
-
-    ctx.restore();
-  }
-
-  private drawCraters(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    r: number,
-    waxing: boolean,
-    illum: number,
-  ): void {
-    // Five fixed crater positions in unit-disc coordinates. Drawing them at the
-    // same place every night makes the moon feel like a familiar object rather
-    // than a procedurally re-rolled blob.
-    const craters: Array<[number, number, number]> = [
-      [ 0.32, -0.18, 0.22],
-      [-0.30,  0.28, 0.16],
-      [ 0.10,  0.45, 0.12],
-      [-0.48, -0.36, 0.10],
-      [ 0.55,  0.06, 0.09],
-    ];
-
-    // Subtle shadow-side suppression: craters near the terminator get faded
-    // so they don't pop against the line.
-    ctx.fillStyle = "rgba(150, 152, 168, 0.50)";
-    ctx.beginPath();
-    for (const [dx, dy, cr] of craters) {
-      const onLitHalf = waxing ? dx > 0 : dx < 0;
-      // Skip craters that would be on the dark side when the moon is mostly dark.
-      if (illum < 0.15 && !onLitHalf) continue;
-      ctx.moveTo(x + r * dx + r * cr, y + r * dy);
-      ctx.arc(x + r * dx, y + r * dy, r * cr, 0, Math.PI * 2);
-    }
-    ctx.fill();
-
-    // Faint highlight rims on the lit side of each crater — sells the relief.
-    ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
-    ctx.beginPath();
-    for (const [dx, dy, cr] of craters) {
-      const onLitHalf = waxing ? dx > 0 : dx < 0;
-      if (illum < 0.30 && !onLitHalf) continue;
-      const hx = x + r * dx + (waxing ? -r * cr * 0.35 : r * cr * 0.35);
-      const hy = y + r * dy - r * cr * 0.35;
-      ctx.moveTo(hx + r * cr * 0.45, hy);
-      ctx.arc(hx, hy, r * cr * 0.45, 0, Math.PI * 2);
-    }
-    ctx.fill();
-  }
 
   private drawCloudLayer(
     ctx: CanvasRenderingContext2D,
@@ -786,9 +587,9 @@ export class World {
     // decks still glow, just ember-dim.
     const glow = horizonGlowStrength(h);
     if (glow > 0.02) {
-      const k = glow * (stormy ? 0.35 : 1);
-      bot = lerpRGB(bot, [246, 138, 96], 0.7 * k);
-      top = lerpRGB(top, [240, 186, 158], 0.35 * k);
+      const k = glow * (stormy ? 0.5 : 1.15);
+      bot = lerpRGB(bot, [255, 120, 55], Math.min(1, 0.85 * k));
+      top = lerpRGB(top, [255, 190, 130], Math.min(1, 0.55 * k));
     }
     const [topR, topG, topB] = top;
     const [botR, botG, botB] = bot;
@@ -825,27 +626,6 @@ export class World {
     }
   }
 
-  private drawFog(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.state;
-    // Vertical gradient — denser near the ground than at the sky.
-    const grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, "rgba(180, 184, 196, 0.04)");
-    grad.addColorStop(0.55, "rgba(190, 192, 202, 0.18)");
-    grad.addColorStop(1, "rgba(200, 200, 210, 0.32)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, width, height);
-
-    // A second slow-drifting band at mid-height suggests layered haze.
-    const t = performance.now() / 1000;
-    const bandY = height * (0.55 + Math.sin(t * 0.06) * 0.04);
-    const bandH = height * 0.18;
-    const band = ctx.createLinearGradient(0, bandY - bandH, 0, bandY + bandH);
-    band.addColorStop(0, "rgba(210, 212, 220, 0)");
-    band.addColorStop(0.5, "rgba(210, 212, 220, 0.10)");
-    band.addColorStop(1, "rgba(210, 212, 220, 0)");
-    ctx.fillStyle = band;
-    ctx.fillRect(0, bandY - bandH, width, bandH * 2);
-  }
 
   private drawDrops(ctx: CanvasRenderingContext2D): void {
     if (this.dropsKind === "rain") {
@@ -1168,54 +948,9 @@ export class World {
     }
     ctx.fillStyle = rgbToCss(farRGB);
     fillHillPath(ctx, this.hillsFar, width, height);
-    if (this.coastal) this.drawSeaBand(ctx);
+    if (this.coastal) drawSeaBand(ctx, width, height);
     ctx.fillStyle = rgbToCss(nearRGB);
     fillHillPath(ctx, this.hillsNear, width, height);
-  }
-
-  /** Pale shimmering strip where the far ridge meets the water. */
-  private drawSeaBand(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.state;
-    const t = performance.now() / 1000;
-    const y = height * 0.655;
-    const grad = ctx.createLinearGradient(0, y, 0, y + height * 0.05);
-    const a = 0.1 + 0.03 * Math.sin(t * 0.8);
-    grad.addColorStop(0, `rgba(210, 225, 240, ${a.toFixed(3)})`);
-    grad.addColorStop(1, "rgba(210, 225, 240, 0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, y, width, height * 0.05);
-  }
-
-  private drawAurora(ctx: CanvasRenderingContext2D, alpha: number): void {
-    const { width, height } = this.state;
-    const t = performance.now() / 1000;
-    // Three offset bands in different cool hues — they share a vertical band
-    // (10%–50% of height) and shimmer at slightly different rates.
-    const bands: Array<[number, number, number]> = [
-      [120, 200, 180],
-      [100, 180, 210],
-      [180, 140, 200],
-    ];
-    for (let band = 0; band < bands.length; band++) {
-      const [r, g, b] = bands[band];
-      const peak = (0.10 + 0.04 * Math.sin(t * 0.5 + band)) * alpha;
-      const grad = ctx.createLinearGradient(0, height * 0.10, 0, height * 0.50);
-      grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
-      grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${peak.toFixed(3)})`);
-      grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      const baseY = height * 0.12 + band * Math.max(18, height * 0.04);
-      ctx.moveTo(0, baseY);
-      for (let x = 0; x <= width; x += 20) {
-        const y = baseY + Math.sin(x * 0.012 + t * 0.3 + band) * 22;
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(width, height * 0.50);
-      ctx.lineTo(0, height * 0.50);
-      ctx.closePath();
-      ctx.fill();
-    }
   }
 
   private tickBirds(dt: number): void {
@@ -1298,37 +1033,13 @@ export class World {
 
   private tickWetness(wx: WeatherConditions | null, dt: number): void {
     if (wx?.precipitation === "rain") {
-      this.wetness = Math.min(1, this.wetness + dt / 20); // soaked in ~20s
+      this.wetness = Math.min(1, this.wetness + dt / 12); // soaked in ~12s
     } else {
-      this.wetness = Math.max(0, this.wetness - dt / 300); // dries over ~5 min
+      this.wetness = Math.max(0, this.wetness - dt / 360); // dries over ~6 min
     }
   }
 
-  private drawWetSheen(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.state;
-    const a = 0.12 * this.wetness;
-    const grad = ctx.createLinearGradient(0, height * 0.86, 0, height);
-    grad.addColorStop(0, "rgba(180, 200, 230, 0)");
-    grad.addColorStop(1, `rgba(190, 210, 240, ${a.toFixed(3)})`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, height * 0.86, width, height * 0.14);
-  }
 
-  private drawHeatHaze(ctx: CanvasRenderingContext2D, k: number): void {
-    const { width, height } = this.state;
-    const t = performance.now() / 1000;
-    // Two soft warm bands wavering just above the horizon — cheap shimmer.
-    for (let i = 0; i < 2; i++) {
-      const y = height * (0.6 + i * 0.07) + Math.sin(t * (0.8 + i * 0.3) + i * 2) * 3;
-      const bandH = height * 0.05;
-      const grad = ctx.createLinearGradient(0, y - bandH, 0, y + bandH);
-      grad.addColorStop(0, "rgba(255, 232, 180, 0)");
-      grad.addColorStop(0.5, `rgba(255, 232, 180, ${(0.05 * k).toFixed(3)})`);
-      grad.addColorStop(1, "rgba(255, 232, 180, 0)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, y - bandH, width, bandH * 2);
-    }
-  }
 
   private tickFlock(dt: number, migrating: boolean): void {
     const { width } = this.state;
@@ -1478,24 +1189,6 @@ export class World {
     return this.wetness * Math.max(0, 1 - cloudAlpha * 1.6) * 0.5;
   }
 
-  private drawRainbow(ctx: CanvasRenderingContext2D, h: number, alpha: number): void {
-    const { width, height } = this.state;
-    // Anchored opposite the sun: mirror the sun's x across the screen.
-    const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-    const cx = width - width * (0.08 + t * 0.84);
-    const cy = height * 0.95;
-    const r = Math.min(width, height) * 0.55;
-    const bands = ["255,60,60", "255,150,40", "250,230,70", "90,200,90", "70,140,235", "150,90,220"];
-    ctx.save();
-    ctx.lineWidth = Math.max(2, r * 0.016);
-    for (let i = 0; i < bands.length; i++) {
-      ctx.strokeStyle = `rgba(${bands[i]}, ${(alpha * 0.35).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r - i * ctx.lineWidth, Math.PI, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
 
   private regenBats(): void {
     let seed = 606;
@@ -1554,66 +1247,7 @@ export class World {
     }
   }
 
-  private drawVenus(
-    ctx: CanvasRenderingContext2D,
-    h: number,
-    date: Date,
-    cloudAlpha: number,
-  ): void {
-    const v = venusState(date);
-    if (v.elong < 12) return; // lost in the sun's glare near conjunction
-    // How long it stays up after sunset (or before sunrise), canonical hours.
-    const visH = (v.elong / 47) * 3.0;
-    let p: number; // 0 = highest (at twilight start), 1 = setting/vanishing
-    let x: number;
-    const { width, height } = this.state;
-    if (v.evening) {
-      const dt = h - SUN_SET;
-      if (dt < 0.15 || dt > visH) return;
-      p = dt / visH;
-      x = width * 0.88; // low in the west, where the sun went down
-    } else {
-      const dt = SUN_RISE - h;
-      if (dt < 0.15 || dt > visH) return;
-      p = dt / visH;
-      x = width * 0.12; // morning star, ahead of the sunrise
-    }
-    const y = height * (0.4 + p * 0.22);
-    // Needs a darkening sky; fades as it sinks; hidden by cloud.
-    const twilight = Math.min(1, (v.evening ? h - SUN_SET : SUN_RISE - h) / 0.5);
-    const a = twilight * (1 - p * 0.5) * (1 - cloudAlpha) * 0.95;
-    if (a < 0.03) return;
-    const ix = x | 0;
-    const iy = y | 0;
-    // Bright and steady — planets don't twinkle.
-    ctx.fillStyle = `rgba(255, 252, 240, ${a.toFixed(3)})`;
-    ctx.fillRect(ix, iy, 2, 2);
-    ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.35).toFixed(3)})`;
-    ctx.fillRect(ix - 1, iy, 1, 2);
-    ctx.fillRect(ix + 2, iy, 1, 2);
-    ctx.fillRect(ix, iy - 1, 2, 1);
-    ctx.fillRect(ix, iy + 2, 2, 1);
-  }
 
-  private drawCityGlow(
-    ctx: CanvasRenderingContext2D,
-    h: number,
-    cloudAlpha: number,
-  ): void {
-    const night = 1 - daylight(h);
-    if (night < 0.3) return;
-    const { width, height } = this.state;
-    const cx = width * 0.3;
-    const cy = height * 0.68;
-    const r = width * 0.22;
-    const a = 0.09 * night * (0.6 + cloudAlpha * 0.8);
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    grad.addColorStop(0, `rgba(255, 178, 108, ${a.toFixed(3)})`);
-    grad.addColorStop(0.6, `rgba(255, 150, 90, ${(a * 0.4).toFixed(3)})`);
-    grad.addColorStop(1, "rgba(255, 140, 80, 0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-  }
 
   private drawFireflies(ctx: CanvasRenderingContext2D, alpha: number): void {
     if (this.fireflies.length === 0) return;

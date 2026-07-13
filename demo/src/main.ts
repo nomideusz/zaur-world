@@ -27,6 +27,8 @@ const customHourVal = document.getElementById("custom-hour-val") as HTMLOutputEl
 const timeHint = document.getElementById("row-time-hint") as HTMLParagraphElement;
 const captureBtn = document.getElementById("btn-capture") as HTMLButtonElement;
 const tourBtn = document.getElementById("btn-tour") as HTMLButtonElement;
+const birdsToggle = document.getElementById("opt-birds") as HTMLInputElement;
+const batsToggle = document.getElementById("opt-bats") as HTMLInputElement;
 const firefliesToggle = document.getElementById("opt-fireflies") as HTMLInputElement;
 const wxRadios = document.querySelectorAll(
 	'input[name="wx"]'
@@ -43,6 +45,8 @@ if (params.get("iss") === "0") satellitesToggle.checked = false;
 if (params.get("pass") === "0") satDemoToggle.checked = false;
 if (params.get("card") === "0") weatherCardToggle.checked = false;
 if (params.get("grid") === "0") gridToggle.checked = false;
+if (params.get("birds") === "0") birdsToggle.checked = false;
+if (params.get("bats") === "0") batsToggle.checked = false;
 if (params.get("fly") === "0") firefliesToggle.checked = false;
 const wxParam = params.get("wx") ?? (params.get("storm") === "1" ? "storm" : null);
 if (wxParam && ["storm", "snow", "fog", "overcast"].includes(wxParam)) {
@@ -62,12 +66,13 @@ const tParam = params.get("t");
 if (tParam) customHourSlider.value = tParam;
 
 const sky: WorldHandle = createWorld(canvas, {
-	weatherCardParent: document.body,
-	weatherCard: { parent: document.body, position: "top-right" },
+		weatherCard: { parent: document.body, position: "top-right" },
 	gridColor: "rgba(232, 228, 216, 0.32)",
 	terrain: terrainToggle.checked,
 	satellites: satellitesToggle.checked,
 	satelliteDemo: satDemoToggle.checked,
+	birds: birdsToggle.checked,
+	bats: batsToggle.checked,
 	fireflies: firefliesToggle.checked,
 	quality: selectedQuality(),
 });
@@ -118,13 +123,13 @@ function selectedQuality(): Quality {
 
 function syncGridRow(): void {
 	const low = selectedQuality() === "low";
-	gridRow.classList.toggle("control-row--disabled", low);
+	gridRow.classList.toggle("chip--disabled", low);
 	gridToggle.disabled = low;
 }
 
 function syncSatDemoRow(): void {
 	const on = satellitesToggle.checked;
-	satDemoRow.classList.toggle("control-row--disabled", !on);
+	satDemoRow.classList.toggle("chip--disabled", !on);
 	satDemoToggle.disabled = !on;
 }
 
@@ -144,7 +149,7 @@ function effectiveHour(): number {
 }
 
 function updateTimeLabels(): void {
-	goldenOffsetVal.textContent = `${goldenOffsetSlider.value} min`;
+	goldenOffsetVal.textContent = `−${goldenOffsetSlider.value}m`;
 	customHourVal.textContent = formatHour(Number(customHourSlider.value));
 }
 
@@ -200,6 +205,8 @@ function syncUrl(): void {
 	else if (!satDemoToggle.checked) p.set("pass", "0");
 	if (!weatherCardToggle.checked) p.set("card", "0");
 	if (!gridToggle.checked) p.set("grid", "0");
+	if (!birdsToggle.checked) p.set("birds", "0");
+	if (!batsToggle.checked) p.set("bats", "0");
 	if (!firefliesToggle.checked) p.set("fly", "0");
 	const wx = selectedWx();
 	if (wx) p.set("wx", wx);
@@ -248,6 +255,13 @@ function updateStatus(): void {
 	const wxPreview = selectedWx();
 	if (wxPreview) parts.push(`Weather: ${wxPreview} preview`);
 
+	const atm = sky.atmosphere();
+	if (atm.moments.length) parts.push(atm.moments.join(", "));
+	else if (atm.mood === "golden") parts.push("Golden hour");
+
+	if (!birdsToggle.checked) parts.push("Birds: off");
+	if (!batsToggle.checked) parts.push("Bats: off");
+
 	if (!firefliesToggle.checked) {
 		parts.push("Fireflies: off");
 	} else {
@@ -260,7 +274,7 @@ function updateStatus(): void {
 
 	statusEl.textContent = parts.length
 		? parts.join(" · ")
-		: "Live sky — no overrides active";
+		: "Live sky — no overrides";
 	syncUrl();
 }
 
@@ -323,10 +337,27 @@ tourBtn.addEventListener("click", () => {
 });
 
 captureBtn.addEventListener("click", () => {
+	const moment = sky.captureMoment();
 	const a = document.createElement("a");
-	a.href = sky.capture();
-	a.download = "zaur-world.png";
+	a.href = moment.dataUrl;
+	const safe = moment.caption
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 48);
+	a.download = `zaur-world-${safe || "moment"}.png`;
 	a.click();
+	statusEl.textContent = moment.caption;
+});
+
+birdsToggle.addEventListener("change", () => {
+	sky.setBirds(birdsToggle.checked);
+	updateStatus();
+});
+
+batsToggle.addEventListener("change", () => {
+	sky.setBats(batsToggle.checked);
+	updateStatus();
 });
 
 firefliesToggle.addEventListener("change", () => {

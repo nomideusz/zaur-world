@@ -62,7 +62,8 @@ export function horizonGlowStrength(h: number): number {
 	const dRise = Math.abs(h - SUN_RISE);
 	const dSet = Math.abs(h - SUN_SET);
 	const d = Math.min(dRise, dSet);
-	if (d > 1.2) return 0;
-	const t = 1 - d / 1.2;
-	return t * t;
+	// Wider window (~90 min) so golden hour actually reads as golden.
+	if (d > 1.6) return 0;
+	const t = 1 - d / 1.6;
+	return t * t * (0.85 + 0.15 * t);
 }

@@ -101,14 +101,40 @@ canvas {
 }
 ```
 
-Content layered above the sky reads best on a translucent "frosted" panel:
+Content layered above the sky reads best on a translucent panel. The sky
+writes CSS variables onto `document.documentElement` so your UI can live
+*under* the weather:
 
 ```css
 .card {
-  background: rgba(20, 20, 26, 0.55);
-  backdrop-filter: blur(10px);
+  background: rgba(20, 20, 26, calc(0.55 + var(--zw-wetness, 0) * 0.15));
+  backdrop-filter: blur(calc(10px + var(--zw-frost, 0) * 8px));
+  box-shadow: inset 0 0 calc(var(--zw-frost, 0) * 16px)
+    rgba(200, 220, 255, calc(var(--zw-frost, 0) * 0.3));
 }
+
+/* Optional rain streaks */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--zw-rain, 0) * 0.5);
+  background: repeating-linear-gradient(
+    -18deg,
+    transparent 0 7px,
+    rgba(180, 200, 230, 0.08) 7px 8px
+  );
+  pointer-events: none;
+}
+
+html[data-zw-mood="golden"] .headline { color: #ffe0c2; }
+html[data-zw-day="0"] .meta { color: rgba(200, 210, 240, 0.75); }
 ```
+
+Variables: `--zw-daylight`, `--zw-dusk`, `--zw-wetness`, `--zw-frost`,
+`--zw-rain`, `--zw-snow`, `--zw-glow`, `--zw-wind`, `--zw-cloud`.
+Attributes: `data-zw-mood`, `data-zw-precip`, `data-zw-day`, `data-zw-moments`.
+Pass `atmosphereRoot: null` to disable, or `onAtmosphereChange` to react in JS.
 
 ### Hero background
 
@@ -178,7 +204,11 @@ createWorld(canvas, {
   // Pause rendering while the tab is hidden (default true).
   pauseWhenHidden: true,
 
-  // Summer-evening fireflies in the lower sky (default true).
+  // Manual pause/resume also available: sky.pause() / sky.resume()
+
+  // Day birds + migrating flocks, dusk bats, summer fireflies (all default true).
+  birds: true,
+  bats: true,
   fireflies: true,
 
   // Browser geolocation fallback when IP lookup fails (opt-in).
@@ -210,7 +240,9 @@ createWorld(canvas, {
 import { useZaurWorld } from "@nomideusz/zaur-world/react";
 
 export function Sky() {
-  const { canvasRef } = useZaurWorld({ terrain: true, satellites: true });
+  const { canvasRef, worldRef } = useZaurWorld({ terrain: true, satellites: true });
+  // Options apply at mount; later tweaks go through worldRef.current
+  // (preview, setTerrain, capture, …) or remount with a new key.
   return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0 }} />;
 }
 ```
@@ -247,7 +279,15 @@ import { warpHour, solsticeWarmth } from "@nomideusz/zaur-world/solar";
 ```ts
 const sky = createWorld(canvas);
 const png = sky.capture("image/png");
+
+// Shareable still with place · time · mood burned in:
+const moment = sky.captureMoment();
+console.log(moment.caption); // "Kraków · 21:14 · golden hour"
+// moment.dataUrl → download or share
 ```
+
+Cinematic demo links work the same way — open
+`?mode=golden` or `?mode=custom&t=21.5&wx=snow` on the live demo.
 
 Reacting to conditions elsewhere in your UI:
 

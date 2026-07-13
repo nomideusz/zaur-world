@@ -17,6 +17,23 @@ import { fetchTerrain, type TerrainProfile } from "./terrain.js";
 import { SatelliteWatcher } from "./satellites.js";
 import { resolveQuality, type Quality } from "./quality.js";
 import { sceneHour, type ScenePreset } from "./solar.js";
+import {
+  applyWeatherPreview,
+  WEATHER_PREVIEWS,
+  type WeatherPreview,
+} from "./weather-preview.js";
+import {
+  applyAtmosphereCSS,
+  buildAtmosphere,
+  clearAtmosphereCSS,
+  formatAtmosphereCaption,
+  type AtmosphereSnapshot,
+} from "./atmosphere.js";
+import {
+  atmosphereEquals,
+  captureWithCaption,
+  type CaptureMomentResult,
+} from "./capture.js";
 
 export { World, type WorldOptions, type WorldState } from "./world.js";
 export {
@@ -48,14 +65,27 @@ export {
 export { resolveQuality, type Quality, type ResolvedQuality } from "./quality.js";
 export { prefersReducedMotion } from "./motion.js";
 export { angularDistanceDeg, predictIssPass } from "./satellite-math.js";
-
-/** Weather look layered over live conditions by `setWeatherPreview` / `preview`. */
-export type WeatherPreview = "storm" | "snow" | "fog" | "overcast";
-
-const WEATHER_PREVIEWS: readonly WeatherPreview[] = ["storm", "snow", "fog", "overcast"];
+export {
+  applyWeatherPreview,
+  WEATHER_PREVIEWS,
+  type WeatherPreview,
+} from "./weather-preview.js";
+export {
+  buildAtmosphere,
+  formatAtmosphereCaption,
+  applyAtmosphereCSS,
+  clearAtmosphereCSS,
+  type AtmosphereSnapshot,
+  type AtmosphereMood,
+  type AtmosphereMoment,
+} from "./atmosphere.js";
+export type { CaptureMomentResult } from "./capture.js";
 
 export interface CreateWorldOptions {
-  /** Host element for the small ambient weather card. Omit for no card. */
+  /**
+   * @deprecated Use `weatherCard: { parent }` instead.
+   * Host element for the small ambient weather card. Omit for no card.
+   */
   weatherCardParent?: HTMLElement;
   /** Weather card host and corner placement. */
   weatherCard?: WeatherCardOptions;
@@ -83,6 +113,16 @@ export interface CreateWorldOptions {
   geolocation?: boolean;
   /** Called when live weather conditions change. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
+  /**
+   * Called when the derived atmosphere snapshot changes (mood, wetness, frost…).
+   * Useful for theming the host page.
+   */
+  onAtmosphereChange?: (atmosphere: AtmosphereSnapshot) => void;
+  /**
+   * Element that receives `--zw-*` CSS vars and `data-zw-*` attributes.
+   * Defaults to `document.documentElement`. Pass `null` to disable.
+   */
+  atmosphereRoot?: HTMLElement | null;
   /** Wall clock override for demos, screenshots, and tests. */
   time?: () => Date;
   /** Performance preset. `"auto"` lowers effects on mobile / reduced-motion. */
@@ -91,6 +131,10 @@ export interface CreateWorldOptions {
   maxDpr?: number;
   /** Pause the render loop while the tab is hidden. Default true. */
   pauseWhenHidden?: boolean;
+  /** Day birds and seasonal migrating V-formations. Default true. */
+  birds?: boolean;
+  /** Summer-dusk bats. Default true. */
+  bats?: boolean;
   /** Summer-evening fireflies in the lower sky band. Default true. */
   fireflies?: boolean;
 }
@@ -98,8 +142,23 @@ export interface CreateWorldOptions {
 export interface WorldHandle {
   world: World;
   conditions: () => WeatherConditions | null;
+  /** Current atmosphere snapshot (mood, wetness, frost, moments…). */
+  atmosphere: () => AtmosphereSnapshot;
   /** Snapshot the current canvas frame as a data URL. */
   capture(type?: string, quality?: number): string;
+  /**
+   * Snapshot with a burned-in caption (place · time · mood).
+   * Pass `caption: false` for a clean frame using the same helper path.
+   */
+  captureMoment(opts?: {
+    type?: string;
+    quality?: number;
+    caption?: boolean | string;
+  }): CaptureMomentResult;
+  /** Pause the render loop (independent of tab visibility). */
+  pause(): void;
+  /** Resume the render loop after `pause()`. */
+  resume(): void;
   /** Toggle real-elevation horizon shaping without remounting. */
   setTerrain(enabled: boolean): void;
   /** Toggle ISS tracking without remounting. */
@@ -114,7 +173,10 @@ export interface WorldHandle {
   setTime(fn?: () => Date): void;
   /** Switch performance preset without remounting. */
   setQuality(quality: Quality): void;
-  /** Preview storm clouds, rain, and lightning using live weather as a base. */
+  /**
+   * @deprecated Use `setWeatherPreview("storm" | null)` instead.
+   * Preview storm clouds, rain, and lightning using live weather as a base.
+   */
   setStormPreview(enabled: boolean): void;
   /**
    * Layer a weather look over live conditions — storm, snow, fog, or
@@ -128,6 +190,10 @@ export interface WorldHandle {
    * return to the live clock and live weather.
    */
   preview(scene: ScenePreset | WeatherPreview | null): void;
+  /** Toggle day birds and migrating flocks. */
+  setBirds(enabled: boolean): void;
+  /** Toggle summer-dusk bats. */
+  setBats(enabled: boolean): void;
   /** Toggle summer-evening fireflies in the lower sky band. */
   setFireflies(enabled: boolean): void;
   /** Current terrain profile, or null while loading / disabled. */
@@ -147,7 +213,8 @@ export function createWorld(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D canvas context unavailable");
 
-  const resolvedQuality = resolveQuality(opts.quality);
+  let qualityMode: Quality = opts.quality ?? "auto";
+  const resolvedQuality = resolveQuality(qualityMode);
   if (opts.maxDpr != null) resolvedQuality.maxDpr = opts.maxDpr;
 
   const client = opts.weather
@@ -166,59 +233,7 @@ export function createWorld(
   const conditions = (): WeatherConditions | null => {
     const live = liveConditions();
     if (!weatherPreview) return live;
-    const base: WeatherConditions = live ?? {
-      cloudiness: 0,
-      precipitation: "none",
-      intensity: 0,
-      thunder: false,
-      fog: false,
-      isDay: true,
-      windSpeed: 12,
-      temperatureC: 18,
-      sunriseH: 6.5,
-      sunsetH: 19,
-    };
-    switch (weatherPreview) {
-      case "storm":
-        return {
-          ...base,
-          cloudiness: 2,
-          precipitation: "rain",
-          intensity: Math.max(0.8, base.intensity),
-          thunder: true,
-          fog: false,
-          windSpeed: Math.max(28, base.windSpeed),
-        };
-      case "snow":
-        return {
-          ...base,
-          cloudiness: 2,
-          precipitation: "snow",
-          intensity: Math.max(0.6, base.intensity),
-          thunder: false,
-          fog: false,
-          temperatureC: Math.min(-1, base.temperatureC),
-        };
-      case "fog":
-        return {
-          ...base,
-          cloudiness: 1,
-          precipitation: "none",
-          intensity: 0,
-          thunder: false,
-          fog: true,
-          windSpeed: Math.min(6, base.windSpeed),
-        };
-      case "overcast":
-        return {
-          ...base,
-          cloudiness: 2,
-          precipitation: "none",
-          intensity: 0,
-          thunder: false,
-          fog: false,
-        };
-    }
+    return applyWeatherPreview(live, weatherPreview);
   };
 
   const location = (): { lat: number; lon: number } | null => {
@@ -233,7 +248,12 @@ export function createWorld(
   let watcher: SatelliteWatcher | null = null;
 
   const loadTerrain = async (): Promise<void> => {
-    const g = await resolveLocation(location, client);
+    const g =
+      opts.geo != null
+        ? { lat: opts.geo.lat, lon: opts.geo.lon }
+        : client
+          ? await client.whenLocated()
+          : location();
     if (g && terrainEnabled) {
       terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
     }
@@ -256,6 +276,8 @@ export function createWorld(
       satellites: () => (satellitesEnabled ? watcher?.current() ?? null : null),
       time: opts.time,
       quality: resolvedQuality,
+      birds: opts.birds !== false,
+      bats: opts.bats !== false,
       fireflies: opts.fireflies !== false,
     }
   );
@@ -285,11 +307,41 @@ export function createWorld(
     if (dprChanged) applySize();
   };
   applySize();
-  window.addEventListener("resize", applySize);
+
+  const resizeObserver = new ResizeObserver(() => applySize());
+  resizeObserver.observe(canvas);
 
   const pauseWhenHidden = opts.pauseWhenHidden !== false;
   let raf = 0;
   let last = performance.now();
+  let pausedByUser = false;
+  let lastAtmosphere: AtmosphereSnapshot | null = null;
+  let atmosphereAcc = 0;
+  let timeOverride: (() => Date) | undefined = opts.time;
+  const atmosphereRoot =
+    opts.atmosphereRoot === null
+      ? null
+      : (opts.atmosphereRoot ?? document.documentElement);
+  const onAtmosphere = opts.onAtmosphereChange ?? null;
+
+  const snapshotAtmosphere = (): AtmosphereSnapshot =>
+    buildAtmosphere({
+      date: timeOverride ? timeOverride() : new Date(),
+      wx: conditions(),
+      wetness: world.getWetness(),
+      issActive: !!(satellitesEnabled && watcher?.current()),
+      city: opts.geo?.city ?? client?.city() ?? null,
+    });
+
+  const publishAtmosphere = (force = false): void => {
+    const next = snapshotAtmosphere();
+    if (!force && lastAtmosphere && atmosphereEquals(lastAtmosphere, next)) {
+      return;
+    }
+    lastAtmosphere = next;
+    if (atmosphereRoot) applyAtmosphereCSS(atmosphereRoot, next);
+    onAtmosphere?.(next);
+  };
 
   const frame = (now: number): void => {
     const dt = Math.min(64, now - last);
@@ -297,11 +349,17 @@ export function createWorld(
     ctx.clearRect(0, 0, world.width, world.height);
     world.update(dt);
     world.draw(ctx);
+    atmosphereAcc += dt;
+    if (atmosphereAcc >= 500) {
+      atmosphereAcc = 0;
+      publishAtmosphere();
+    }
     raf = requestAnimationFrame(frame);
   };
 
   const startLoop = (): void => {
-    if (raf !== 0) return;
+    if (raf !== 0 || pausedByUser) return;
+    if (pauseWhenHidden && document.visibilityState === "hidden") return;
     last = performance.now();
     raf = requestAnimationFrame(frame);
   };
@@ -313,6 +371,7 @@ export function createWorld(
   };
 
   startLoop();
+  publishAtmosphere(true);
 
   const onVisibility = (): void => {
     if (document.visibilityState === "hidden") {
@@ -320,16 +379,56 @@ export function createWorld(
       return;
     }
     last = performance.now();
-    if (pauseWhenHidden) startLoop();
+    startLoop();
     void client?.refresh();
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  const autoListeners: Array<{ mql: MediaQueryList; fn: () => void }> = [];
+  {
+    const onAutoChange = (): void => {
+      if (qualityMode === "auto") applyQualityPreset("auto");
+    };
+    for (const query of ["(prefers-reduced-motion: reduce)", "(max-width: 767px)"]) {
+      const mql = window.matchMedia(query);
+      mql.addEventListener("change", onAutoChange);
+      autoListeners.push({ mql, fn: onAutoChange });
+    }
+  }
+
   return {
     world,
     conditions,
+    atmosphere: snapshotAtmosphere,
     capture(type = "image/png", quality?: number): string {
       return canvas.toDataURL(type, quality);
+    },
+    captureMoment(opts = {}): CaptureMomentResult {
+      const atmosphere = snapshotAtmosphere();
+      const captionText =
+        opts.caption === false
+          ? ""
+          : typeof opts.caption === "string"
+            ? opts.caption
+            : formatAtmosphereCaption(atmosphere);
+      const type = opts.type ?? "image/png";
+      const dataUrl =
+        captionText.length > 0
+          ? captureWithCaption(canvas, captionText, type, opts.quality)
+          : canvas.toDataURL(type, opts.quality);
+      return {
+        dataUrl,
+        caption: captionText || formatAtmosphereCaption(atmosphere),
+        atmosphere,
+      };
+    },
+    pause(): void {
+      pausedByUser = true;
+      stopLoop();
+    },
+    resume(): void {
+      pausedByUser = false;
+      startLoop();
     },
     setTerrain(enabled: boolean): void {
       if (terrainEnabled === enabled) return;
@@ -362,62 +461,68 @@ export function createWorld(
       world.setGrid(enabled);
     },
     setTime(fn?: () => Date): void {
+      timeOverride = fn;
       world.setTime(fn);
+      publishAtmosphere(true);
     },
     setQuality(quality: Quality): void {
+      qualityMode = quality;
       applyQualityPreset(quality);
     },
     setStormPreview(enabled: boolean): void {
       weatherPreview = enabled ? "storm" : null;
+      publishAtmosphere(true);
     },
     setWeatherPreview(preview: WeatherPreview | null): void {
       weatherPreview = preview;
+      publishAtmosphere(true);
     },
     preview(scene: ScenePreset | WeatherPreview | null): void {
       if (scene !== null && WEATHER_PREVIEWS.includes(scene as WeatherPreview)) {
         weatherPreview = scene as WeatherPreview;
+        timeOverride = undefined;
         world.setTime();
+        publishAtmosphere(true);
         return;
       }
       weatherPreview = null;
       if (scene === null) {
+        timeOverride = undefined;
         world.setTime();
+        publishAtmosphere(true);
         return;
       }
-      world.setTime(() => {
+      const fn = (): Date => {
         const wx = liveConditions();
         const h = sceneHour(scene as ScenePreset, wx?.sunriseH ?? null, wx?.sunsetH ?? null);
         const d = new Date();
         d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
         return d;
-      });
+      };
+      timeOverride = fn;
+      world.setTime(fn);
+      publishAtmosphere(true);
     },
     setFireflies(enabled: boolean): void {
       world.setFireflies(enabled);
+    },
+    setBirds(enabled: boolean): void {
+      world.setBirds(enabled);
+    },
+    setBats(enabled: boolean): void {
+      world.setBats(enabled);
     },
     terrainProfile(): TerrainProfile | null {
       return terrainEnabled ? terrainProfile : null;
     },
     destroy(): void {
       stopLoop();
-      window.removeEventListener("resize", applySize);
+      resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
+      for (const { mql, fn } of autoListeners) mql.removeEventListener("change", fn);
+      if (atmosphereRoot) clearAtmosphereCSS(atmosphereRoot);
       client?.destroy();
       watcher?.destroy();
     },
   };
-}
-
-async function resolveLocation(
-  location: () => { lat: number; lon: number } | null,
-  client: WeatherClient | null,
-  tries = 30
-): Promise<{ lat: number; lon: number } | null> {
-  for (let i = 0; i < tries; i++) {
-    const g = location();
-    if (g) return g;
-    if (!client) return null;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  return null;
 }

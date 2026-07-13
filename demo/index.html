@@ -11,7 +11,7 @@
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Sans+3:wght@400;500;600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap"
 			rel="stylesheet"
 		/>
 		<link rel="stylesheet" href="/src/style.css" />
@@ -20,161 +20,122 @@
 		<canvas id="sky" aria-hidden="true"></canvas>
 
 		<header class="brand">
-			<p class="eyebrow">npm · zero dependencies</p>
-			<h1>zaur-world</h1>
-			<p class="tagline">Live sky for your location, hour, and weather.</p>
+			<a class="brand-mark" href="https://www.npmjs.com/package/@nomideusz/zaur-world">
+				<svg
+					class="brand-glyph"
+					viewBox="0 0 40 40"
+					width="36"
+					height="36"
+					aria-hidden="true"
+				>
+					<defs>
+						<linearGradient id="zw-sky" x1="0" y1="0" x2="0" y2="1">
+							<stop offset="0%" stop-color="#7eb6ff" />
+							<stop offset="55%" stop-color="#f4a574" />
+							<stop offset="100%" stop-color="#2a1f3d" />
+						</linearGradient>
+					</defs>
+					<rect width="40" height="40" rx="8" fill="url(#zw-sky)" />
+					<circle cx="28" cy="12" r="5" fill="#fff4e0" />
+					<path
+						d="M0 28 C8 24 14 30 22 27 C28 25 34 28 40 26 L40 40 L0 40 Z"
+						fill="#1a1528"
+						opacity="0.9"
+					/>
+					<path
+						d="M0 32 C10 29 18 34 26 31 C32 29 36 32 40 30 L40 40 L0 40 Z"
+						fill="#0e0c16"
+					/>
+				</svg>
+				<span class="brand-word">
+					<span class="brand-name">zaur</span><span class="brand-dot">.</span
+					><span class="brand-name">world</span>
+				</span>
+			</a>
+			<p class="tagline">Your sky. This hour. This weather.</p>
 		</header>
 
 		<footer class="chrome">
 			<button class="btn btn--tour" id="btn-tour" type="button">
-				▶ Play one day
+				Play one day
 			</button>
 
-			<details class="demo-panel">
-				<summary class="demo-panel-trigger">Demo controls</summary>
+			<details class="tweaks">
+				<summary class="tweaks-trigger">Tweaks</summary>
 
-				<div class="demo-panel-body">
-					<p class="panel-intro">
-						Optional layers and previews. Changes apply instantly — no reload,
-						no sky flash.
-					</p>
+				<div class="tweaks-panel">
+					<div class="chip-grid" role="group" aria-label="Layers">
+						<label class="chip" title="Horizon from nearby elevations">
+							<input type="checkbox" id="opt-terrain" checked />
+							<span>Terrain</span>
+						</label>
+						<label class="chip" title="Live conditions readout">
+							<input type="checkbox" id="opt-weather-card" checked />
+							<span>Card</span>
+						</label>
+						<label class="chip" id="row-grid" title="Foreground graph-paper overlay">
+							<input type="checkbox" id="opt-grid" checked />
+							<span>Grid</span>
+						</label>
+						<label class="chip" title="Real ISS when overhead">
+							<input type="checkbox" id="opt-satellites" checked />
+							<span>ISS</span>
+						</label>
+						<label
+							class="chip"
+							id="row-sat-demo"
+							title="Demo arc ~12s after enable, then ~every 7 min"
+						>
+							<input type="checkbox" id="opt-sat-demo" checked />
+							<span>Pass</span>
+						</label>
+						<label class="chip" title="Day birds and migrating flocks">
+							<input type="checkbox" id="opt-birds" checked />
+							<span>Birds</span>
+						</label>
+						<label class="chip" title="Summer dusk bats">
+							<input type="checkbox" id="opt-bats" checked />
+							<span>Bats</span>
+						</label>
+						<label class="chip" title="Summer evenings ~19:30–03:00">
+							<input type="checkbox" id="opt-fireflies" checked />
+							<span>Fireflies</span>
+						</label>
+					</div>
 
-					<section class="control-group">
-						<h2 class="group-label">Layers</h2>
-
-						<div class="control-row">
-							<label class="control-text" for="opt-terrain">
-								<span class="control-title">Real terrain</span>
-								<span class="control-desc"
-									>Horizon shaped from nearby elevations.</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-terrain" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
+					<div class="field">
+						<span class="field-label" id="clock-label">Time</span>
+						<div
+							class="segmented"
+							role="radiogroup"
+							aria-labelledby="clock-label"
+						>
+							<input
+								type="radio"
+								name="time-mode"
+								id="time-live"
+								value="live"
+								checked
+							/>
+							<label for="time-live">Live</label>
+							<input
+								type="radio"
+								name="time-mode"
+								id="time-golden"
+								value="golden"
+							/>
+							<label for="time-golden">Golden</label>
+							<input
+								type="radio"
+								name="time-mode"
+								id="time-custom"
+								value="custom"
+							/>
+							<label for="time-custom">Custom</label>
 						</div>
-
-						<div class="control-row">
-							<label class="control-text" for="opt-weather-card">
-								<span class="control-title">Weather card</span>
-								<span class="control-desc"
-									>Live conditions readout (top-right).</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-weather-card" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
-						</div>
-
-						<div class="control-row" id="row-grid">
-							<label class="control-text" for="opt-grid">
-								<span class="control-title">Dot grid</span>
-								<span class="control-desc"
-									>Foreground graph-paper overlay.</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-grid" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
-						</div>
-					</section>
-
-					<section class="control-group">
-						<h2 class="group-label">Space</h2>
-
-						<div class="control-row">
-							<label class="control-text" for="opt-satellites">
-								<span class="control-title">ISS tracking</span>
-								<span class="control-desc"
-									>Real station when overhead (often at night).</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-satellites" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
-						</div>
-
-						<div class="control-row control-row--nested" id="row-sat-demo">
-							<label class="control-text" for="opt-sat-demo">
-								<span class="control-title">Sample passes</span>
-								<span class="control-desc"
-									>Demo arc ~12 s after enable, then every ~7 min.</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-sat-demo" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
-						</div>
-					</section>
-
-					<section class="control-group">
-						<h2 class="group-label">Life</h2>
-
-						<div class="control-row">
-							<label class="control-text" for="opt-fireflies">
-								<span class="control-title">Fireflies</span>
-								<span class="control-desc"
-									>Clear summer evenings, ~19:30–03:00.</span
-								>
-							</label>
-							<label class="switch">
-								<input type="checkbox" id="opt-fireflies" checked />
-								<span class="switch-track" aria-hidden="true"></span>
-							</label>
-						</div>
-					</section>
-
-					<section class="control-group">
-						<h2 class="group-label">Time</h2>
-
-						<div class="control-row control-row--stacked">
-							<div class="control-text">
-								<span class="control-title">Clock</span>
-								<span class="control-desc"
-									>Preview any hour without waiting.</span
-								>
-							</div>
-							<div class="segmented" role="radiogroup" aria-label="Clock mode">
-								<input
-									type="radio"
-									name="time-mode"
-									id="time-live"
-									value="live"
-									checked
-								/>
-								<label for="time-live">Live</label>
-								<input
-									type="radio"
-									name="time-mode"
-									id="time-golden"
-									value="golden"
-								/>
-								<label for="time-golden">Golden</label>
-								<input
-									type="radio"
-									name="time-mode"
-									id="time-custom"
-									value="custom"
-								/>
-								<label for="time-custom">Custom</label>
-							</div>
-						</div>
-
-						<div class="time-detail">
-							<p class="time-hint" id="row-time-hint">
-								Sky follows your real local clock.
-							</p>
-
-							<div class="slider-row" id="row-golden-offset" hidden>
-							<label class="slider-label" for="opt-golden-offset"
-								>Minutes before sunset</label
-							>
-							<div class="slider-field">
+						<div class="field-extra">
+							<p class="time-hint" id="row-time-hint">Follows your local clock.</p>
+							<div class="slider" id="row-golden-offset" hidden>
 								<input
 									type="range"
 									id="opt-golden-offset"
@@ -182,18 +143,13 @@
 									max="90"
 									step="15"
 									value="30"
+									aria-label="Minutes before sunset"
 								/>
 								<output id="golden-offset-val" for="opt-golden-offset"
-									>30 min</output
+									>−30m</output
 								>
 							</div>
-						</div>
-
-						<div class="slider-row" id="row-custom-hour" hidden>
-							<label class="slider-label" for="opt-custom-hour"
-								>Hour of day</label
-							>
-							<div class="slider-field">
+							<div class="slider" id="row-custom-hour" hidden>
 								<input
 									type="range"
 									id="opt-custom-hour"
@@ -201,68 +157,43 @@
 									max="23.75"
 									step="0.25"
 									value="21"
+									aria-label="Hour of day"
 								/>
 								<output id="custom-hour-val" for="opt-custom-hour"
 									>21:00</output
 								>
 							</div>
 						</div>
+					</div>
+
+					<div class="field">
+						<span class="field-label" id="wx-label">Weather</span>
+						<div
+							class="segmented segmented--wrap"
+							role="radiogroup"
+							aria-labelledby="wx-label"
+						>
+							<input type="radio" name="wx" id="wx-live" value="live" checked />
+							<label for="wx-live">Live</label>
+							<input type="radio" name="wx" id="wx-storm" value="storm" />
+							<label for="wx-storm">Storm</label>
+							<input type="radio" name="wx" id="wx-snow" value="snow" />
+							<label for="wx-snow">Snow</label>
+							<input type="radio" name="wx" id="wx-fog" value="fog" />
+							<label for="wx-fog">Fog</label>
+							<input type="radio" name="wx" id="wx-overcast" value="overcast" />
+							<label for="wx-overcast">Gray</label>
 						</div>
-					</section>
+					</div>
 
-					<section class="control-group">
-						<h2 class="group-label">Weather</h2>
-
-						<div class="control-row control-row--stacked">
-							<div class="control-text">
-								<span class="control-title">Conditions</span>
-								<span class="control-desc"
-									>Layered over live weather — combines with any clock
-									mode.</span
-								>
-							</div>
+					<div class="field field--split">
+						<div class="field field--grow">
+							<span class="field-label" id="qual-label">Quality</span>
 							<div
-								class="segmented segmented--five"
+								class="segmented"
 								role="radiogroup"
-								aria-label="Weather preview"
+								aria-labelledby="qual-label"
 							>
-								<input
-									type="radio"
-									name="wx"
-									id="wx-live"
-									value="live"
-									checked
-								/>
-								<label for="wx-live">Live</label>
-								<input type="radio" name="wx" id="wx-storm" value="storm" />
-								<label for="wx-storm">Storm</label>
-								<input type="radio" name="wx" id="wx-snow" value="snow" />
-								<label for="wx-snow">Snow</label>
-								<input type="radio" name="wx" id="wx-fog" value="fog" />
-								<label for="wx-fog">Fog</label>
-								<input
-									type="radio"
-									name="wx"
-									id="wx-overcast"
-									value="overcast"
-								/>
-								<label for="wx-overcast">Gray</label>
-							</div>
-						</div>
-					</section>
-
-					<section class="control-group">
-						<h2 class="group-label">Rendering</h2>
-
-						<div class="control-row control-row--stacked">
-							<div class="control-text">
-								<span class="control-title">Quality</span>
-								<span class="control-desc"
-									>Low halves particles, dims rare effects, drops the dot
-									grid and DPR.</span
-								>
-							</div>
-							<div class="segmented" role="radiogroup" aria-label="Quality preset">
 								<input
 									type="radio"
 									name="quality"
@@ -277,25 +208,14 @@
 								<label for="qual-low">Low</label>
 							</div>
 						</div>
-
-						<div class="control-row">
-							<label class="control-text" for="btn-capture">
-								<span class="control-title">Snapshot</span>
-								<span class="control-desc"
-									>Save the current frame as a PNG.</span
-								>
-							</label>
-							<button class="btn" id="btn-capture" type="button">
-								Save PNG
-							</button>
-						</div>
-					</section>
-
-					<div class="panel-status" aria-live="polite">
-						<p class="extras-status" id="extras-status">
-							Live sky — no overrides active
-						</p>
+						<button class="btn btn--ghost" id="btn-capture" type="button">
+							PNG
+						</button>
 					</div>
+
+					<p class="tweaks-status" id="extras-status" aria-live="polite">
+						Live sky — no overrides
+					</p>
 				</div>
 			</details>
 

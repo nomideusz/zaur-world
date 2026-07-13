@@ -114,7 +114,16 @@ export class SatelliteWatcher {
 		if (!g || this.passStart !== null) return;
 		if (Date.now() - this.lastPassAt < COOLDOWN_MS) return;
 		try {
-			const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
+			const ctrl = new AbortController();
+			const timeout = window.setTimeout(() => ctrl.abort(), 8_000);
+			let res: Response;
+			try {
+				res = await fetch("https://api.wheretheiss.at/v1/satellites/25544", {
+					signal: ctrl.signal,
+				});
+			} finally {
+				window.clearTimeout(timeout);
+			}
 			if (!res.ok) return;
 			const j = (await res.json()) as {
 				latitude?: number;

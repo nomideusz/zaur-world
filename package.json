@@ -1,6 +1,6 @@
 {
 	"name": "@nomideusz/zaur-world",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
 	"type": "module",
 	"exports": {
@@ -29,12 +29,15 @@
 	"files": [
 		"dist"
 	],
-	"sideEffects": ["./dist/auto.js"],
+	"sideEffects": [
+		"./dist/auto.js"
+	],
 	"packageManager": "pnpm@9.15.9",
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
-		"test": "pnpm run build && node --test test/*.test.mjs",
-		"demo:dev": "pnpm run build && pnpm --filter zaur-world-demo dev",
+		"build": "tsc -p tsconfig.json && node scripts/minify.mjs",
+		"build:types": "tsc -p tsconfig.json",
+		"test": "pnpm run build:types && node --test test/*.test.mjs",
+		"demo:dev": "pnpm run build:types && pnpm --filter zaur-world-demo dev",
 		"demo:build": "pnpm run build && pnpm --filter zaur-world-demo build",
 		"prepublishOnly": "pnpm run build && pnpm test"
 	},
@@ -70,6 +73,7 @@
 	},
 	"devDependencies": {
 		"@types/react": "^19.1.8",
+		"esbuild": "0.25.5",
 		"react": "^19.1.0",
 		"typescript": "^5.7.2"
 	}

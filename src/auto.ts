@@ -16,17 +16,25 @@ declare global {
   }
 }
 
-const { canvas: selector, ...opts } = window.zaurWorldConfig ?? {};
+function mount(): void {
+  const { canvas: selector, ...opts } = window.zaurWorldConfig ?? {};
 
-let canvas = document.querySelector<HTMLCanvasElement>(
-  selector ?? "canvas[data-zaur-world]"
-);
-if (!canvas) {
-  canvas = document.createElement("canvas");
-  canvas.setAttribute("aria-hidden", "true");
-  canvas.style.cssText =
-    "position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none";
-  document.body.appendChild(canvas);
+  let canvas = document.querySelector<HTMLCanvasElement>(
+    selector ?? "canvas[data-zaur-world]"
+  );
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.style.cssText =
+      "position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none";
+    document.body.appendChild(canvas);
+  }
+
+  window.zaurWorld = createWorld(canvas, opts);
 }
 
-window.zaurWorld = createWorld(canvas, opts);
+if (document.body) {
+  mount();
+} else {
+  document.addEventListener("DOMContentLoaded", mount, { once: true });
+}

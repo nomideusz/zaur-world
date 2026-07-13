@@ -83,6 +83,8 @@ export class WeatherClient {
   private readonly onChange: ((conditions: WeatherConditions) => void) | null;
   private readonly useGeolocation: boolean;
   private readonly seedGeo: Geo | null;
+  private readonly located: Promise<{ lat: number; lon: number }>;
+  private resolveLocated!: (g: { lat: number; lon: number }) => void;
 
   constructor(opts: WeatherClientOptions = {}) {
     this.cache = opts.cache !== false;
@@ -90,6 +92,9 @@ export class WeatherClient {
     this.useGeolocation = opts.geolocation === true;
     const cardOpts = opts.weatherCard ?? (opts.cardParent ? { parent: opts.cardParent } : null);
     this.card = cardOpts ? new WeatherCard(cardOpts) : null;
+    this.located = new Promise((resolve) => {
+      this.resolveLocated = resolve;
+    });
     if (opts.geo) {
       this.seedGeo = {
         lat: opts.geo.lat,
@@ -97,6 +102,7 @@ export class WeatherClient {
         city: opts.geo.city ?? "your area",
       };
       this.cachedGeo = this.seedGeo;
+      this.resolveLocated({ lat: this.seedGeo.lat, lon: this.seedGeo.lon });
     } else {
       this.seedGeo = null;
     }
@@ -123,6 +129,16 @@ export class WeatherClient {
   /** Resolved approximate location (null until the first geo lookup). */
   location(): { lat: number; lon: number } | null {
     return this.cachedGeo ? { lat: this.cachedGeo.lat, lon: this.cachedGeo.lon } : null;
+  }
+
+  /** City label from geo (null until known). */
+  city(): string | null {
+    return this.cachedGeo?.city ?? null;
+  }
+
+  /** Resolves once approximate location is known (IP, cache, seed, or fallback). */
+  whenLocated(): Promise<{ lat: number; lon: number }> {
+    return this.located;
   }
 
   /** Re-fetch weather (e.g. when the tab becomes visible again). */
@@ -174,6 +190,7 @@ export class WeatherClient {
     if (this.cachedGeo) return this.cachedGeo;
     if (this.seedGeo) {
       this.cachedGeo = this.seedGeo;
+      this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
       return this.cachedGeo;
     }
     try {
@@ -199,6 +216,7 @@ export class WeatherClient {
               /* private mode */
             }
           }
+          this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
           return this.cachedGeo;
         }
       }
@@ -216,6 +234,7 @@ export class WeatherClient {
             /* private mode */
           }
         }
+        this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
         return this.cachedGeo;
       }
     }
@@ -226,6 +245,7 @@ export class WeatherClient {
           const g = JSON.parse(saved) as Partial<Geo>;
           if (Number.isFinite(g.lat) && Number.isFinite(g.lon) && typeof g.city === "string") {
             this.cachedGeo = { lat: g.lat as number, lon: g.lon as number, city: g.city };
+            this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
             return this.cachedGeo;
           }
         }
@@ -234,6 +254,7 @@ export class WeatherClient {
       }
     }
     this.cachedGeo = FALLBACK_GEO;
+    this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
     return this.cachedGeo;
   }
 

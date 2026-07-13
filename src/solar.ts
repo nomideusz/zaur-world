@@ -32,21 +32,23 @@ export function auroraLatFactor(lat: number | null | undefined): number {
 
 /**
  * Shooting-star frequency multiplier around major meteor-shower peaks
- * (day-of-year ±3).
+ * (day-of-year ±5). Peak nights (Perseids, Geminids) get much busier skies.
  */
 export function meteorRate(date: Date): number {
 	const start = Date.UTC(date.getUTCFullYear(), 0, 0);
 	const doy = Math.floor((date.getTime() - start) / 86_400_000);
 	const peaks: Array<[number, number]> = [
-		[3, 4],
-		[112, 2],
-		[126, 2],
-		[224, 5],
-		[294, 2],
-		[348, 6],
+		[3, 5], // Quadrantids
+		[112, 3], // Lyrids
+		[126, 3], // Eta Aquariids
+		[224, 9], // Perseids
+		[294, 3], // Orionids
+		[348, 10], // Geminids
 	];
 	for (const [p, rate] of peaks) {
-		if (Math.abs(doy - p) <= 3) return rate;
+		const dist = Math.abs(doy - p);
+		if (dist <= 2) return rate;
+		if (dist <= 5) return Math.max(2, Math.round(rate * 0.45));
 	}
 	return 1;
 }
@@ -109,7 +111,7 @@ export function sceneHour(
 		case "noon":
 			return 13;
 		case "golden":
-			return Math.max(0, set - 0.5);
+			return Math.max(0, set - 0.35);
 		case "dusk":
 			return set + 0.6;
 		case "night":

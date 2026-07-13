@@ -27,7 +27,7 @@ describe("auroraLatFactor", () => {
 describe("meteorRate", () => {
 	it("spikes near the Perseids peak", () => {
 		const perseids = new Date("2026-08-12T12:00:00Z");
-		assert.equal(meteorRate(perseids), 5);
+		assert.equal(meteorRate(perseids), 9);
 	});
 });
 
