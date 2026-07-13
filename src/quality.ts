@@ -28,9 +28,9 @@ const LOW: ResolvedQuality = {
 };
 
 export function resolveQuality(quality: Quality = "auto"): ResolvedQuality {
-	if (quality === "high") return HIGH;
-	if (quality === "low") return LOW;
+	if (quality === "high") return { ...HIGH };
+	if (quality === "low") return { ...LOW };
 	const mobile = typeof window !== "undefined" && window.innerWidth < 768;
-	if (prefersReducedMotion() || mobile) return LOW;
-	return HIGH;
+	if (prefersReducedMotion() || mobile) return { ...LOW };
+	return { ...HIGH };
 }

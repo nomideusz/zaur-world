@@ -226,9 +226,9 @@ export class World {
     this.particleScale = q?.particleScale ?? 1;
     this.ambientEffects = q?.ambientEffects ?? 1;
     this.showGrid = q?.showGrid ?? true;
-    this.gridEnabled = this.showGrid;
+    this.gridEnabled = true;
     this.baseGridColor = opts.gridColor === undefined ? DEFAULT_GRID : opts.gridColor;
-    this.gridColor = this.gridEnabled && this.baseGridColor ? this.baseGridColor : null;
+    this.gridColor = this.showGrid && this.baseGridColor ? this.baseGridColor : null;
     this.terrainFn = opts.terrain ?? (() => null);
     this.satFn = opts.satellites ?? (() => null);
     this.timeFn = opts.time ?? (() => new Date());
@@ -269,7 +269,15 @@ export class World {
   /** Toggle the foreground dot grid without remounting. */
   setGrid(enabled: boolean): void {
     this.gridEnabled = enabled;
-    this.gridColor = enabled && this.baseGridColor ? this.baseGridColor : null;
+    this.syncGridColor();
+  }
+
+  /** Grid draws only when both the user toggle and the quality preset allow it. */
+  private syncGridColor(): void {
+    this.gridColor =
+      this.gridEnabled && this.showGrid && this.baseGridColor
+        ? this.baseGridColor
+        : null;
     this.regenGridPattern();
   }
 
@@ -278,10 +286,14 @@ export class World {
     this.timeFn = fn ?? (() => new Date());
   }
 
-  /** Update particle density and ambient effect scaling. */
+  /** Update particle density, ambient effect scaling, and grid visibility. */
   applyQuality(q: ResolvedQuality): void {
     this.particleScale = q.particleScale;
     this.ambientEffects = q.ambientEffects;
+    if (this.showGrid !== q.showGrid) {
+      this.showGrid = q.showGrid;
+      this.syncGridColor();
+    }
   }
 
   /** Toggle summer-evening fireflies without remounting. */
@@ -465,7 +477,7 @@ export class World {
   /** Bake the dot grid into a repeating pattern (regenerated on resize). */
   private regenGridPattern(): void {
     this.gridPattern = null;
-    if (!this.gridColor || !this.gridEnabled) return;
+    if (!this.gridColor) return;
     const tile = document.createElement("canvas");
     tile.width = GRID_PX;
     tile.height = GRID_PX;

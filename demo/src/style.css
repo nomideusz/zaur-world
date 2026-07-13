@@ -269,19 +269,39 @@ body {
 	cursor: not-allowed;
 }
 
+/* Fixed-height slot below the clock segmented control — swapping its
+   contents (hint / golden slider / hour slider) never resizes the panel. */
+.time-detail {
+	height: 3.35rem;
+	padding-top: 0.15rem;
+	overflow: hidden;
+}
+
+.time-hint {
+	margin: 0.35rem 0 0 0.5rem;
+	padding-left: 0.55rem;
+	border-left: 1px solid rgba(232, 228, 216, 0.1);
+	font-size: 0.66rem;
+	color: var(--ink-muted);
+	line-height: 1.35;
+}
+
+.time-hint[hidden] {
+	display: none;
+}
+
 /* Slider row */
 .slider-row {
 	display: grid;
 	gap: 0.35rem;
-	margin: 0.15rem 0 0.35rem 0.5rem;
+	margin: 0 0 0 0.5rem;
 	padding-left: 0.55rem;
 	border-left: 1px solid rgba(232, 228, 216, 0.1);
 	min-height: 3.1rem;
 }
 
-.slider-row--disabled {
-	opacity: 0.42;
-	pointer-events: none;
+.slider-row[hidden] {
+	display: none;
 }
 
 .slider-label {
@@ -364,6 +384,52 @@ body {
 .segmented input:focus-visible + label {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
+}
+
+.segmented--five {
+	grid-template-columns: repeat(5, 1fr);
+}
+
+.segmented--five label {
+	padding: 0.32rem 0.15rem;
+	font-size: 0.64rem;
+}
+
+/* Small pill button */
+.btn {
+	padding: 0.32rem 0.75rem;
+	border-radius: 999px;
+	border: 1px solid rgba(232, 228, 216, 0.18);
+	background: rgba(232, 228, 216, 0.1);
+	color: var(--ink);
+	font: 600 0.7rem var(--font-sans);
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.btn:hover {
+	background: rgba(232, 228, 216, 0.18);
+}
+
+.btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* Day-tour pill — the demo's main call to action */
+.btn--tour {
+	pointer-events: auto;
+	padding: 0.4rem 0.85rem;
+	font-size: 0.78rem;
+	color: var(--accent);
+	background: rgba(12, 12, 18, 0.52);
+	border-color: rgba(240, 149, 106, 0.45);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+.btn--tour:hover {
+	background: rgba(240, 149, 106, 0.18);
 }
 
 /* Fixed-height status — prevents layout jump */

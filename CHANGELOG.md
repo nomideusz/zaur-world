@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-13
+
+### Added
+
+- `WorldHandle.preview(scene)` — jump to a named scene (`"dawn" | "noon" | "golden" | "dusk" | "night"`, a weather look, or `null` for live), anchored to the visitor's real sun times
+- `WorldHandle.setWeatherPreview(preview)` — layer `"storm" | "snow" | "fog" | "overcast"` over live conditions, independent of the clock (combines with `setTime`)
+- `sceneHour(scene, sunriseH, sunsetH)` exported from `solar`
+- `@nomideusz/zaur-world/auto` — self-mounting entry for script-tag / CDN use (config via `window.zaurWorldConfig`, handle on `window.zaurWorld`)
+- Demo: "▶ Play one day" 30-second cinematic tour, Time group (live / golden / custom hour), weather preview picker (storm / snow / fog / overcast), snapshot button, and shareable scene URLs (`?mode=custom&t=21.5&wx=snow`)
+
+### Fixed
+
+- `setQuality("low")` now hides the dot grid at runtime, matching mount-time behavior; the grid draws only when both the user toggle and the quality preset allow it
+- `resolveQuality()` returned shared preset objects — a `maxDpr` override could leak into later `createWorld` calls
+
 ## [0.5.1] - 2026-07-13
 
 ### Added

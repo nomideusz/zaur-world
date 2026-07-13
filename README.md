@@ -1,11 +1,18 @@
 # @nomideusz/zaur-world
 
-A living ambient sky for any web page, on a single `<canvas>`. Zero dependencies.
+A living ambient sky for any web page, on a single `<canvas>`.
+
+**~17 kB min+gzip · zero dependencies · no API keys · no build step required.**
 
 Born as the backdrop of [dino.zaur.app](https://dino.zaur.app), where a small dinosaur
 named Zaur walks on the day's news under it.
 
-**[Live demo](https://zaur-world.netlify.app)** · `pnpm run demo:dev` in this repo
+**[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play one day** for a
+30-second tour through dawn, golden hour, dusk, and the night sky.
+
+| Golden hour | Night |
+| --- | --- |
+| ![Golden hour — warm horizon, sun halo, parallax clouds](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/golden.png) | ![Night — phase-accurate moon, stars, city glow beyond the ridge](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/night.png) |
 
 ## What it renders
 
@@ -65,6 +72,21 @@ const sky = createWorld(canvas);
 sky.destroy();
 ```
 
+### No build step — script tag / CDN
+
+The `auto` entry mounts a full-viewport sky behind the page on its own:
+
+```html
+<script>
+  window.zaurWorldConfig = { terrain: true, satellites: true }; // optional
+</script>
+<script type="module" src="https://esm.sh/@nomideusz/zaur-world/auto"></script>
+```
+
+It adopts a `<canvas data-zaur-world>` if one exists (or the `canvas` CSS
+selector from the config), otherwise it creates a fixed canvas at
+`z-index: -1`. The handle is exposed as `window.zaurWorld`.
+
 The canvas must be sized by CSS — the device-pixel scaling and render loop
 are handled for you:
 
@@ -86,6 +108,50 @@ Content layered above the sky reads best on a translucent "frosted" panel:
   background: rgba(20, 20, 26, 0.55);
   backdrop-filter: blur(10px);
 }
+```
+
+### Hero background
+
+The sky works well as a living hero-section backdrop. Scope the canvas to the
+section instead of the viewport, and dim it with plain CSS so text stays
+readable:
+
+```css
+.hero {
+  position: relative;
+}
+.hero canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8; /* dim to taste */
+}
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+```
+
+### Scenes
+
+Jump straight to a moment worth showing — anchored to the visitor's *real*
+sun times, so "golden" is their golden hour:
+
+```ts
+sky.preview("golden"); // "dawn" | "noon" | "golden" | "dusk" | "night"
+sky.preview("storm");  // or a weather look: "storm" | "snow" | "fog" | "overcast"
+sky.preview(null);     // back to the live clock and live weather
+```
+
+Weather looks are layered over live conditions and are independent of the
+clock, so they combine — snow at night:
+
+```ts
+sky.preview("night");          // jump the clock to night…
+sky.setWeatherPreview("snow"); // …then layer snow over it
 ```
 
 ### Options

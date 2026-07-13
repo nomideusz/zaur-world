@@ -16,6 +16,7 @@ import {
 import { fetchTerrain, type TerrainProfile } from "./terrain.js";
 import { SatelliteWatcher } from "./satellites.js";
 import { resolveQuality, type Quality } from "./quality.js";
+import { sceneHour, type ScenePreset } from "./solar.js";
 
 export { World, type WorldOptions, type WorldState } from "./world.js";
 export {
@@ -39,12 +40,19 @@ export {
   meteorRate,
   auroraLatFactor,
   solsticeWarmth,
+  sceneHour,
+  type ScenePreset,
   SUN_RISE,
   SUN_SET,
 } from "./solar.js";
 export { resolveQuality, type Quality, type ResolvedQuality } from "./quality.js";
 export { prefersReducedMotion } from "./motion.js";
 export { angularDistanceDeg, predictIssPass } from "./satellite-math.js";
+
+/** Weather look layered over live conditions by `setWeatherPreview` / `preview`. */
+export type WeatherPreview = "storm" | "snow" | "fog" | "overcast";
+
+const WEATHER_PREVIEWS: readonly WeatherPreview[] = ["storm", "snow", "fog", "overcast"];
 
 export interface CreateWorldOptions {
   /** Host element for the small ambient weather card. Omit for no card. */
@@ -108,6 +116,18 @@ export interface WorldHandle {
   setQuality(quality: Quality): void;
   /** Preview storm clouds, rain, and lightning using live weather as a base. */
   setStormPreview(enabled: boolean): void;
+  /**
+   * Layer a weather look over live conditions — storm, snow, fog, or
+   * overcast. Pass `null` to return to live weather. Independent of the
+   * clock, so it combines with `setTime` (e.g. snow at night).
+   */
+  setWeatherPreview(preview: WeatherPreview | null): void;
+  /**
+   * Jump to a named scene — a time of day worth showing off, anchored to
+   * the visitor's real sun times — or a weather look. Pass `null` to
+   * return to the live clock and live weather.
+   */
+  preview(scene: ScenePreset | WeatherPreview | null): void;
   /** Toggle summer-evening fireflies in the lower sky band. */
   setFireflies(enabled: boolean): void;
   /** Current terrain profile, or null while loading / disabled. */
@@ -141,11 +161,11 @@ export function createWorld(
         onConditionsChange: opts.onConditionsChange,
       });
 
-  let stormPreview = false;
+  let weatherPreview: WeatherPreview | null = null;
   const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
   const conditions = (): WeatherConditions | null => {
     const live = liveConditions();
-    if (!stormPreview) return live;
+    if (!weatherPreview) return live;
     const base: WeatherConditions = live ?? {
       cloudiness: 0,
       precipitation: "none",
@@ -158,15 +178,47 @@ export function createWorld(
       sunriseH: 6.5,
       sunsetH: 19,
     };
-    return {
-      ...base,
-      cloudiness: 2,
-      precipitation: "rain",
-      intensity: Math.max(0.8, base.intensity),
-      thunder: true,
-      fog: false,
-      windSpeed: Math.max(28, base.windSpeed),
-    };
+    switch (weatherPreview) {
+      case "storm":
+        return {
+          ...base,
+          cloudiness: 2,
+          precipitation: "rain",
+          intensity: Math.max(0.8, base.intensity),
+          thunder: true,
+          fog: false,
+          windSpeed: Math.max(28, base.windSpeed),
+        };
+      case "snow":
+        return {
+          ...base,
+          cloudiness: 2,
+          precipitation: "snow",
+          intensity: Math.max(0.6, base.intensity),
+          thunder: false,
+          fog: false,
+          temperatureC: Math.min(-1, base.temperatureC),
+        };
+      case "fog":
+        return {
+          ...base,
+          cloudiness: 1,
+          precipitation: "none",
+          intensity: 0,
+          thunder: false,
+          fog: true,
+          windSpeed: Math.min(6, base.windSpeed),
+        };
+      case "overcast":
+        return {
+          ...base,
+          cloudiness: 2,
+          precipitation: "none",
+          intensity: 0,
+          thunder: false,
+          fog: false,
+        };
+    }
   };
 
   const location = (): { lat: number; lon: number } | null => {
@@ -228,6 +280,7 @@ export function createWorld(
     resolvedQuality.maxDpr = next.maxDpr;
     resolvedQuality.particleScale = next.particleScale;
     resolvedQuality.ambientEffects = next.ambientEffects;
+    resolvedQuality.showGrid = next.showGrid;
     world.applyQuality(next);
     if (dprChanged) applySize();
   };
@@ -315,7 +368,29 @@ export function createWorld(
       applyQualityPreset(quality);
     },
     setStormPreview(enabled: boolean): void {
-      stormPreview = enabled;
+      weatherPreview = enabled ? "storm" : null;
+    },
+    setWeatherPreview(preview: WeatherPreview | null): void {
+      weatherPreview = preview;
+    },
+    preview(scene: ScenePreset | WeatherPreview | null): void {
+      if (scene !== null && WEATHER_PREVIEWS.includes(scene as WeatherPreview)) {
+        weatherPreview = scene as WeatherPreview;
+        world.setTime();
+        return;
+      }
+      weatherPreview = null;
+      if (scene === null) {
+        world.setTime();
+        return;
+      }
+      world.setTime(() => {
+        const wx = liveConditions();
+        const h = sceneHour(scene as ScenePreset, wx?.sunriseH ?? null, wx?.sunsetH ?? null);
+        const d = new Date();
+        d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
+        return d;
+      });
     },
     setFireflies(enabled: boolean): void {
       world.setFireflies(enabled);

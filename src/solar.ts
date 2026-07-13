@@ -88,3 +88,31 @@ export function solsticeWarmth(date: Date, latitude = 50): number {
 	if (h < 10 || h > 18) return 0;
 	return 0.08 * (1 - dist / 15);
 }
+
+/** Named scene for `WorldHandle.preview()` — a time of day worth showing off. */
+export type ScenePreset = "dawn" | "noon" | "golden" | "dusk" | "night";
+
+/**
+ * Decimal hour for a named scene, anchored to the day's real sun times.
+ * `sunriseH` / `sunsetH` may be null while weather is still loading.
+ */
+export function sceneHour(
+	scene: ScenePreset,
+	sunriseH: number | null,
+	sunsetH: number | null
+): number {
+	const rise = sunriseH ?? 6.5;
+	const set = sunsetH ?? 19;
+	switch (scene) {
+		case "dawn":
+			return rise + 0.25;
+		case "noon":
+			return 13;
+		case "golden":
+			return Math.max(0, set - 0.5);
+		case "dusk":
+			return set + 0.6;
+		case "night":
+			return 23.5;
+	}
+}

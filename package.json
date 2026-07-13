@@ -1,6 +1,6 @@
 {
 	"name": "@nomideusz/zaur-world",
-	"version": "0.5.1",
+	"version": "0.6.0",
 	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
 	"type": "module",
 	"exports": {
@@ -19,13 +19,17 @@
 		"./react": {
 			"types": "./dist/react.d.ts",
 			"default": "./dist/react.js"
+		},
+		"./auto": {
+			"types": "./dist/auto.d.ts",
+			"default": "./dist/auto.js"
 		}
 	},
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist"
 	],
-	"sideEffects": false,
+	"sideEffects": ["./dist/auto.js"],
 	"packageManager": "pnpm@9.15.9",
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
