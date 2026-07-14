@@ -1,8 +1,11 @@
 import {
 	createWorld,
+	formatAtmosphereCaption,
+	type AtmosphereSnapshot,
 	type Quality,
 	type TerrainProfile,
 	type WeatherConditions,
+	type WeatherOverride,
 	type WeatherPreview,
 	type WorldHandle,
 } from "@nomideusz/zaur-world";
@@ -37,6 +40,27 @@ const qualityRadios = document.querySelectorAll(
 	'input[name="quality"]'
 ) as NodeListOf<HTMLInputElement>;
 const statusEl = document.getElementById("extras-status") as HTMLParagraphElement;
+const clockEl = document.getElementById("sky-clock") as HTMLParagraphElement;
+const placeEl = document.getElementById("sky-place") as HTMLParagraphElement;
+const intensitySlider = document.getElementById("opt-intensity") as HTMLInputElement;
+const intensityVal = document.getElementById("intensity-val") as HTMLOutputElement;
+const tempSlider = document.getElementById("opt-temp") as HTMLInputElement;
+const tempVal = document.getElementById("temp-val") as HTMLOutputElement;
+const windSlider = document.getElementById("opt-wind") as HTMLInputElement;
+const windVal = document.getElementById("wind-val") as HTMLOutputElement;
+const climateResetBtn = document.getElementById("btn-climate-reset") as HTMLButtonElement;
+const climateHint = document.getElementById("climate-hint") as HTMLParagraphElement;
+
+type ClimateKey = "intensity" | "temperatureC" | "windSpeed";
+const climateLocks = new Set<ClimateKey>();
+
+function updatePlace(a: AtmosphereSnapshot): void {
+	const line = formatAtmosphereCaption(a)
+		.split(" · ")
+		.filter((part) => !/^\d{1,2}:\d{2}$/.test(part))
+		.join(" · ");
+	if (placeEl.textContent !== line) placeEl.textContent = line || "Your sky";
+}
 
 // Shareable scene URLs — apply query params to the controls before mounting.
 const params = new URLSearchParams(location.search);
@@ -65,8 +89,21 @@ if (offParam) goldenOffsetSlider.value = offParam;
 const tParam = params.get("t");
 if (tParam) customHourSlider.value = tParam;
 
+if (params.has("int")) {
+	intensitySlider.value = params.get("int")!;
+	climateLocks.add("intensity");
+}
+if (params.has("temp")) {
+	tempSlider.value = params.get("temp")!;
+	climateLocks.add("temperatureC");
+}
+if (params.has("wind")) {
+	windSlider.value = params.get("wind")!;
+	climateLocks.add("windSpeed");
+}
+
 const sky: WorldHandle = createWorld(canvas, {
-		weatherCard: { parent: document.body, position: "top-right" },
+	weatherCard: { parent: document.body, position: "top-right" },
 	gridColor: "rgba(232, 228, 216, 0.32)",
 	terrain: terrainToggle.checked,
 	satellites: satellitesToggle.checked,
@@ -75,6 +112,7 @@ const sky: WorldHandle = createWorld(canvas, {
 	bats: batsToggle.checked,
 	fireflies: firefliesToggle.checked,
 	quality: selectedQuality(),
+	onAtmosphereChange: updatePlace,
 });
 
 function terrainLabel(t: TerrainProfile): string {
@@ -119,6 +157,73 @@ function selectedQuality(): Quality {
 		if (radio.checked) return radio.value as Quality;
 	}
 	return "auto";
+}
+
+function precipPreview(): boolean {
+	const wx = selectedWx();
+	return wx === "storm" || wx === "snow";
+}
+
+function buildClimateOverride(): WeatherOverride | null {
+	if (climateLocks.size === 0) return null;
+	const o: WeatherOverride = {};
+	if (climateLocks.has("intensity")) o.intensity = Number(intensitySlider.value);
+	if (climateLocks.has("temperatureC")) o.temperatureC = Number(tempSlider.value);
+	if (climateLocks.has("windSpeed")) o.windSpeed = Number(windSlider.value);
+	return Object.keys(o).length ? o : null;
+}
+
+function applyClimate(): void {
+	sky.setWeatherOverride(buildClimateOverride());
+	syncClimateChrome();
+}
+
+function syncClimateChrome(): void {
+	climateResetBtn.hidden = climateLocks.size === 0;
+	climateHint.hidden = climateLocks.size > 0;
+	intensityVal.textContent = `${Math.round(Number(intensitySlider.value) * 100)}%`;
+	tempVal.textContent = `${tempSlider.value}°`;
+	windVal.textContent = windSlider.value;
+}
+
+/** Mirror unlocked controls from the current (previewed) sky so they stay honest. */
+function mirrorClimateFromSky(): void {
+	const wx = sky.conditions();
+	if (!wx) return;
+	if (!climateLocks.has("intensity")) {
+		intensitySlider.value = String(Math.round(wx.intensity * 20) / 20);
+	}
+	if (!climateLocks.has("temperatureC")) {
+		tempSlider.value = String(Math.round(wx.temperatureC));
+	}
+	if (!climateLocks.has("windSpeed")) {
+		windSlider.value = String(Math.round(Math.min(60, Math.max(0, wx.windSpeed))));
+	}
+	syncClimateChrome();
+}
+
+function resetClimate(): void {
+	climateLocks.clear();
+	applyClimate();
+	mirrorClimateFromSky();
+	// Storm/Snow re-bind intensity so the slider keeps working.
+	if (precipPreview()) bindPrecipIntensity();
+	updateStatus();
+}
+
+/** Seed intensity from the weather preset, then lock so the slider drives drops. */
+function bindPrecipIntensity(): void {
+	climateLocks.delete("intensity");
+	applyClimate();
+	mirrorClimateFromSky();
+	climateLocks.add("intensity");
+	applyClimate();
+}
+
+function lockClimate(key: ClimateKey): void {
+	climateLocks.add(key);
+	applyClimate();
+	updateStatus();
 }
 
 function syncGridRow(): void {
@@ -170,6 +275,12 @@ const TOUR_SECONDS = 30;
 let tourRaf = 0;
 let tourHour = 0;
 
+function updateClock(): void {
+	const h = tourRaf !== 0 ? tourHour : effectiveHour();
+	const label = formatHour(h);
+	if (clockEl.textContent !== label) clockEl.textContent = label;
+}
+
 function stopTour(): void {
 	if (tourRaf === 0) return;
 	cancelAnimationFrame(tourRaf);
@@ -192,6 +303,7 @@ function startTour(): void {
 			return;
 		}
 		tourHour = (from + t * 24) % 24;
+		updateClock();
 		statusEl.textContent = `Day tour — ${formatHour(tourHour)}`;
 		tourRaf = requestAnimationFrame(step);
 	};
@@ -220,6 +332,9 @@ function syncUrl(): void {
 		p.set("mode", "custom");
 		p.set("t", customHourSlider.value);
 	}
+	if (climateLocks.has("intensity")) p.set("int", intensitySlider.value);
+	if (climateLocks.has("temperatureC")) p.set("temp", tempSlider.value);
+	if (climateLocks.has("windSpeed")) p.set("wind", windSlider.value);
 	const search = p.toString() ? `?${p.toString()}` : "";
 	if (location.search !== search) {
 		history.replaceState(null, "", search || location.pathname);
@@ -227,6 +342,8 @@ function syncUrl(): void {
 }
 
 function updateStatus(): void {
+	updateClock();
+	mirrorClimateFromSky();
 	if (tourRaf !== 0) return;
 
 	const parts: string[] = [];
@@ -254,6 +371,16 @@ function updateStatus(): void {
 
 	const wxPreview = selectedWx();
 	if (wxPreview) parts.push(`Weather: ${wxPreview} preview`);
+
+	if (climateLocks.size) {
+		const bits: string[] = [];
+		if (climateLocks.has("intensity")) {
+			bits.push(`${Math.round(Number(intensitySlider.value) * 100)}% precip`);
+		}
+		if (climateLocks.has("temperatureC")) bits.push(`${tempSlider.value}°C`);
+		if (climateLocks.has("windSpeed")) bits.push(`wind ${windSlider.value}`);
+		if (bits.length) parts.push(`Climate: ${bits.join(", ")}`);
+	}
 
 	const atm = sky.atmosphere();
 	if (atm.moments.length) parts.push(atm.moments.join(", "));
@@ -369,9 +496,33 @@ for (const radio of wxRadios) {
 	radio.addEventListener("change", () => {
 		if (!radio.checked) return;
 		sky.setWeatherPreview(selectedWx());
+		if (precipPreview()) bindPrecipIntensity();
+		else {
+			applyClimate();
+			mirrorClimateFromSky();
+		}
 		updateStatus();
 	});
 }
+
+intensitySlider.addEventListener("input", () => {
+	syncClimateChrome();
+	lockClimate("intensity");
+});
+
+tempSlider.addEventListener("input", () => {
+	syncClimateChrome();
+	lockClimate("temperatureC");
+});
+
+windSlider.addEventListener("input", () => {
+	syncClimateChrome();
+	lockClimate("windSpeed");
+});
+
+climateResetBtn.addEventListener("click", () => {
+	resetClimate();
+});
 
 for (const radio of qualityRadios) {
 	radio.addEventListener("change", () => {
@@ -389,6 +540,10 @@ updateTimeLabels();
 sky.setWeatherCard(weatherCardToggle.checked);
 sky.setGrid(gridToggle.checked);
 sky.setWeatherPreview(selectedWx());
+if (precipPreview()) bindPrecipIntensity();
+else applyClimate();
 applyTime();
+mirrorClimateFromSky();
 updateStatus();
 window.setInterval(updateStatus, 2000);
+window.setInterval(updateClock, 1000);

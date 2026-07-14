@@ -193,6 +193,8 @@ export function drawCelestial(
   dim: number,
   date: Date
 ): void {
+  if (dim < 0.02) return;
+
   const isSun = h >= SUN_RISE && h <= SUN_SET;
 
   let t: number;
@@ -211,7 +213,7 @@ export function drawCelestial(
   const y = baseY - Math.sin(t * Math.PI) * arcHeight;
 
   ctx.save();
-  ctx.globalAlpha = Math.max(0.2, dim);
+  ctx.globalAlpha = Math.max(0, Math.min(1, dim));
 
   if (isSun) {
     const horizonness = Math.min(1, Math.abs(t - 0.5) * 2);

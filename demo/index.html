@@ -48,11 +48,12 @@
 					/>
 				</svg>
 				<span class="brand-word">
-					<span class="brand-name">zaur</span><span class="brand-dot">.</span
-					><span class="brand-name">world</span>
+					<span class="brand-zaur">zaur</span><span class="brand-dot" aria-hidden="true">.</span
+					><span class="brand-world">world</span>
 				</span>
 			</a>
-			<p class="tagline">Your sky. This hour. This weather.</p>
+			<p class="place" id="sky-place">Your sky</p>
+			<p class="clock" id="sky-clock" aria-live="polite">--:--</p>
 		</header>
 
 		<footer class="chrome">
@@ -183,6 +184,57 @@
 							<label for="wx-fog">Fog</label>
 							<input type="radio" name="wx" id="wx-overcast" value="overcast" />
 							<label for="wx-overcast">Gray</label>
+						</div>
+					</div>
+
+					<div class="field">
+						<div class="field-head">
+							<span class="field-label" id="climate-label">Climate</span>
+							<button class="btn-text" id="btn-climate-reset" type="button" hidden>
+								Reset
+							</button>
+						</div>
+						<p class="climate-hint" id="climate-hint">
+							Dial intensity, temp, and wind — clouds follow precip.
+						</p>
+						<div class="slider slider--named" title="Rain / snow strength">
+							<span class="slider-name">Intensity</span>
+							<input
+								type="range"
+								id="opt-intensity"
+								min="0"
+								max="1"
+								step="0.05"
+								value="0.5"
+								aria-label="Precipitation intensity"
+							/>
+							<output id="intensity-val" for="opt-intensity">50%</output>
+						</div>
+						<div class="slider slider--named" title="Air temperature">
+							<span class="slider-name">Temp</span>
+							<input
+								type="range"
+								id="opt-temp"
+								min="-20"
+								max="40"
+								step="1"
+								value="18"
+								aria-label="Temperature Celsius"
+							/>
+							<output id="temp-val" for="opt-temp">18°</output>
+						</div>
+						<div class="slider slider--named" title="Wind speed">
+							<span class="slider-name">Wind</span>
+							<input
+								type="range"
+								id="opt-wind"
+								min="0"
+								max="60"
+								step="1"
+								value="12"
+								aria-label="Wind speed km/h"
+							/>
+							<output id="wind-val" for="opt-wind">12</output>
 						</div>
 					</div>
 

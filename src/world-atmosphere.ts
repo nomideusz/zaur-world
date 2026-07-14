@@ -71,6 +71,35 @@ export function drawWetSheen(
   }
 }
 
+/** Settled snow blanket along the ground — builds while snowing, holds in the cold. */
+export function drawSnowCover(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cover: number
+): void {
+  if (cover < 0.02) return;
+  const a = 0.55 * cover;
+  const grad = ctx.createLinearGradient(0, height * 0.78, 0, height);
+  grad.addColorStop(0, "rgba(245, 250, 255, 0)");
+  grad.addColorStop(0.4, `rgba(235, 244, 255, ${(a * 0.35).toFixed(3)})`);
+  grad.addColorStop(1, `rgba(248, 252, 255, ${a.toFixed(3)})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, height * 0.78, width, height * 0.22);
+
+  // Soft uneven drifts — denser as cover builds.
+  const t = performance.now() / 1000;
+  const n = Math.round(12 + cover * 28);
+  for (let i = 0; i < n; i++) {
+    const x = ((i * 89 + Math.sin(t * 0.05 + i) * 6) % width + width) % width;
+    const y = height * (0.86 + ((i * 17) % 12) / 100);
+    const w = 3 + (i % 5);
+    const ga = cover * (0.12 + 0.2 * ((i * 7) % 5) / 5);
+    ctx.fillStyle = `rgba(255, 255, 255, ${ga.toFixed(3)})`;
+    ctx.fillRect(x | 0, y | 0, w, 2);
+  }
+}
+
 /** Cold-clear frost sparkle along the lower sky / ridge. */
 export function drawFrost(
   ctx: CanvasRenderingContext2D,

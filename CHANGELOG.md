@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-14
+
+### Added
+
+- `setWeatherOverride()` / `WeatherOverride` / `applyWeatherOverride()` — dial intensity, temperature, wind, clouds, precip, fog, and thunder on top of live weather or a named preview
+- `normalizeWeather()` — keeps conditions physically coherent (warm snow → rain, sub-zero rain → snow, fog wind capped, thunder always has a deck)
+- Settled snow cover on the ground — builds while snowing in the cold, holds below freezing, melts in a thaw (`getSnowCover()`, `--zw-snow-cover`, captions)
+- Intensity-driven cloud deck: darker, larger, denser banks; 100% seals the sky and hides the sun/moon
+- Wind drives rain slant and snow drift from real km/h, not just a gentle gust
+- Demo: live place · mood line, clock, climate sliders, shareable `int` / `temp` / `wind` URL params
+
+### Changed
+
+- Precipitation intensity uses a quadratic density curve — 100% is extreme (wall of rain/snow, fast soak / snow blanket)
+- Celestial dimming no longer floors at 20% opacity; full overcast blacks out sun and moon
+- `--zw-cloud` reflects intensity and storm mood, not only cloudiness enum
+
 ## [0.7.1] - 2026-07-13
 
 ### Fixed
@@ -155,7 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase-accurate moon, golden-hour lit clouds, seasons, fireflies, shooting stars, wet ground
 - Zero runtime dependencies; framework-agnostic API
 
-[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nomideusz/zaur-world/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/nomideusz/zaur-world/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nomideusz/zaur-world/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/nomideusz/zaur-world/compare/v0.5.1...v0.6.0

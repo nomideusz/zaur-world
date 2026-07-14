@@ -19,8 +19,11 @@ import { resolveQuality, type Quality } from "./quality.js";
 import { sceneHour, type ScenePreset } from "./solar.js";
 import {
   applyWeatherPreview,
+  applyWeatherOverride,
+  normalizeWeather,
   WEATHER_PREVIEWS,
   type WeatherPreview,
+  type WeatherOverride,
 } from "./weather-preview.js";
 import {
   applyAtmosphereCSS,
@@ -67,8 +70,11 @@ export { prefersReducedMotion } from "./motion.js";
 export { angularDistanceDeg, predictIssPass } from "./satellite-math.js";
 export {
   applyWeatherPreview,
+  applyWeatherOverride,
+  normalizeWeather,
   WEATHER_PREVIEWS,
   type WeatherPreview,
+  type WeatherOverride,
 } from "./weather-preview.js";
 export {
   buildAtmosphere,
@@ -185,6 +191,12 @@ export interface WorldHandle {
    */
   setWeatherPreview(preview: WeatherPreview | null): void;
   /**
+   * Override individual climate fields (intensity, temperature, wind,
+   * clouds, precip, fog, thunder) on top of live weather / preview.
+   * Pass `null` or `{}` to clear. Combines with `setWeatherPreview`.
+   */
+  setWeatherOverride(override: WeatherOverride | null): void;
+  /**
    * Jump to a named scene — a time of day worth showing off, anchored to
    * the visitor's real sun times — or a weather look. Pass `null` to
    * return to the live clock and live weather.
@@ -229,11 +241,14 @@ export function createWorld(
       });
 
   let weatherPreview: WeatherPreview | null = null;
+  let weatherOverride: WeatherOverride | null = null;
   const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
   const conditions = (): WeatherConditions | null => {
-    const live = liveConditions();
-    if (!weatherPreview) return live;
-    return applyWeatherPreview(live, weatherPreview);
+    let wx = liveConditions();
+    if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
+    if (weatherOverride) wx = applyWeatherOverride(wx, weatherOverride);
+    else if (wx) wx = normalizeWeather(wx);
+    return wx;
   };
 
   const location = (): { lat: number; lon: number } | null => {
@@ -329,6 +344,7 @@ export function createWorld(
       date: timeOverride ? timeOverride() : new Date(),
       wx: conditions(),
       wetness: world.getWetness(),
+      snowCover: world.getSnowCover(),
       issActive: !!(satellitesEnabled && watcher?.current()),
       city: opts.geo?.city ?? client?.city() ?? null,
     });
@@ -475,6 +491,14 @@ export function createWorld(
     },
     setWeatherPreview(preview: WeatherPreview | null): void {
       weatherPreview = preview;
+      publishAtmosphere(true);
+    },
+    setWeatherOverride(override: WeatherOverride | null): void {
+      if (!override || Object.keys(override).length === 0) {
+        weatherOverride = null;
+      } else {
+        weatherOverride = { ...override };
+      }
       publishAtmosphere(true);
     },
     preview(scene: ScenePreset | WeatherPreview | null): void {

@@ -1,6 +1,6 @@
 {
 	"name": "@nomideusz/zaur-world",
-	"version": "0.7.1",
+	"version": "0.8.0",
 	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
 	"type": "module",
 	"exports": {

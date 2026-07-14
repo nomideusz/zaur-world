@@ -56,6 +56,7 @@ export function atmosphereEquals(a: AtmosphereSnapshot, b: AtmosphereSnapshot): 
     a.moments.join() === b.moments.join() &&
     Math.abs(a.daylight - b.daylight) < 0.04 &&
     Math.abs(a.wetness - b.wetness) < 0.05 &&
+    Math.abs(a.snowCover - b.snowCover) < 0.05 &&
     Math.abs(a.frost - b.frost) < 0.05 &&
     Math.abs(a.rain - b.rain) < 0.05 &&
     Math.abs(a.glow - b.glow) < 0.05 &&

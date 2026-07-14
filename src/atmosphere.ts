@@ -33,6 +33,8 @@ export interface AtmosphereSnapshot {
   dusk: number;
   /** 0..1 ground wetness after rain. */
   wetness: number;
+  /** 0..1 settled snow on the ground. */
+  snowCover: number;
   /** 0..1 frost sparkle (cold clear nights / mornings). */
   frost: number;
   precipitation: Precipitation;
@@ -114,10 +116,12 @@ export function buildAtmosphere(input: {
   date: Date;
   wx: WeatherConditions | null;
   wetness: number;
+  snowCover?: number;
   issActive: boolean;
   city?: string | null;
 }): AtmosphereSnapshot {
   const { date, wx, wetness, issActive } = input;
+  const snowCover = input.snowCover ?? 0;
   const localHour =
     date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
   const skyHour = warpHour(localHour, wx?.sunriseH ?? null, wx?.sunsetH ?? null);
@@ -130,6 +134,7 @@ export function buildAtmosphere(input: {
     daylight: day,
     dusk: duskAlpha(skyHour),
     wetness,
+    snowCover,
     frost,
     precipitation: precip,
     intensity,
@@ -160,6 +165,7 @@ export function formatAtmosphereCaption(a: AtmosphereSnapshot): string {
   else if (a.moments.includes("hard-frost")) parts.push("frost");
   else if (a.moments.includes("iss")) parts.push("ISS pass");
   else if (a.temperatureC <= -1) parts.push(`${Math.round(a.temperatureC)}°C`);
+  else if (a.snowCover > 0.35 && a.snow === 0) parts.push("snow on the ground");
   else if (a.wetness > 0.4 && a.rain === 0) parts.push("after rain");
   return parts.join(" · ");
 }
@@ -194,12 +200,16 @@ export function applyAtmosphereCSS(
   s.setProperty("--zw-daylight", a.daylight.toFixed(3));
   s.setProperty("--zw-dusk", a.dusk.toFixed(3));
   s.setProperty("--zw-wetness", a.wetness.toFixed(3));
+  s.setProperty("--zw-snow-cover", a.snowCover.toFixed(3));
   s.setProperty("--zw-frost", a.frost.toFixed(3));
   s.setProperty("--zw-rain", a.rain.toFixed(3));
   s.setProperty("--zw-snow", a.snow.toFixed(3));
   s.setProperty("--zw-glow", a.glow.toFixed(3));
   s.setProperty("--zw-wind", Math.min(1, a.windSpeed / 40).toFixed(3));
-  s.setProperty("--zw-cloud", (a.cloudiness / 2).toFixed(3));
+  s.setProperty(
+    "--zw-cloud",
+    Math.min(1, a.cloudiness / 2 + a.intensity * 0.35 + (a.mood === "storm" ? 0.15 : 0)).toFixed(3)
+  );
   root.dataset.zwMood = a.mood;
   root.dataset.zwPrecip = a.precipitation;
   root.dataset.zwDay = a.isDay ? "1" : "0";
@@ -211,6 +221,7 @@ export function clearAtmosphereCSS(root: HTMLElement): void {
     "--zw-daylight",
     "--zw-dusk",
     "--zw-wetness",
+    "--zw-snow-cover",
     "--zw-frost",
     "--zw-rain",
     "--zw-snow",

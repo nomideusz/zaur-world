@@ -21,15 +21,18 @@ named Zaur walks on the day's news under it.
   Sun arcs by day; a phase-accurate moon with craters and earthshine by night.
 - **Live weather** — per-visitor IP geolocation drives clouds (three parallax
   layers), rain with splashes, snow, fog, thunderstorms with procedural
-  lightning, and wind speed that slants the rain and hurries the clouds.
-  Overcast desaturates the whole sky; clear days are genuinely blue.
+  lightning, and wind that slants rain, drives flakes sideways, and hurries
+  the clouds. Intensity scales the whole scene: light drizzle is a veil;
+  100% is a sealed overcast with no sun visible. Overcast desaturates the
+  sky; clear days are genuinely blue. Conditions stay physically coherent
+  (warm snow melts to rain; sub-zero rain falls as snow).
 - **Golden hour** — horizon glow, and cloud undersides that catch fire
   at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
   winter), fireflies on summer nights, aurora veils in deep night, shooting
-  stars a few minutes apart, heat haze above 27 °C, and ground that stays
-  visibly wet for a few minutes after rain stops. Seasons flip with the
-  visitor's hemisphere.
+  stars a few minutes apart, heat haze above 27 °C, ground that stays
+  visibly wet after rain, and snow that settles and lingers while the air
+  stays cold. Seasons flip with the visitor's hemisphere.
 - **A believable traffic of sky objects** — airplanes with dissolving
   contrails by day and blinking navigation lights by night, migrating
   V-formations in spring and autumn, a stylized satellite train gliding
@@ -131,8 +134,8 @@ html[data-zw-mood="golden"] .headline { color: #ffe0c2; }
 html[data-zw-day="0"] .meta { color: rgba(200, 210, 240, 0.75); }
 ```
 
-Variables: `--zw-daylight`, `--zw-dusk`, `--zw-wetness`, `--zw-frost`,
-`--zw-rain`, `--zw-snow`, `--zw-glow`, `--zw-wind`, `--zw-cloud`.
+Variables: `--zw-daylight`, `--zw-dusk`, `--zw-wetness`, `--zw-snow-cover`,
+`--zw-frost`, `--zw-rain`, `--zw-snow`, `--zw-glow`, `--zw-wind`, `--zw-cloud`.
 Attributes: `data-zw-mood`, `data-zw-precip`, `data-zw-day`, `data-zw-moments`.
 Pass `atmosphereRoot: null` to disable, or `onAtmosphereChange` to react in JS.
 
@@ -179,6 +182,19 @@ clock, so they combine — snow at night:
 sky.preview("night");          // jump the clock to night…
 sky.setWeatherPreview("snow"); // …then layer snow over it
 ```
+
+Dial individual climate fields on top of live weather or a preview —
+intensity, temperature, wind, clouds, precip, fog, thunder:
+
+```ts
+sky.setWeatherPreview("storm");
+sky.setWeatherOverride({ intensity: 1, windSpeed: 45 }); // sealed overcast gale
+sky.setWeatherOverride(null); // clear field overrides
+```
+
+`normalizeWeather()` (also applied automatically) keeps impossible combos
+coherent — e.g. snow above ~1 °C becomes rain; rain below freezing becomes
+snow.
 
 ### Options
 
@@ -287,7 +303,9 @@ console.log(moment.caption); // "Kraków · 21:14 · golden hour"
 ```
 
 Cinematic demo links work the same way — open
-`?mode=golden` or `?mode=custom&t=21.5&wx=snow` on the live demo.
+`?mode=golden` or `?mode=custom&t=21.5&wx=snow&int=1&wind=40` on the live
+demo. The Tweaks panel includes Climate sliders (intensity, temp, wind)
+that layer via `setWeatherOverride`.
 
 Reacting to conditions elsewhere in your UI:
 

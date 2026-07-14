@@ -3,12 +3,15 @@ import { SUN_RISE, SUN_SET } from "./solar.js";
 
 export function cloudAlphaFor(wx: WeatherConditions): number {
 	let a = 0;
-	if (wx.cloudiness === 1) a = 0.35;
-	else if (wx.cloudiness === 2) a = 0.65;
-	if (wx.thunder) a = Math.max(a, 0.85);
-	if (wx.precipitation === "rain") a = Math.max(a, 0.55);
-	if (wx.precipitation === "snow") a = Math.max(a, 0.5);
-	return Math.min(1, a + wx.intensity * 0.1);
+	if (wx.cloudiness === 1) a = 0.28;
+	else if (wx.cloudiness === 2) a = 0.48;
+	if (wx.thunder) a = Math.max(a, 0.6);
+	if (wx.precipitation === "rain") a = Math.max(a, 0.38);
+	if (wx.precipitation === "snow") a = Math.max(a, 0.35);
+	const i = Math.max(0, Math.min(1, wx.intensity));
+	// Intensity opens the dial: drizzle is a veil, 100% is a sealed deck.
+	a += i * 0.22 + i * i * 0.45;
+	return Math.min(1, a);
 }
 
 export function starAlpha(h: number): number {
