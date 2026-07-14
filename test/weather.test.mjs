@@ -31,4 +31,40 @@ describe("deriveConditions", () => {
 		assert.equal(wx.thunder, true);
 		assert.equal(wx.precipitation, "rain");
 	});
+
+	it("carries the detailed current fields through", () => {
+		const wx = deriveConditions({
+			temperature_2m: 21,
+			weather_code: 2,
+			is_day: 1,
+			wind_speed_10m: 14,
+			wind_direction_10m: 225,
+			wind_gusts_10m: 32,
+			relative_humidity_2m: 68,
+			cloud_cover: 55,
+			pressure_msl: 1013.2,
+		});
+		assert.equal(wx.weatherCode, 2);
+		assert.equal(wx.humidity, 68);
+		assert.equal(wx.cloudCover, 55);
+		assert.equal(wx.pressureMsl, 1013.2);
+		assert.equal(wx.windDirection, 225);
+		assert.equal(wx.windGusts, 32);
+	});
+
+	it("promotes cloudiness when real cloud cover disagrees with the code", () => {
+		const clearButGray = deriveConditions({
+			temperature_2m: 15,
+			weather_code: 0,
+			cloud_cover: 92,
+		});
+		assert.equal(clearButGray.cloudiness, 2);
+		const overcastCode = deriveConditions({
+			temperature_2m: 15,
+			weather_code: 3,
+			cloud_cover: 10,
+		});
+		// Never demoted below what the code promises.
+		assert.equal(overcastCode.cloudiness, 2);
+	});
 });

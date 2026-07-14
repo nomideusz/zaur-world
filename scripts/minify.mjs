@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
 
-const dist = new URL("../dist/", import.meta.url).pathname;
+const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 for (const name of readdirSync(dist)) {
   if (!name.endsWith(".js")) continue;
   const path = join(dist, name);

@@ -1,5 +1,6 @@
 import {
 	createWorld,
+	describeWeather,
 	formatAtmosphereCaption,
 	type AtmosphereSnapshot,
 	type Quality,
@@ -270,7 +271,9 @@ function applyTime(): void {
 }
 
 // 24-hour cinematic tour: full circle starting from the current sky time,
-// so both start and end are seamless — no clock jump.
+// so both start and end are seamless — no clock jump. In live weather mode
+// each hour of the sweep pulls that hour's real forecast, so you watch the
+// coming day's weather actually arrive.
 const TOUR_SECONDS = 30;
 let tourRaf = 0;
 let tourHour = 0;
@@ -281,11 +284,24 @@ function updateClock(): void {
 	if (clockEl.textContent !== label) clockEl.textContent = label;
 }
 
+function tourStatus(): string {
+	let s = `Day tour — ${formatHour(tourHour)}`;
+	const wx = sky.conditions();
+	if (wx && wx.weatherCode != null) {
+		s += ` · ${describeWeather(wx.weatherCode, wx.isDay)}, ${Math.round(wx.temperatureC)}°`;
+		if (wx.precipProbability != null && wx.precipProbability >= 20) {
+			s += ` · ${Math.round(wx.precipProbability)}% precip`;
+		}
+	}
+	return s;
+}
+
 function stopTour(): void {
 	if (tourRaf === 0) return;
 	cancelAnimationFrame(tourRaf);
 	tourRaf = 0;
-	tourBtn.textContent = "▶ Play one day";
+	tourBtn.textContent = "▶ Play 24 hours";
+	sky.setForecastHour(null);
 	applyTime();
 	updateStatus();
 }
@@ -296,6 +312,9 @@ function startTour(): void {
 	tourBtn.textContent = "■ Stop tour";
 	tourHour = from;
 	sky.setTime(() => dateAtHour(tourHour));
+	// Storm/Snow/Fog/Gray presets stay in charge; only live weather follows
+	// the hourly forecast around the clock.
+	const followForecast = selectedWx() === null;
 	const step = (now: number): void => {
 		const t = (now - start) / 1000 / TOUR_SECONDS;
 		if (t >= 1) {
@@ -303,8 +322,9 @@ function startTour(): void {
 			return;
 		}
 		tourHour = (from + t * 24) % 24;
+		if (followForecast) sky.setForecastHour(tourHour);
 		updateClock();
-		statusEl.textContent = `Day tour — ${formatHour(tourHour)}`;
+		statusEl.textContent = tourStatus();
 		tourRaf = requestAnimationFrame(step);
 	};
 	tourRaf = requestAnimationFrame(step);

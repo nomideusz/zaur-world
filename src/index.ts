@@ -9,6 +9,7 @@
 import { World } from "./world.js";
 import {
   WeatherClient,
+  type ForecastHour,
   type WeatherConditions,
   type GeoLocation,
   type WeatherCardOptions,
@@ -48,7 +49,15 @@ export {
   type GeoLocation,
   type WeatherCardOptions,
   type WeatherCardPosition,
+  type ForecastHour,
+  type OpenMeteoCurrent,
+  type OpenMeteoDaily,
+  type OpenMeteoHourly,
+  buildHourlyForecast,
+  compassDir,
   deriveConditions,
+  describeWeather,
+  forecastConditionsAt,
   isoToHour,
 } from "./weather.js";
 export { fetchTerrain, type TerrainProfile } from "./terrain.js";
@@ -177,6 +186,17 @@ export interface WorldHandle {
   setGrid(enabled: boolean): void;
   /** Override the wall clock, or pass undefined to use real time again. */
   setTime(fn?: () => Date): void;
+  /**
+   * Drive the sky from the hourly forecast at a local decimal hour
+   * (0..24) instead of current conditions — pairs with `setTime` so a
+   * time sweep shows the weather each hour will actually bring. The next
+   * occurrence of the hour is used, so sweeping ahead rolls into
+   * tomorrow. Pass `null` to return to current conditions. No-op until
+   * the forecast has loaded, and with a custom `weather` source.
+   */
+  setForecastHour(hour: number | null): void;
+  /** Hourly forecast for the next ~48 h (empty until loaded / custom source). */
+  forecast(): ForecastHour[];
   /** Switch performance preset without remounting. */
   setQuality(quality: Quality): void;
   /**
@@ -242,9 +262,13 @@ export function createWorld(
 
   let weatherPreview: WeatherPreview | null = null;
   let weatherOverride: WeatherOverride | null = null;
+  let forecastHour: number | null = null;
   const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
   const conditions = (): WeatherConditions | null => {
     let wx = liveConditions();
+    if (forecastHour !== null && client) {
+      wx = client.conditionsAtHour(forecastHour) ?? wx;
+    }
     if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
     if (weatherOverride) wx = applyWeatherOverride(wx, weatherOverride);
     else if (wx) wx = normalizeWeather(wx);
@@ -480,6 +504,14 @@ export function createWorld(
       timeOverride = fn;
       world.setTime(fn);
       publishAtmosphere(true);
+    },
+    setForecastHour(hour: number | null): void {
+      // No publishAtmosphere here — tours call this per frame; the regular
+      // 500 ms atmosphere cadence picks the change up.
+      forecastHour = hour;
+    },
+    forecast(): ForecastHour[] {
+      return client?.forecast() ?? [];
     },
     setQuality(quality: Quality): void {
       qualityMode = quality;

@@ -3,8 +3,13 @@
 // that fades in and back out on its own, and the World reads `conditions()`
 // each frame to tint the sky with clouds and precipitation.
 
-import { deriveConditions } from "./weather-logic.js";
-import type { OpenMeteoCurrent, OpenMeteoDaily } from "./weather-logic.js";
+import { buildHourlyForecast, deriveConditions, forecastConditionsAt } from "./weather-logic.js";
+import type {
+  ForecastHour,
+  OpenMeteoCurrent,
+  OpenMeteoDaily,
+  OpenMeteoHourly,
+} from "./weather-logic.js";
 
 export type Cloudiness = 0 | 1 | 2; // none / scattered / overcast
 export type Precipitation = "none" | "rain" | "snow";
@@ -27,6 +32,20 @@ export interface WeatherConditions {
   /** Approximate visitor latitude in degrees — drives hemisphere-aware
    *  seasons. Optional so hand-rolled weather sources stay valid. */
   latitude?: number | null;
+  /** WMO weather code from the provider — feed to `describeWeather`. */
+  weatherCode?: number | null;
+  /** Relative humidity, %. */
+  humidity?: number | null;
+  /** Total cloud cover, % — smooths the three-bucket cloudiness. */
+  cloudCover?: number | null;
+  /** Mean sea-level pressure, hPa. */
+  pressureMsl?: number | null;
+  /** Direction the wind blows *from*, degrees (0 = north). */
+  windDirection?: number | null;
+  /** Wind gusts, km/h. */
+  windGusts?: number | null;
+  /** Chance of precipitation, % (forecast hours only). */
+  precipProbability?: number | null;
 }
 
 export interface GeoLocation {
@@ -76,6 +95,9 @@ export interface WeatherClientOptions {
 
 export class WeatherClient {
   private state: WeatherConditions | null = null;
+  private hourly: ForecastHour[] = [];
+  private todayHighC: number | null = null;
+  private todayLowC: number | null = null;
   private cachedGeo: Geo | null = null;
   private readonly card: WeatherCard | null;
   private readonly timers: number[] = [];
@@ -126,6 +148,27 @@ export class WeatherClient {
     return this.state;
   }
 
+  /** Hourly forecast for the next ~48 h (empty until the first fetch). */
+  forecast(): ForecastHour[] {
+    return this.hourly;
+  }
+
+  /**
+   * Forecast conditions at a local decimal hour (0..24) — the next
+   * occurrence of that hour, so sweeping 24 h ahead rolls into tomorrow.
+   * Null until the forecast has loaded.
+   */
+  conditionsAtHour(hour: number): WeatherConditions | null {
+    return forecastConditionsAt(this.hourly, hour, localIso(new Date()), this.state);
+  }
+
+  /** Today's forecast high/low °C, or null until known. */
+  todayRange(): { highC: number; lowC: number } | null {
+    return this.todayHighC !== null && this.todayLowC !== null
+      ? { highC: this.todayHighC, lowC: this.todayLowC }
+      : null;
+  }
+
   /** Resolved approximate location (null until the first geo lookup). */
   location(): { lat: number; lon: number } | null {
     return this.cachedGeo ? { lat: this.cachedGeo.lat, lon: this.cachedGeo.lon } : null;
@@ -159,26 +202,37 @@ export class WeatherClient {
       url.searchParams.set("longitude", String(geo.lon));
       url.searchParams.set(
         "current",
-        "temperature_2m,apparent_temperature,weather_code,is_day,precipitation,wind_speed_10m"
+        "temperature_2m,apparent_temperature,weather_code,is_day,precipitation," +
+          "wind_speed_10m,wind_direction_10m,wind_gusts_10m," +
+          "relative_humidity_2m,cloud_cover,pressure_msl"
       );
-      url.searchParams.set("daily", "sunrise,sunset");
-      url.searchParams.set("forecast_days", "1");
+      url.searchParams.set("daily", "sunrise,sunset,temperature_2m_max,temperature_2m_min");
+      url.searchParams.set(
+        "hourly",
+        "temperature_2m,weather_code,precipitation,precipitation_probability," +
+          "cloud_cover,wind_speed_10m,relative_humidity_2m,is_day"
+      );
+      url.searchParams.set("forecast_days", "2");
       url.searchParams.set("timezone", "auto");
       const res = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
       if (!res.ok) return;
       const data = (await res.json()) as {
         current?: OpenMeteoCurrent;
         daily?: OpenMeteoDaily;
+        hourly?: OpenMeteoHourly;
       };
       const c = data.current;
       if (!c) return;
 
+      this.hourly = buildHourlyForecast(data.hourly);
+      this.todayHighC = data.daily?.temperature_2m_max?.[0] ?? null;
+      this.todayLowC = data.daily?.temperature_2m_min?.[0] ?? null;
       const next = { ...deriveConditions(c, data.daily), latitude: geo.lat };
       const changed = !this.state || !conditionsEqual(this.state, next);
       this.state = next;
       if (changed) this.onChange?.(next);
       if (this.card) {
-        this.card.update(formatLine(geo.city, c), this.state);
+        this.card.update(formatLine(geo.city, c), formatDetails(c, this.todayRange()), this.state);
         window.setTimeout(() => this.card?.show(CARD_DURATION_MS), FIRST_SHOW_DELAY_MS);
       }
     } catch {
@@ -289,8 +343,22 @@ function conditionsEqual(a: WeatherConditions, b: WeatherConditions): boolean {
     a.temperatureC === b.temperatureC &&
     a.sunriseH === b.sunriseH &&
     a.sunsetH === b.sunsetH &&
-    a.latitude === b.latitude
+    a.latitude === b.latitude &&
+    a.weatherCode === b.weatherCode &&
+    a.humidity === b.humidity &&
+    a.cloudCover === b.cloudCover &&
+    a.pressureMsl === b.pressureMsl &&
+    a.windDirection === b.windDirection &&
+    a.windGusts === b.windGusts
   );
+}
+
+/** Local wall-clock "YYYY-MM-DDTHH:MM" — comparable to Open-Meteo strings. */
+function localIso(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -313,7 +381,37 @@ function formatLine(city: string, c: OpenMeteoCurrent): string {
   return line;
 }
 
-function describeWeather(code: number, isDay: boolean): string {
+/** Compass point (8-wind) for a meteorological wind direction in degrees. */
+export function compassDir(deg: number): string {
+  const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return points[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+/** Second card line: wind, humidity, pressure, and today's high/low. */
+function formatDetails(
+  c: OpenMeteoCurrent,
+  range: { highC: number; lowC: number } | null
+): string {
+  const parts: string[] = [];
+  if (c.wind_speed_10m !== undefined) {
+    let wind = `wind ${Math.round(c.wind_speed_10m)} km/h`;
+    if (c.wind_direction_10m !== undefined) wind += ` ${compassDir(c.wind_direction_10m)}`;
+    const gusts = c.wind_gusts_10m;
+    if (gusts !== undefined && gusts >= 20 && gusts >= c.wind_speed_10m * 1.5) {
+      wind += `, gusts ${Math.round(gusts)}`;
+    }
+    parts.push(wind);
+  }
+  if (c.relative_humidity_2m !== undefined) {
+    parts.push(`humidity ${Math.round(c.relative_humidity_2m)}%`);
+  }
+  if (c.pressure_msl !== undefined) parts.push(`${Math.round(c.pressure_msl)} hPa`);
+  if (range) parts.push(`↑${Math.round(range.highC)}° ↓${Math.round(range.lowC)}°`);
+  return parts.join(" · ");
+}
+
+/** Human-readable phrase for a WMO weather code. */
+export function describeWeather(code: number, isDay: boolean): string {
   switch (code) {
     case 0:
       return isDay ? "clear skies" : "clear night";
@@ -377,15 +475,23 @@ class WeatherCard {
     this.el.setAttribute("aria-live", "polite");
     this.el.innerHTML = `
       <span class="wx-card__icon" aria-hidden="true">☁</span>
-      <span class="wx-card__line"></span>
+      <span class="wx-card__body">
+        <span class="wx-card__line"></span>
+        <span class="wx-card__details" hidden></span>
+      </span>
     `;
     opts.parent.appendChild(this.el);
   }
 
-  update(line: string, conditions: WeatherConditions): void {
+  update(line: string, details: string, conditions: WeatherConditions): void {
     const lineEl = this.el.querySelector<HTMLSpanElement>(".wx-card__line");
+    const detailsEl = this.el.querySelector<HTMLSpanElement>(".wx-card__details");
     const iconEl = this.el.querySelector<HTMLSpanElement>(".wx-card__icon");
     if (lineEl) lineEl.textContent = line;
+    if (detailsEl) {
+      detailsEl.textContent = details;
+      detailsEl.hidden = details.length === 0;
+    }
     if (iconEl) iconEl.textContent = iconFor(conditions);
   }
 
@@ -476,6 +582,17 @@ function injectStylesOnce(): void {
       line-height: 1;
       opacity: 0.85;
     }
+    .wx-card__body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .wx-card__details {
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      opacity: 0.72;
+    }
     @media (prefers-reduced-motion: reduce) {
       .wx-card { transition: opacity 200ms ease; transform: none; }
     }
@@ -483,4 +600,13 @@ function injectStylesOnce(): void {
   document.head.appendChild(style);
 }
 
-export { deriveConditions, isoToHour } from "./weather-logic.js";
+export {
+  buildHourlyForecast,
+  deriveConditions,
+  forecastConditionsAt,
+  isoToHour,
+  type ForecastHour,
+  type OpenMeteoCurrent,
+  type OpenMeteoDaily,
+  type OpenMeteoHourly,
+} from "./weather-logic.js";

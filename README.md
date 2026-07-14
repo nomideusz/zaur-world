@@ -196,6 +196,24 @@ sky.setWeatherOverride(null); // clear field overrides
 coherent — e.g. snow above ~1 °C becomes rain; rain below freezing becomes
 snow.
 
+### Forecast
+
+The weather fetch also brings back ~48 hours of hourly forecast. Pair
+`setForecastHour` with `setTime` to show the weather an hour will *actually*
+bring — the demo's "Play 24 hours" tour is exactly this:
+
+```ts
+sky.setTime(() => hourAsDate(18));  // jump the clock to 18:00…
+sky.setForecastHour(18);            // …and the sky rains if 18:00 will rain
+sky.setForecastHour(null);          // back to current conditions
+sky.forecast();                     // raw ForecastHour[] for your own UI
+```
+
+Hours earlier than now roll into tomorrow, so sweeping a full day from the
+current hour always shows the *coming* 24 hours. Current conditions carry
+detail too: `humidity`, `cloudCover`, `pressureMsl`, `windDirection`,
+`windGusts`, and `weatherCode` (feed it to `describeWeather()`).
+
 ### Options
 
 ```ts

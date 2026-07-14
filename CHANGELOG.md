@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-14
+
+### Added
+
+- Hourly forecast: the weather fetch now pulls ~48 h of Open-Meteo hourly data — `WeatherClient.forecast()` / `conditionsAtHour(hour)`, pure `buildHourlyForecast()` / `forecastConditionsAt()`, and `ForecastHour` type
+- `setForecastHour(hour | null)` on the world handle — drive the sky from the forecast at a given hour; pairs with `setTime` so a time sweep shows the weather each hour will actually bring (wraps into tomorrow)
+- Richer current conditions on `WeatherConditions`: `weatherCode`, `humidity`, `cloudCover`, `pressureMsl`, `windDirection`, `windGusts`, `precipProbability`
+- Weather card gained a detail line — wind speed + compass direction (gusts when notable), humidity, pressure, and today's forecast high/low
+- `describeWeather(code, isDay)` and `compassDir(deg)` exported for host pages
+- Demo: "Play 24 hours" tour follows the real hourly forecast (live weather mode) and narrates each hour — description, temperature, precip chance
+
+### Changed
+
+- Real cloud-cover % refines the sky: it can promote the code-derived cloudiness bucket and smooths cloud opacity into a continuum
+- Demo tour button renamed "Play one day" → "Play 24 hours"
+
+### Fixed
+
+- `scripts/minify.mjs` resolved the dist path incorrectly on Windows (`C:\C:\…`)
+
 ## [0.8.0] - 2026-07-14
 
 ### Added
