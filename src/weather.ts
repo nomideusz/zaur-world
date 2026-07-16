@@ -98,6 +98,9 @@ export class WeatherClient {
   private hourly: ForecastHour[] = [];
   private todayHighC: number | null = null;
   private todayLowC: number | null = null;
+  private currentLine: string | null = null;
+  private currentDetails = "";
+  private previewKey: string | null = null;
   private cachedGeo: Geo | null = null;
   private readonly card: WeatherCard | null;
   private readonly timers: number[] = [];
@@ -194,6 +197,35 @@ export class WeatherClient {
     this.card?.setVisible(visible);
   }
 
+  /**
+   * Point the card at a forecast hour — it shows that hour's conditions
+   * and stays visible until the preview ends. Called per frame by time
+   * sweeps, so DOM writes only happen when the text actually changes.
+   * Pass `null` to restore current conditions and normal card behavior.
+   */
+  previewHour(hour: number | null): void {
+    if (!this.card) return;
+    if (hour === null) {
+      if (this.previewKey === null) return;
+      this.previewKey = null;
+      if (this.state && this.currentLine !== null) {
+        this.card.update(this.currentLine, this.currentDetails, this.state);
+      }
+      this.card.endPreview();
+      return;
+    }
+    const wx = this.conditionsAtHour(hour);
+    if (!wx) return;
+    const line = formatForecastLine(hour, wx);
+    const details = formatForecastDetails(wx);
+    const key = `${line}|${details}`;
+    if (key !== this.previewKey) {
+      this.previewKey = key;
+      this.card.update(line, details, wx);
+    }
+    this.card.beginPreview();
+  }
+
   private async fetchWeather(): Promise<void> {
     try {
       const geo = await this.geo();
@@ -231,8 +263,10 @@ export class WeatherClient {
       const changed = !this.state || !conditionsEqual(this.state, next);
       this.state = next;
       if (changed) this.onChange?.(next);
-      if (this.card) {
-        this.card.update(formatLine(geo.city, c), formatDetails(c, this.todayRange()), this.state);
+      this.currentLine = formatLine(geo.city, c);
+      this.currentDetails = formatDetails(c, this.todayRange());
+      if (this.card && this.previewKey === null) {
+        this.card.update(this.currentLine, this.currentDetails, this.state);
         window.setTimeout(() => this.card?.show(CARD_DURATION_MS), FIRST_SHOW_DELAY_MS);
       }
     } catch {
@@ -410,6 +444,24 @@ function formatDetails(
   return parts.join(" · ");
 }
 
+/** Card line for a forecast hour, e.g. "18:00 — raining, 24°C". */
+export function formatForecastLine(hour: number, wx: WeatherConditions): string {
+  const h = ((Math.floor(hour) % 24) + 24) % 24;
+  const desc = wx.weatherCode != null ? describeWeather(wx.weatherCode, wx.isDay) : "forecast";
+  return `${h}:00 — ${desc}, ${Math.round(wx.temperatureC)}°C`;
+}
+
+/** Card detail line for a forecast hour: precip chance, wind, humidity. */
+export function formatForecastDetails(wx: WeatherConditions): string {
+  const parts: string[] = [];
+  if (wx.precipProbability != null && wx.precipProbability >= 5) {
+    parts.push(`${Math.round(wx.precipProbability)}% precip`);
+  }
+  parts.push(`wind ${Math.round(wx.windSpeed)} km/h`);
+  if (wx.humidity != null) parts.push(`humidity ${Math.round(wx.humidity)}%`);
+  return parts.join(" · ");
+}
+
 /** Human-readable phrase for a WMO weather code. */
 export function describeWeather(code: number, isDay: boolean): string {
   switch (code) {
@@ -465,6 +517,8 @@ class WeatherCard {
   private hideTimer: number | null = null;
   /** `pinned` = always visible; `ambient` = peek then fade; `hidden` = off. */
   private mode: "ambient" | "pinned" | "hidden" = "ambient";
+  /** Forecast preview holds the card on screen regardless of fade timers. */
+  private previewing = false;
 
   constructor(opts: WeatherCardOptions) {
     injectStylesOnce();
@@ -492,7 +546,7 @@ class WeatherCard {
       detailsEl.textContent = details;
       detailsEl.hidden = details.length === 0;
     }
-    if (iconEl) iconEl.textContent = iconFor(conditions);
+    if (iconEl) iconEl.textContent = weatherIcon(conditions);
   }
 
   remove(): void {
@@ -500,8 +554,26 @@ class WeatherCard {
     this.el.remove();
   }
 
+  beginPreview(): void {
+    if (this.previewing || this.mode === "hidden") return;
+    this.previewing = true;
+    if (this.hideTimer !== null) {
+      window.clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    this.el.hidden = false;
+    this.el.classList.add("wx-card--visible");
+  }
+
+  endPreview(): void {
+    if (!this.previewing) return;
+    this.previewing = false;
+    // Pinned cards stay; ambient cards linger a beat, then fade as usual.
+    if (this.mode === "ambient") this.show(4_000);
+  }
+
   show(durationMs: number): void {
-    if (this.mode === "hidden") return;
+    if (this.mode === "hidden" || this.previewing) return;
     this.el.hidden = false;
     this.el.classList.add("wx-card--visible");
     if (this.mode === "pinned") {
@@ -532,7 +604,8 @@ class WeatherCard {
   }
 }
 
-function iconFor(c: WeatherConditions): string {
+/** Single-glyph icon for conditions — the same one the card shows. */
+export function weatherIcon(c: WeatherConditions): string {
   if (c.thunder) return "⚡";
   if (c.precipitation === "snow") return "❄";
   if (c.precipitation === "rain") return "☂";

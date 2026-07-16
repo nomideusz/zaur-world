@@ -58,7 +58,10 @@ export {
   deriveConditions,
   describeWeather,
   forecastConditionsAt,
+  formatForecastDetails,
+  formatForecastLine,
   isoToHour,
+  weatherIcon,
 } from "./weather.js";
 export { fetchTerrain, type TerrainProfile } from "./terrain.js";
 export { SatelliteWatcher, type SatellitePass } from "./satellites.js";
@@ -191,7 +194,9 @@ export interface WorldHandle {
    * (0..24) instead of current conditions — pairs with `setTime` so a
    * time sweep shows the weather each hour will actually bring. The next
    * occurrence of the hour is used, so sweeping ahead rolls into
-   * tomorrow. Pass `null` to return to current conditions. No-op until
+   * tomorrow. The built-in weather card follows the sweep — it shows the
+   * previewed hour's conditions and stays visible until the hour is
+   * cleared. Pass `null` to return to current conditions. No-op until
    * the forecast has loaded, and with a custom `weather` source.
    */
   setForecastHour(hour: number | null): void;
@@ -509,6 +514,7 @@ export function createWorld(
       // No publishAtmosphere here — tours call this per frame; the regular
       // 500 ms atmosphere cadence picks the change up.
       forecastHour = hour;
+      client?.previewHour(hour);
     },
     forecast(): ForecastHour[] {
       return client?.forecast() ?? [];

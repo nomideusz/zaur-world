@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-16
+
+### Added
+
+- The built-in weather card follows `setForecastHour` — while a forecast hour is active it shows that hour's conditions ("18:00 — raining, 24°C" plus precip chance, wind, humidity) and stays visible until the hour is cleared, then returns to current conditions and normal fade behavior
+- `WeatherClient.previewHour(hour | null)` — point the card at a forecast hour directly (per-frame safe; DOM only updates when the text changes)
+- `formatForecastLine(hour, wx)`, `formatForecastDetails(wx)`, and `weatherIcon(wx)` exported for host pages building their own forecast readouts
+- Demo: the 24-hour tour shows the forecast beside the header clock — icon, description, temperature, and precip chance update as the sweep moves through the day
+
+### Changed
+
+- README screenshots refreshed to the current demo (golden hour, night), plus a new 24-hour-tour shot showing the forecast beside the clock
+
 ## [0.9.0] - 2026-07-14
 
 ### Added
@@ -192,7 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase-accurate moon, golden-hour lit clouds, seasons, fireflies, shooting stars, wet ground
 - Zero runtime dependencies; framework-agnostic API
 
-[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/nomideusz/zaur-world/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/nomideusz/zaur-world/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/nomideusz/zaur-world/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/nomideusz/zaur-world/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/nomideusz/zaur-world/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nomideusz/zaur-world/compare/v0.6.0...v0.7.0

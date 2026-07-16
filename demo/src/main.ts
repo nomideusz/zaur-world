@@ -2,6 +2,7 @@ import {
 	createWorld,
 	describeWeather,
 	formatAtmosphereCaption,
+	weatherIcon,
 	type AtmosphereSnapshot,
 	type Quality,
 	type TerrainProfile,
@@ -42,6 +43,7 @@ const qualityRadios = document.querySelectorAll(
 ) as NodeListOf<HTMLInputElement>;
 const statusEl = document.getElementById("extras-status") as HTMLParagraphElement;
 const clockEl = document.getElementById("sky-clock") as HTMLParagraphElement;
+const wxEl = document.getElementById("sky-wx") as HTMLParagraphElement;
 const placeEl = document.getElementById("sky-place") as HTMLParagraphElement;
 const intensitySlider = document.getElementById("opt-intensity") as HTMLInputElement;
 const intensityVal = document.getElementById("intensity-val") as HTMLOutputElement;
@@ -284,6 +286,23 @@ function updateClock(): void {
 	if (clockEl.textContent !== label) clockEl.textContent = label;
 }
 
+/** Header weather line during the tour — forecast visible beside the clock. */
+function updateTourWx(): void {
+	const wx = sky.conditions();
+	if (!wx || wx.weatherCode == null) {
+		wxEl.hidden = true;
+		return;
+	}
+	let s = `${weatherIcon(wx)} ${describeWeather(wx.weatherCode, wx.isDay)} · ${Math.round(
+		wx.temperatureC
+	)}°`;
+	if (wx.precipProbability != null && wx.precipProbability >= 20) {
+		s += ` · ${Math.round(wx.precipProbability)}%`;
+	}
+	wxEl.hidden = false;
+	if (wxEl.textContent !== s) wxEl.textContent = s;
+}
+
 function tourStatus(): string {
 	let s = `Day tour — ${formatHour(tourHour)}`;
 	const wx = sky.conditions();
@@ -301,6 +320,7 @@ function stopTour(): void {
 	cancelAnimationFrame(tourRaf);
 	tourRaf = 0;
 	tourBtn.textContent = "▶ Play 24 hours";
+	wxEl.hidden = true;
 	sky.setForecastHour(null);
 	applyTime();
 	updateStatus();
@@ -324,6 +344,7 @@ function startTour(): void {
 		tourHour = (from + t * 24) % 24;
 		if (followForecast) sky.setForecastHour(tourHour);
 		updateClock();
+		updateTourWx();
 		statusEl.textContent = tourStatus();
 		tourRaf = requestAnimationFrame(step);
 	};

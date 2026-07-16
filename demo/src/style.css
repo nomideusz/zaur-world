@@ -178,6 +178,16 @@ body {
 	transition: color 1s var(--ease), text-shadow 1s var(--ease);
 }
 
+.wx {
+	margin: 0.22rem 0 0;
+	font-size: 0.72rem;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.03em;
+	color: var(--ink-muted);
+	transition: color 1s var(--ease);
+}
+
 @keyframes brand-wind {
 	0%,
 	100% {
@@ -265,7 +275,9 @@ html[data-zw-mood="night"] .brand-dot {
 }
 
 html[data-zw-mood="night"] .place,
-html[data-zw-day="0"] .place {
+html[data-zw-day="0"] .place,
+html[data-zw-mood="night"] .wx,
+html[data-zw-day="0"] .wx {
 	color: rgba(180, 200, 235, 0.72);
 }
 

@@ -7,8 +7,9 @@ A living ambient sky for any web page, on a single `<canvas>`.
 Born as the backdrop of [dino.zaur.app](https://dino.zaur.app), where a small dinosaur
 named Zaur walks on the day's news under it.
 
-**[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play one day** for a
-30-second tour through dawn, golden hour, dusk, and the night sky.
+**[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play 24 hours** for a
+30-second tour through dawn, golden hour, dusk, and the night sky, with the
+hourly forecast riding along beside the clock.
 
 | Golden hour | Night |
 | --- | --- |
@@ -210,9 +211,17 @@ sky.forecast();                     // raw ForecastHour[] for your own UI
 ```
 
 Hours earlier than now roll into tomorrow, so sweeping a full day from the
-current hour always shows the *coming* 24 hours. Current conditions carry
-detail too: `humidity`, `cloudCover`, `pressureMsl`, `windDirection`,
-`windGusts`, and `weatherCode` (feed it to `describeWeather()`).
+current hour always shows the *coming* 24 hours. While a forecast hour is
+active the built-in weather card follows along — "18:00 — raining, 24°C"
+with precip chance, wind, and humidity — and stays on screen until you pass
+`null`. Building your own readout instead? `formatForecastLine(hour, wx)`,
+`formatForecastDetails(wx)`, and `weatherIcon(wx)` are exported.
+
+![24-hour tour at golden hour — the forecast rides beside the clock while the weather card tracks the swept hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/tour.png)
+
+Current conditions carry detail too: `humidity`, `cloudCover`,
+`pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to
+`describeWeather()`).
 
 ### Options
 
