@@ -1157,6 +1157,15 @@ body:has(.daystrip:not([hidden])) .chrome {
 	background: #dce8ff;
 }
 
+/* Comfortable touch targets for the day strip on any coarse pointer. */
+@media (pointer: coarse) {
+	.ds-cell {
+		flex-basis: 2.5rem;
+		min-width: 2.5rem;
+		min-height: 3.4rem;
+	}
+}
+
 @media (max-width: 480px) {
 	.brand {
 		max-width: min(18rem, 88vw);
@@ -1168,6 +1177,19 @@ body:has(.daystrip:not([hidden])) .chrome {
 		padding-bottom: 2.75rem;
 	}
 
+	/* With the dock visible the card rides above it — clear its full height
+	   so the Install / links rows stay readable and tappable. */
+	body:has(.daystrip:not([hidden])) .chrome {
+		padding-bottom: 5.9rem;
+	}
+
+	/* Keep the open panel inside the viewport: budget for the action
+	   buttons, trigger, install/links rows, dock lift, and card padding. */
+	.tweaks-panel {
+		max-height: max(13rem, calc(100vh - 23rem));
+		max-height: max(13rem, calc(100dvh - 23rem));
+	}
+
 	/* Dock owns the bottom edge — raise the parked weather card above it. */
 	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-right"],
 	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-left"],
@@ -1177,8 +1199,9 @@ body:has(.daystrip:not([hidden])) .chrome {
 	}
 
 	.ds-cell {
-		flex: 0 0 2.3rem;
-		min-height: 3.3rem;
+		flex: 0 0 2.6rem;
+		min-width: 2.6rem;
+		min-height: 3.4rem;
 	}
 
 	.chrome-actions {

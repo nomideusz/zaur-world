@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Demo: `sky.location()` was called but never existed on `WorldHandle`, so `updateStatus` threw on load — the status line, live clock refresh, and shareable `?lat=&lon=` apply were dead in v0.11.0
+- Demo mobile: the weather card no longer covers the Install/links rows (chrome clears its full height while the day strip is visible); an open Tweaks panel now stays inside the viewport on small phones instead of pushing the header off-screen; day-strip cells grew to ≥42 px touch targets on coarse pointers
 
 ## [0.11.0] - 2026-07-19
 
