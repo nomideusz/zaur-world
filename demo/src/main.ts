@@ -407,8 +407,9 @@ function stripSlots(): ForecastHour[] {
 	return forecast.slice(start, start + 24);
 }
 
-let stripStartISO = "";
-let stripCellCount = 0;
+/** Memo of what the strip currently shows: window start + slot count +
+ *  location, so a pin to a same-timezone city still re-renders. */
+let stripMemo = "";
 
 /** Temperature curve + sunrise/sunset marks overlaid on the cell track. */
 function buildStripOverlays(track: HTMLDivElement, slots: ForecastHour[]): void {
@@ -459,18 +460,18 @@ function renderStrip(): void {
 	if (slots.length < 2) {
 		if (!stripEl.hidden) {
 			stripEl.hidden = true;
-			stripStartISO = "";
-			stripCellCount = 0;
+			stripMemo = "";
 			if (scrubHour !== null) clearScrub(true);
 		}
 		return;
 	}
 	stripEl.hidden = false;
-	if (slots[0].timeISO === stripStartISO && stripCellCount === slots.length) {
-		return;
-	}
-	stripStartISO = slots[0].timeISO;
-	stripCellCount = slots.length;
+	const loc = sky.location();
+	const memo = `${slots[0].timeISO}|${slots.length}|${
+		loc ? `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)}` : ""
+	}`;
+	if (memo === stripMemo) return;
+	stripMemo = memo;
 	stripCellsEl.textContent = "";
 	const track = document.createElement("div");
 	track.className = "daystrip-track";
@@ -664,6 +665,43 @@ function syncLocChrome(): void {
 	}
 }
 
+/** Input values matching the currently applied location — lets Apply tell
+ *  "city edited" apart from "coordinates edited". */
+let appliedLat = "";
+let appliedLon = "";
+let appliedCity = "";
+
+function rememberApplied(): void {
+	appliedLat = latInput.value;
+	appliedLon = lonInput.value;
+	appliedCity = cityInput.value.trim();
+}
+
+/** Forward-geocode a place name via Open-Meteo (keyless, same provider). */
+async function geocodeCity(
+	name: string
+): Promise<{ lat: number; lon: number; city: string } | null> {
+	try {
+		const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+		url.searchParams.set("name", name);
+		url.searchParams.set("count", "1");
+		url.searchParams.set("language", "en");
+		url.searchParams.set("format", "json");
+		const res = await fetch(url);
+		if (!res.ok) return null;
+		const data = (await res.json()) as {
+			results?: Array<{ latitude?: number; longitude?: number; name?: string }>;
+		};
+		const hit = data.results?.[0];
+		if (!hit || !Number.isFinite(hit.latitude) || !Number.isFinite(hit.longitude)) {
+			return null;
+		}
+		return { lat: hit.latitude!, lon: hit.longitude!, city: hit.name || name };
+	} catch {
+		return null;
+	}
+}
+
 function readManualGeo(): { lat: number; lon: number; city?: string } | null {
 	const lat = Number(latInput.value);
 	const lon = Number(lonInput.value);
@@ -674,6 +712,28 @@ function readManualGeo(): { lat: number; lon: number; city?: string } | null {
 }
 
 async function applyManualLocation(): Promise<void> {
+	const typedCity = cityInput.value.trim();
+	const coordsEdited =
+		(latInput.value !== "" && latInput.value !== appliedLat) ||
+		(lonInput.value !== "" && lonInput.value !== appliedLon);
+	const cityEdited =
+		typedCity !== "" && typedCity.toLowerCase() !== appliedCity.toLowerCase();
+	// Typing a city without touching the coordinates means "take me there" —
+	// geocode the name; otherwise the stale coords silently win over it.
+	if (cityEdited && !coordsEdited) {
+		locApplyBtn.disabled = true;
+		statusEl.textContent = `Finding ${typedCity}…`;
+		const found = await geocodeCity(typedCity);
+		locApplyBtn.disabled = false;
+		if (found) {
+			latInput.value = found.lat.toFixed(2);
+			lonInput.value = found.lon.toFixed(2);
+			cityInput.value = found.city;
+		} else {
+			statusEl.textContent = `Couldn't find “${typedCity}” — check the name or enter coordinates`;
+			return;
+		}
+	}
 	const geo = readManualGeo();
 	if (!geo) {
 		statusEl.textContent = "Enter valid latitude (−90…90) and longitude (−180…180)";
@@ -687,6 +747,7 @@ async function applyManualLocation(): Promise<void> {
 		if (g) {
 			const city = sky.city();
 			if (city && !cityInput.value.trim()) cityInput.value = city;
+			rememberApplied();
 			statusEl.textContent = city ? `Pinned · ${city}` : `Pinned · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;
 			updatePlace(sky.atmosphere());
 		} else {
@@ -712,6 +773,7 @@ async function clearManualLocation(): Promise<void> {
 	}
 	const city = sky.city();
 	cityInput.value = city && city !== "your area" ? city : "";
+	rememberApplied();
 	updatePlace(sky.atmosphere());
 	syncLocChrome();
 	syncLocateHint();
@@ -721,12 +783,23 @@ async function clearManualLocation(): Promise<void> {
 function fillLocFromSky(): void {
 	const loc = sky.location();
 	if (!loc || manualLocation) return;
-	if (!latInput.value) latInput.value = loc.lat.toFixed(2);
-	if (!lonInput.value) lonInput.value = loc.lon.toFixed(2);
+	let filled = false;
+	if (!latInput.value) {
+		latInput.value = loc.lat.toFixed(2);
+		filled = true;
+	}
+	if (!lonInput.value) {
+		lonInput.value = loc.lon.toFixed(2);
+		filled = true;
+	}
 	if (!cityInput.value) {
 		const city = sky.city();
-		if (city && city !== "your area") cityInput.value = city;
+		if (city && city !== "your area") {
+			cityInput.value = city;
+			filled = true;
+		}
 	}
+	if (filled) rememberApplied();
 	syncLocChrome();
 }
 
@@ -884,6 +957,7 @@ locateBtn.addEventListener("click", async () => {
 			lonInput.value = g.lon.toFixed(2);
 			const city = sky.city();
 			cityInput.value = city && city !== "your area" ? city : "";
+			rememberApplied();
 			statusEl.textContent = city
 				? `Located · ${city}`
 				: `Location updated · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;

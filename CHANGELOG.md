@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Demo: typing a city name into Tweaks → Location now actually takes you there — the name is forward-geocoded (Open-Meteo geocoding, keyless) when the coordinates weren't edited. Previously the city was only a label and the stale auto-filled coordinates silently won, so "Dublin" pinned Kraków's weather under a Dublin name. Editing the coordinates yourself still wins over the name
+- Demo: the day strip re-renders when the pinned location changes within the same timezone (its cache key now includes the coordinates, not just the window start hour)
 - The sun and moon now rise from and set behind the hills: the arc's endpoints sit below the ridge line, so the sunrise/sunset handoff happens out of sight — previously the moon vanished mid-sky at the right edge and the sun popped in already risen at the left (and vice versa at dusk). The noon/midnight apex is unchanged
 - Pinning a location while boot geo-detection was still in flight (e.g. the GPS permission prompt open under `geolocation: "prefer"`) let the boot fetch's late response overwrite the pinned location's weather with detected-location conditions until the next 15-minute refresh — stale fetches are now discarded (per-fetch sequence guard) and a mid-flight manual pin wins over the detection result
 - Demo: `sky.location()` was called but never existed on `WorldHandle`, so `updateStatus` threw on load — the status line, live clock refresh, and shareable `?lat=&lon=` apply were dead in v0.11.0
