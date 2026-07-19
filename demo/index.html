@@ -118,6 +118,10 @@
 							<input type="checkbox" id="opt-fireflies" checked />
 							<span>Fireflies</span>
 						</label>
+						<label class="chip" title="24-hour forecast strip — click an hour to preview it">
+							<input type="checkbox" id="opt-strip" checked />
+							<span>Day strip</span>
+						</label>
 					</div>
 
 					<div class="field" id="field-location">
@@ -377,6 +381,21 @@ sky.destroy(); // on unmount</code></pre>
 				<a href="https://dino.zaur.app">dino.zaur.app</a>
 			</nav>
 		</footer>
+
+		<div class="daystrip" id="daystrip" hidden>
+			<div class="daystrip-head">
+				<span class="daystrip-label">Next 24 h</span>
+				<button class="btn-text daystrip-live" id="btn-strip-live" type="button" hidden>
+					⨯ Back to live
+				</button>
+			</div>
+			<div
+				class="daystrip-cells"
+				id="daystrip-cells"
+				role="listbox"
+				aria-label="Hourly forecast — select an hour to preview it in the sky"
+			></div>
+		</div>
 
 		<script type="module" src="/src/main.ts"></script>
 	</body>

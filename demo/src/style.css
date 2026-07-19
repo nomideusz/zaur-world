@@ -995,6 +995,168 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	text-decoration-color: var(--accent);
 }
 
+/* —— Day strip: 24-hour forecast dock —— */
+.daystrip {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2;
+	pointer-events: auto;
+	padding: 0.3rem clamp(0.5rem, 2vw, 1rem) calc(0.4rem + env(safe-area-inset-bottom, 0px));
+	background: linear-gradient(rgba(8, 10, 16, 0.55), rgba(8, 10, 16, 0.82));
+	border-top: 1px solid var(--panel-edge);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	animation: daystrip-in 0.35s var(--ease);
+}
+
+.daystrip[hidden] {
+	display: none;
+}
+
+@keyframes daystrip-in {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Lift the rest of the chrome above the dock while it is visible. */
+body:has(.daystrip:not([hidden])) .chrome {
+	bottom: calc(clamp(0.85rem, 2.2vw, 1.25rem) + 4.9rem + env(safe-area-inset-bottom, 0px));
+}
+
+.daystrip-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.6rem;
+	padding: 0 0.15rem 0.2rem;
+}
+
+.daystrip-label {
+	font-size: 0.56rem;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-faint);
+}
+
+.daystrip-live {
+	font-size: 0.6rem;
+	color: var(--accent-warm);
+}
+
+.daystrip-cells {
+	display: flex;
+	gap: 1px;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+	touch-action: pan-x;
+}
+
+.daystrip-cells::-webkit-scrollbar {
+	display: none;
+}
+
+.ds-cell {
+	position: relative;
+	flex: 1 0 2.15rem;
+	min-width: 2.15rem;
+	display: grid;
+	justify-items: center;
+	gap: 0.06rem;
+	padding: 0.24rem 0.1rem 0.3rem;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-muted);
+	font-family: var(--font-sans);
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.ds-cell:hover {
+	background: rgba(230, 234, 240, 0.07);
+}
+
+.ds-cell:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.ds-cell.is-active {
+	background: var(--chip-on);
+	box-shadow: inset 0 0 0 1px var(--chip-on-edge);
+	color: var(--ink);
+}
+
+.ds-cell.is-now .ds-time::after {
+	content: "";
+	display: inline-block;
+	width: 0.24rem;
+	height: 0.24rem;
+	margin-left: 0.18rem;
+	border-radius: 50%;
+	background: var(--accent-warm);
+	vertical-align: 0.05rem;
+}
+
+.ds-time {
+	font-size: 0.52rem;
+	font-weight: 500;
+	letter-spacing: 0.03em;
+	color: var(--ink-faint);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.ds-cell.is-active .ds-time {
+	color: var(--ink);
+}
+
+.ds-icon {
+	font-size: 0.82rem;
+	line-height: 1.1;
+}
+
+.ds-temp {
+	font-size: 0.6rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Precipitation-probability meter along the cell foot. */
+.ds-pop {
+	position: absolute;
+	left: 15%;
+	right: 15%;
+	bottom: 0.08rem;
+	height: 2px;
+	border-radius: 999px;
+	background: rgba(142, 197, 255, 0.16);
+	overflow: hidden;
+}
+
+.ds-pop::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	width: calc(var(--pop, 0) * 100%);
+	border-radius: inherit;
+	background: var(--accent);
+}
+
+.ds-cell[data-snow="1"] .ds-pop::after {
+	background: #dce8ff;
+}
+
 @media (max-width: 480px) {
 	.brand {
 		max-width: min(18rem, 88vw);
@@ -1004,6 +1166,19 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 		max-width: min(20rem, 94vw);
 		/* Leave room for the weather card parked bottom-right on phones. */
 		padding-bottom: 2.75rem;
+	}
+
+	/* Dock owns the bottom edge — raise the parked weather card above it. */
+	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-right"],
+	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-left"],
+	body:has(.daystrip:not([hidden])) .wx-card[data-position="bottom-right"],
+	body:has(.daystrip:not([hidden])) .wx-card[data-position="bottom-left"] {
+		bottom: calc(14px + 5.1rem + env(safe-area-inset-bottom, 0px));
+	}
+
+	.ds-cell {
+		flex: 0 0 2.3rem;
+		min-height: 3.3rem;
 	}
 
 	.chrome-actions {
@@ -1043,9 +1218,15 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	.segmented label,
 	.brand-word,
 	.brand-dot,
+	.daystrip,
 	html[data-zw-moments~="meteor-shower"] .brand-world {
 		animation: none;
 		transition: none;
+	}
+
+	.daystrip {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 	}
 
 	.brand-word {

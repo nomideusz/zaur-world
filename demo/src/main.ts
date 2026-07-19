@@ -2,8 +2,10 @@ import {
 	createWorld,
 	describeWeather,
 	formatAtmosphereCaption,
+	isoInUtcOffset,
 	weatherIcon,
 	type AtmosphereSnapshot,
+	type ForecastHour,
 	type Quality,
 	type TerrainProfile,
 	type WeatherConditions,
@@ -61,6 +63,10 @@ const locApplyBtn = document.getElementById("btn-loc-apply") as HTMLButtonElemen
 const locClearBtn = document.getElementById("btn-loc-clear") as HTMLButtonElement;
 const locHint = document.getElementById("loc-hint") as HTMLParagraphElement;
 const locPresets = document.querySelectorAll(".loc-presets .chip-btn") as NodeListOf<HTMLButtonElement>;
+const stripToggle = document.getElementById("opt-strip") as HTMLInputElement;
+const stripEl = document.getElementById("daystrip") as HTMLDivElement;
+const stripCellsEl = document.getElementById("daystrip-cells") as HTMLDivElement;
+const stripLiveBtn = document.getElementById("btn-strip-live") as HTMLButtonElement;
 
 type ClimateKey = "intensity" | "temperatureC" | "windSpeed";
 const climateLocks = new Set<ClimateKey>();
@@ -85,6 +91,7 @@ if (params.get("grid") === "0") gridToggle.checked = false;
 if (params.get("birds") === "0") birdsToggle.checked = false;
 if (params.get("bats") === "0") batsToggle.checked = false;
 if (params.get("fly") === "0") firefliesToggle.checked = false;
+if (params.get("strip") === "0") stripToggle.checked = false;
 const wxParam = params.get("wx") ?? (params.get("storm") === "1" ? "storm" : null);
 if (wxParam && ["storm", "snow", "fog", "overcast"].includes(wxParam)) {
 	(document.getElementById(`wx-${wxParam}`) as HTMLInputElement).checked = true;
@@ -267,6 +274,7 @@ function syncTimeRows(): void {
 }
 
 function effectiveHour(): number {
+	if (scrubHour !== null) return scrubHour;
 	const mode = timeMode();
 	if (mode === "golden") return goldenHour(sky.conditions());
 	if (mode === "custom") return Number(customHourSlider.value);
@@ -280,6 +288,7 @@ function updateTimeLabels(): void {
 }
 
 function applyTime(): void {
+	if (scrubHour !== null) return; // the day strip owns the clock while scrubbing
 	const mode = timeMode();
 	if (mode === "golden") {
 		sky.setTime(() => dateAtHour(goldenHour(sky.conditions())));
@@ -297,6 +306,8 @@ function applyTime(): void {
 const TOUR_SECONDS = 30;
 let tourRaf = 0;
 let tourHour = 0;
+/** Hour pinned from the day strip, or null when the strip is idle. */
+let scrubHour: number | null = null;
 
 function updateClock(): void {
 	const h = tourRaf !== 0 ? tourHour : effectiveHour();
@@ -304,7 +315,7 @@ function updateClock(): void {
 	if (clockEl.textContent !== label) clockEl.textContent = label;
 }
 
-/** Header weather line during the tour — forecast visible beside the clock. */
+/** Header weather line while touring or scrubbing — forecast beside the clock. */
 function updateTourWx(): void {
 	const wx = sky.conditions();
 	if (!wx || wx.weatherCode == null) {
@@ -341,10 +352,12 @@ function stopTour(): void {
 	wxEl.hidden = true;
 	sky.setForecastHour(null);
 	applyTime();
+	syncStripHighlight();
 	updateStatus();
 }
 
 function startTour(): void {
+	clearScrub(false);
 	const start = performance.now();
 	const from = effectiveHour();
 	tourBtn.textContent = "■ Stop tour";
@@ -361,6 +374,7 @@ function startTour(): void {
 		}
 		tourHour = (from + t * 24) % 24;
 		if (followForecast) sky.setForecastHour(tourHour);
+		highlightStripHour(tourHour);
 		updateClock();
 		updateTourWx();
 		statusEl.textContent = tourStatus();
@@ -368,6 +382,167 @@ function startTour(): void {
 	};
 	tourRaf = requestAnimationFrame(step);
 }
+
+// —— Day strip: the next 24 hours as a scrubbable forecast dock ——————————————
+
+/** WMO code → glyph, matching the library's weatherIcon buckets. */
+function iconForCode(code: number, isDay: boolean): string {
+	if (code >= 95) return "⚡";
+	if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "❄";
+	if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "☂";
+	if (code === 45 || code === 48) return "≋";
+	if (code === 3) return "☁";
+	if (code === 1 || code === 2) return "⛅";
+	return isDay ? "☀" : "☾";
+}
+
+/** The forecast slots the strip shows: from the current hour, up to 24. */
+function stripSlots(): ForecastHour[] {
+	const forecast = sky.forecast();
+	if (forecast.length === 0) return [];
+	const off = sky.utcOffsetSeconds() ?? -new Date().getTimezoneOffset() * 60;
+	const nowSlotISO = `${isoInUtcOffset(new Date(), off).slice(0, 13)}:00`;
+	const start = forecast.findIndex((slot) => slot.timeISO >= nowSlotISO);
+	if (start === -1) return [];
+	return forecast.slice(start, start + 24);
+}
+
+let stripStartISO = "";
+
+/** Rebuild the cells when the forecast window moves; cheap no-op otherwise. */
+function renderStrip(): void {
+	const wanted = stripToggle.checked && selectedWx() === null;
+	const slots = wanted ? stripSlots() : [];
+	if (slots.length < 2) {
+		if (!stripEl.hidden) {
+			stripEl.hidden = true;
+			stripStartISO = "";
+			if (scrubHour !== null) clearScrub(true);
+		}
+		return;
+	}
+	stripEl.hidden = false;
+	if (slots[0].timeISO === stripStartISO && stripCellsEl.childElementCount === slots.length) {
+		return;
+	}
+	stripStartISO = slots[0].timeISO;
+	stripCellsEl.textContent = "";
+	for (const slot of slots) {
+		const h = Math.floor(slot.hour);
+		const cell = document.createElement("button");
+		cell.type = "button";
+		cell.className = "ds-cell";
+		cell.dataset.hour = String(h);
+		if (
+			(slot.weatherCode >= 71 && slot.weatherCode <= 77) ||
+			slot.weatherCode === 85 ||
+			slot.weatherCode === 86
+		) {
+			cell.dataset.snow = "1";
+		}
+		cell.setAttribute("role", "option");
+		cell.setAttribute("aria-selected", "false");
+		const desc = describeWeather(slot.weatherCode, slot.isDay);
+		const pop = slot.precipProbability;
+		cell.title = `${h}:00 — ${desc}, ${Math.round(slot.temperatureC)}°${
+			pop != null && pop >= 10 ? ` · ${Math.round(pop)}% precip` : ""
+		}`;
+		cell.innerHTML = `
+			<span class="ds-time">${h}:00</span>
+			<span class="ds-icon" aria-hidden="true">${iconForCode(slot.weatherCode, slot.isDay)}</span>
+			<span class="ds-temp">${Math.round(slot.temperatureC)}°</span>
+			<span class="ds-pop" style="--pop:${pop != null ? Math.round(pop) / 100 : 0}" aria-hidden="true"></span>`;
+		stripCellsEl.appendChild(cell);
+	}
+	(stripCellsEl.firstElementChild as HTMLElement | null)?.classList.add("is-now");
+	syncStripHighlight();
+}
+
+/** Mark the cell containing `hour` active (tour progress / scrub pin). */
+function highlightStripHour(hour: number | null): void {
+	const cells = stripCellsEl.children;
+	const target =
+		hour === null ? null : String(((Math.floor(hour) % 24) + 24) % 24);
+	for (const cell of cells) {
+		const on = target !== null && (cell as HTMLElement).dataset.hour === target;
+		cell.classList.toggle("is-active", on);
+		cell.setAttribute("aria-selected", on ? "true" : "false");
+	}
+}
+
+function syncStripHighlight(): void {
+	if (tourRaf !== 0) highlightStripHour(tourHour);
+	else highlightStripHour(scrubHour);
+	stripLiveBtn.hidden = scrubHour === null;
+}
+
+/** Pin the sky to a forecast hour picked on the strip. */
+function setScrub(hour: number): void {
+	if (tourRaf !== 0) stopTour();
+	scrubHour = hour;
+	sky.setTime(() => dateAtHour(hour));
+	if (selectedWx() === null) sky.setForecastHour(hour);
+	syncStripHighlight();
+	updateClock();
+	updateTourWx();
+	updateStatus();
+}
+
+/** Return to live time/weather. `reapply` restores the selected time mode. */
+function clearScrub(reapply: boolean): void {
+	if (scrubHour === null) return;
+	scrubHour = null;
+	sky.setForecastHour(null);
+	if (reapply) applyTime();
+	wxEl.hidden = true;
+	syncStripHighlight();
+	updateClock();
+	updateStatus();
+}
+
+stripCellsEl.addEventListener("click", (e) => {
+	const cell = (e.target as HTMLElement).closest<HTMLElement>(".ds-cell");
+	if (!cell) return;
+	const h = Number(cell.dataset.hour);
+	if (!Number.isFinite(h)) return;
+	if (scrubHour !== null && Math.floor(scrubHour) === h) clearScrub(true);
+	else setScrub(h);
+});
+
+// Drag across the strip to sweep the day — mobile-friendly scrubbing.
+let stripDragging = false;
+stripCellsEl.addEventListener("pointerdown", (e) => {
+	if (e.pointerType === "mouse" && e.buttons !== 1) return;
+	stripDragging = true;
+});
+window.addEventListener("pointerup", () => {
+	stripDragging = false;
+});
+stripCellsEl.addEventListener("pointermove", (e) => {
+	if (!stripDragging) return;
+	const cell = document
+		.elementFromPoint(e.clientX, e.clientY)
+		?.closest<HTMLElement>(".ds-cell");
+	if (!cell) return;
+	const h = Number(cell.dataset.hour);
+	if (Number.isFinite(h) && (scrubHour === null || Math.floor(scrubHour) !== h)) {
+		setScrub(h);
+	}
+});
+
+stripLiveBtn.addEventListener("click", () => {
+	clearScrub(true);
+});
+
+window.addEventListener("keydown", (e) => {
+	if (e.key === "Escape" && scrubHour !== null) clearScrub(true);
+});
+
+stripToggle.addEventListener("change", () => {
+	if (!stripToggle.checked && scrubHour !== null) clearScrub(true);
+	renderStrip();
+	updateStatus();
+});
 
 function syncUrl(): void {
 	const p = new URLSearchParams();
@@ -379,6 +554,7 @@ function syncUrl(): void {
 	if (!birdsToggle.checked) p.set("birds", "0");
 	if (!batsToggle.checked) p.set("bats", "0");
 	if (!firefliesToggle.checked) p.set("fly", "0");
+	if (!stripToggle.checked) p.set("strip", "0");
 	const wx = selectedWx();
 	if (wx) p.set("wx", wx);
 	const q = selectedQuality();
@@ -510,9 +686,13 @@ function updateStatus(): void {
 	syncLocateHint();
 	syncLocChrome();
 	fillLocFromSky();
+	renderStrip();
 	if (tourRaf !== 0) return;
 
 	const parts: string[] = [];
+	if (scrubHour !== null) {
+		parts.push(`Pinned to ${formatHour(scrubHour)} forecast — Esc for live`);
+	}
 	const locHintText = sky.locationHint();
 	if (locHintText && !manualLocation) parts.push(locHintText);
 
@@ -610,6 +790,7 @@ gridToggle.addEventListener("change", () => {
 for (const radio of timeModeRadios) {
 	radio.addEventListener("change", () => {
 		stopTour();
+		clearScrub(false);
 		syncTimeRows();
 		applyTime();
 		updateStatus();
@@ -618,6 +799,7 @@ for (const radio of timeModeRadios) {
 
 goldenOffsetSlider.addEventListener("input", () => {
 	stopTour();
+	clearScrub(false);
 	updateTimeLabels();
 	applyTime();
 	updateStatus();
@@ -625,6 +807,7 @@ goldenOffsetSlider.addEventListener("input", () => {
 
 customHourSlider.addEventListener("input", () => {
 	stopTour();
+	clearScrub(false);
 	updateTimeLabels();
 	applyTime();
 	updateStatus();
@@ -726,12 +909,14 @@ firefliesToggle.addEventListener("change", () => {
 for (const radio of wxRadios) {
 	radio.addEventListener("change", () => {
 		if (!radio.checked) return;
+		clearScrub(true);
 		sky.setWeatherPreview(selectedWx());
 		if (precipPreview()) bindPrecipIntensity();
 		else {
 			applyClimate();
 			mirrorClimateFromSky();
 		}
+		renderStrip();
 		updateStatus();
 	});
 }

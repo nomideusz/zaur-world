@@ -210,6 +210,8 @@ export interface WorldHandle {
   utcOffsetSeconds(): number | null;
   /** City label from geo / reverse-geocode (null until known). */
   city(): string | null;
+  /** Coordinates the sky is keyed to (pin → GPS/IP), or null until resolved. */
+  location(): { lat: number; lon: number } | null;
   /** How coordinates were resolved (`gps`, `ip`, …). */
   locationSource(): LocationSource | null;
   /** VPN / mismatched-location hint for host UI, or null when confident. */
@@ -569,6 +571,9 @@ export function createWorld(
     },
     city(): string | null {
       return runtimeGeo?.city ?? client?.city() ?? null;
+    },
+    location(): { lat: number; lon: number } | null {
+      return location();
     },
     locationSource(): LocationSource | null {
       if (runtimeGeo) return "fixed";
