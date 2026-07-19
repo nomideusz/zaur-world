@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pinning a location while boot geo-detection was still in flight (e.g. the GPS permission prompt open under `geolocation: "prefer"`) let the boot fetch's late response overwrite the pinned location's weather with detected-location conditions until the next 15-minute refresh — stale fetches are now discarded (per-fetch sequence guard) and a mid-flight manual pin wins over the detection result
 - Demo: `sky.location()` was called but never existed on `WorldHandle`, so `updateStatus` threw on load — the status line, live clock refresh, and shareable `?lat=&lon=` apply were dead in v0.11.0
 - Demo mobile: the weather card no longer covers the Install/links rows (chrome clears its full height while the day strip is visible); an open Tweaks panel now stays inside the viewport on small phones instead of pushing the header off-screen; day-strip cells grew to ≥42 px touch targets on coarse pointers
 

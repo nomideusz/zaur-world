@@ -136,6 +136,8 @@ export class WeatherClient {
   private currentDetails = "";
   private lastFetchMs = 0;
   private fetching = false;
+  /** Bumped per fetch — a response only applies if still the newest. */
+  private fetchSeq = 0;
   private previewKey: string | null = null;
   private cachedGeo: Geo | null = null;
   private readonly card: WeatherCard | null;
@@ -419,6 +421,10 @@ export class WeatherClient {
   }
 
   private async fetchWeather(): Promise<void> {
+    // The boot fetch can dwell in geo() for seconds (GPS permission prompt).
+    // If a newer fetch starts meanwhile — setGeo pin, relocate — this one
+    // must not apply its stale response over the newer location's weather.
+    const seq = ++this.fetchSeq;
     try {
       const geo = await this.geo();
       const url = new URL("https://api.open-meteo.com/v1/forecast");
@@ -454,6 +460,7 @@ export class WeatherClient {
       };
       const c = data.current;
       if (!c) return;
+      if (seq !== this.fetchSeq) return; // superseded while in flight
 
       if (typeof data.utc_offset_seconds === "number" && Number.isFinite(data.utc_offset_seconds)) {
         this.utcOffsetSec = data.utc_offset_seconds;
@@ -495,11 +502,15 @@ export class WeatherClient {
     // Always learn the IP estimate (for VPN hints) even when GPS is preferred.
     const fromIp = await this.ipGeo();
     if (fromIp) this.ipEstimate = fromIp;
+    // A manual pin set while detection was in flight wins over the result.
+    if (this.manualGeo) return this.commitGeo(this.manualGeo, "fixed");
 
     if (this.geoMode === "prefer") {
       const browser = await this.browserGeo();
+      if (this.manualGeo) return this.commitGeo(this.manualGeo, "fixed");
       if (browser) {
         const named = await this.withCityName(browser);
+        if (this.manualGeo) return this.commitGeo(this.manualGeo, "fixed");
         return this.commitGeo(named, "gps");
       }
     }
@@ -508,8 +519,10 @@ export class WeatherClient {
 
     if (this.geoMode === "fallback") {
       const browser = await this.browserGeo();
+      if (this.manualGeo) return this.commitGeo(this.manualGeo, "fixed");
       if (browser) {
         const named = await this.withCityName(browser);
+        if (this.manualGeo) return this.commitGeo(this.manualGeo, "fixed");
         return this.commitGeo(named, "gps");
       }
     }
