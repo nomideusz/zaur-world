@@ -41,6 +41,7 @@ import {
   drawCityGlow,
   drawFog,
   drawFrost,
+  drawRainCurtain,
   drawHeatHaze,
   drawHorizonGlow,
   drawRainbow,
@@ -513,6 +514,11 @@ export class World {
     // A rainbow when the sun and a clearing shower share the sky.
     const rainbowA = this.rainbowAlpha(wx, cloudAlpha, h);
     if (rainbowA > 0.02) drawRainbow(ctx, width, height, h, rainbowA);
+
+    // Distant rain shafts under the deck give a heavy downpour depth.
+    if (wx?.precipitation === "rain" && intensity > 0.45) {
+      drawRainCurtain(ctx, width, height, intensity, this.wind);
+    }
 
     // Mid + near cloud layers in front of the celestial body.
     if (this.clouds.length > 0 && cloudAlpha > 0) {

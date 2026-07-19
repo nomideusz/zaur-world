@@ -269,6 +269,45 @@ export function drawRainbow(
   ctx.restore();
 }
 
+/**
+ * Distant rain sheets hanging from the cloud base toward the ridge —
+ * a downpour visibly marching in the distance behind the foreground
+ * streaks. Slant follows the wind; shafts slowly cross the sky.
+ */
+export function drawRainCurtain(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  intensity: number,
+  wind: number
+): void {
+  const k = Math.min(1, (intensity - 0.45) / 0.55);
+  if (k <= 0) return;
+  const t = performance.now() / 1000;
+  const slant = wind * width * 0.05;
+  const top = height * 0.24;
+  const bottom = height * 0.74;
+  for (let i = 0; i < 3; i++) {
+    const w = width * (0.18 + ((i * 37) % 20) / 100);
+    const cx =
+      width * ((((((i * 53 + 17) % 100) / 100 + t * 0.008 * (1 + i * 0.35)) % 1.3) + 1.3) % 1.3) -
+      width * 0.15;
+    const a = (0.06 + k * 0.1) * (0.7 + ((i * 13) % 40) / 100);
+    const grad = ctx.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0, `rgba(148, 162, 188, ${a.toFixed(3)})`);
+    grad.addColorStop(0.8, `rgba(148, 162, 188, ${(a * 0.5).toFixed(3)})`);
+    grad.addColorStop(1, "rgba(148, 162, 188, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2, top);
+    ctx.lineTo(cx + w / 2, top);
+    ctx.lineTo(cx + w / 2 + slant, bottom);
+    ctx.lineTo(cx - w / 2 + slant, bottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 export function drawSeaBand(
   ctx: CanvasRenderingContext2D,
   width: number,
