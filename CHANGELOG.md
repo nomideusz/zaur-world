@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 15-minute precipitation nowcast: the weather fetch pulls Open-Meteo `minutely_15` (precipitation + weather code, next 2 h) and current conditions advance along it every minute — rain or thunder starting/stopping mid-hour reaches the sky within a minute of its slot instead of waiting out the coarse hourly value. Natively modelled in Europe/North America, interpolated elsewhere; degrades to previous behavior when the series is missing or stale
+- Pure helpers `buildMinutely15` / `refineWithMinutely` and types `MinutelySlot` / `OpenMeteoMinutely15` exported for host pages
+
 - `WorldHandle.location()` — resolved coordinates the sky is keyed to (manual pin → GPS/IP), `null` until known
 - Demo: **Day strip** — a 24-hour forecast dock along the bottom edge: one cell per hour (time, condition icon, temperature, precip-probability meter), starting at the current hour in the forecast location's timezone (VPN-safe). Click or drag across it to pin the sky, clock, and weather card to that hour; click again, press Esc, or hit "Back to live" to return. Doubles as the progress bar for the 24-hour tour. Toggle via Tweaks → Day strip or `?strip=0`.
 

@@ -226,6 +226,95 @@ export function deriveConditions(
 	};
 }
 
+/** Open-Meteo `minutely_15` block — 15-minute near-term series. */
+export interface OpenMeteoMinutely15 {
+	time?: string[];
+	precipitation?: number[];
+	weather_code?: number[];
+}
+
+/** One 15-minute slot of near-term precipitation. */
+export interface MinutelySlot {
+	/** Local wall-clock slot start, e.g. "2026-07-19T06:15". */
+	timeISO: string;
+	/** Precipitation in this 15-minute slot, mm. */
+	precipMm: number;
+	weatherCode: number | null;
+}
+
+/** Flatten Open-Meteo's parallel minutely_15 arrays into slot records. */
+export function buildMinutely15(m: OpenMeteoMinutely15 | undefined): MinutelySlot[] {
+	const times = m?.time;
+	if (!m || !times) return [];
+	const out: MinutelySlot[] = [];
+	for (let i = 0; i < times.length; i++) {
+		const t = times[i];
+		if (!t || t.length < 16) continue;
+		out.push({
+			timeISO: t,
+			precipMm: m.precipitation?.[i] ?? 0,
+			weatherCode: m.weather_code?.[i] ?? null,
+		});
+	}
+	return out;
+}
+
+/**
+ * Refine current conditions with the active 15-minute slot, so rain and
+ * thunder starting or stopping mid-hour reach the sky within minutes
+ * instead of waiting out the coarse hourly value from the last refresh.
+ *
+ * `nowISO` is a location-local "YYYY-MM-DDTHH:MM" string. Returns `base`
+ * itself when no slot covers now (empty/stale series) — callers can use
+ * identity to skip change notifications.
+ */
+export function refineWithMinutely(
+	base: WeatherConditions,
+	slots: MinutelySlot[],
+	nowISO: string
+): WeatherConditions {
+	if (slots.length === 0 || nowISO.length < 16) return base;
+	// Last slot starting at or before now; slots are 15 min apart, so the
+	// match must be within the current quarter-hour to be "covering".
+	let active: MinutelySlot | null = null;
+	for (const slot of slots) {
+		if (slot.timeISO <= nowISO) active = slot;
+		else break;
+	}
+	if (!active) return base;
+	const minutes = Number(nowISO.slice(14, 16));
+	if (!Number.isFinite(minutes)) return base;
+	const quarter = String(Math.floor(minutes / 15) * 15).padStart(2, "0");
+	if (active.timeISO !== `${nowISO.slice(0, 14)}${quarter}`) return base;
+
+	const code = active.weatherCode ?? base.weatherCode;
+	if (code == null) return base;
+	// The intensity curve is tuned for hourly mm — scale the 15-min slot up.
+	const sky = skyFromCode(code, active.precipMm * 4);
+	const next: WeatherConditions = {
+		...base,
+		...sky,
+		cloudiness: refineCloudiness(sky.cloudiness, base.cloudCover),
+		weatherCode: code,
+	};
+	// Dry sky: keep the cloud-cover intensity lift from deriveConditions so a
+	// sealed overcast doesn't flatten to zero when the slot has no precip.
+	if (next.precipitation === "none" && base.cloudCover != null) {
+		next.intensity = Math.max(next.intensity, Math.min(0.35, (base.cloudCover / 100) * 0.35));
+	}
+	if (
+		next.cloudiness === base.cloudiness &&
+		next.precipitation === base.precipitation &&
+		next.intensity === base.intensity &&
+		next.thunder === base.thunder &&
+		next.fog === base.fog &&
+		next.weatherCode === base.weatherCode
+	) {
+		return base;
+	}
+	return next;
+}
+
 /** Flatten Open-Meteo's parallel hourly arrays into per-hour records. */
 export function buildHourlyForecast(hourly: OpenMeteoHourly | undefined): ForecastHour[] {
 	const times = hourly?.time;

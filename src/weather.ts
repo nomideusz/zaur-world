@@ -5,19 +5,23 @@
 
 import {
   buildHourlyForecast,
+  buildMinutely15,
   dateAsLocationLocal,
   decimalHourInUtcOffset,
   deriveConditions,
   forecastConditionsAt,
   geoDistanceKm,
   isoInUtcOffset,
+  refineWithMinutely,
   timezoneOffsetMismatch,
 } from "./weather-logic.js";
 import type {
   ForecastHour,
+  MinutelySlot,
   OpenMeteoCurrent,
   OpenMeteoDaily,
   OpenMeteoHourly,
+  OpenMeteoMinutely15,
 } from "./weather-logic.js";
 
 export type Cloudiness = 0 | 1 | 2; // none / scattered / overcast
@@ -77,6 +81,7 @@ interface Geo {
 }
 
 const REFRESH_MS = 15 * 60_000;
+const MINUTELY_APPLY_MS = 60_000;
 const FIRST_SHOW_DELAY_MS = 4_000;
 const REPEAT_SHOW_INTERVAL_MS = 6 * 60_000;
 const CARD_DURATION_MS = 9_000;
@@ -118,6 +123,8 @@ export interface WeatherClientOptions {
 export class WeatherClient {
   private state: WeatherConditions | null = null;
   private hourly: ForecastHour[] = [];
+  /** 15-minute near-term series — refines `state` between full refreshes. */
+  private minutely: MinutelySlot[] = [];
   private todayHighC: number | null = null;
   private todayLowC: number | null = null;
   /** Seconds east of UTC from the last Open-Meteo response (`timezone=auto`). */
@@ -167,6 +174,7 @@ export class WeatherClient {
     }
     void this.refresh();
     this.timers.push(window.setInterval(() => void this.refresh(), REFRESH_MS));
+    this.timers.push(window.setInterval(() => this.applyMinutely(), MINUTELY_APPLY_MS));
     if (this.card) {
       this.timers.push(
         window.setInterval(() => this.card?.show(CARD_DURATION_MS), REPEAT_SHOW_INTERVAL_MS)
@@ -372,6 +380,19 @@ export class WeatherClient {
     this.card.beginPreview();
   }
 
+  /**
+   * Advance current conditions along the 15-minute series between full
+   * refreshes — precipitation onset/end shows in the sky within a minute
+   * of its slot instead of waiting for the next 15-minute fetch.
+   */
+  private applyMinutely(): void {
+    if (!this.state || this.minutely.length === 0) return;
+    const next = refineWithMinutely(this.state, this.minutely, this.nowISO());
+    if (next === this.state || conditionsEqual(this.state, next)) return;
+    this.state = next;
+    this.onChange?.(next);
+  }
+
   private async fetchWeather(): Promise<void> {
     try {
       const geo = await this.geo();
@@ -390,6 +411,10 @@ export class WeatherClient {
         "temperature_2m,weather_code,precipitation,precipitation_probability," +
           "cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day"
       );
+      // Near-term 15-minute series (natively modelled in Europe/North
+      // America, interpolated elsewhere) — 8 slots ≈ the next 2 hours.
+      url.searchParams.set("minutely_15", "precipitation,weather_code");
+      url.searchParams.set("forecast_minutely_15", "8");
       url.searchParams.set("forecast_days", "2");
       url.searchParams.set("timezone", "auto");
       const res = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
@@ -398,6 +423,7 @@ export class WeatherClient {
         current?: OpenMeteoCurrent;
         daily?: OpenMeteoDaily;
         hourly?: OpenMeteoHourly;
+        minutely_15?: OpenMeteoMinutely15;
         utc_offset_seconds?: number;
         timezone?: string;
       };
@@ -412,9 +438,11 @@ export class WeatherClient {
       }
 
       this.hourly = buildHourlyForecast(data.hourly);
+      this.minutely = buildMinutely15(data.minutely_15);
       this.todayHighC = data.daily?.temperature_2m_max?.[0] ?? null;
       this.todayLowC = data.daily?.temperature_2m_min?.[0] ?? null;
-      const next = { ...deriveConditions(c, data.daily), latitude: geo.lat };
+      const derived = { ...deriveConditions(c, data.daily), latitude: geo.lat };
+      const next = refineWithMinutely(derived, this.minutely, this.nowISO());
       const changed = !this.state || !conditionsEqual(this.state, next);
       this.state = next;
       if (changed) this.onChange?.(next);
@@ -919,6 +947,7 @@ function injectStylesOnce(): void {
 
 export {
   buildHourlyForecast,
+  buildMinutely15,
   dateAsLocationLocal,
   decimalHourInUtcOffset,
   deriveConditions,
@@ -927,9 +956,12 @@ export {
   intensityFromPrecip,
   isoInUtcOffset,
   isoToHour,
+  refineWithMinutely,
   timezoneOffsetMismatch,
   type ForecastHour,
+  type MinutelySlot,
   type OpenMeteoCurrent,
   type OpenMeteoDaily,
   type OpenMeteoHourly,
+  type OpenMeteoMinutely15,
 } from "./weather-logic.js";
