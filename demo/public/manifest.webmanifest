@@ -1,0 +1,30 @@
+{
+	"name": "zaur.world — a living ambient sky",
+	"short_name": "zaur.world",
+	"description": "Your sky for the next 24 hours — real sunrise, live weather, and an hourly forecast strip. VPN-safe location.",
+	"start_url": ".",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#0c0e14",
+	"theme_color": "#0c0e14",
+	"icons": [
+		{
+			"src": "icons/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "icons/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "icons/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}
