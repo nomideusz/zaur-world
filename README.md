@@ -9,8 +9,9 @@ named Zaur walks on the day's news under it.
 
 **[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play 24 hours** for a
 30-second tour through dawn, golden hour, dusk, and the night sky, with the
-hourly forecast riding along beside the clock. On a VPN, tap **Use my location**
-so the tour matches your real sky.
+hourly forecast riding along beside the clock — or scrub the **day strip**
+along the bottom edge to jump the sky to any of the next 24 hours. On a VPN,
+tap **Use my location** so the tour matches your real sky.
 
 | Golden hour | Night |
 | --- | --- |
@@ -27,8 +28,11 @@ so the tour matches your real sky.
   with procedural lightning, and wind that slants rain, drives flakes
   sideways, and hurries the clouds. Intensity scales the whole scene: light
   drizzle is a veil; 100% is a sealed overcast with no sun visible. Overcast
-  desaturates the sky; clear days are genuinely blue. Conditions stay
-  physically coherent (warm snow melts to rain; sub-zero rain falls as snow).
+  desaturates the sky; clear days are genuinely blue, and lightly veiled ones
+  (~10–40% real cover) show high thin cirrus filaments. Conditions stay
+  physically coherent (warm snow melts to rain; sub-zero rain falls as snow),
+  a 15-minute nowcast lands precipitation within a minute of its slot, and
+  the sky catches up instantly when a backgrounded tab wakes again.
 - **Golden hour** — horizon glow, and cloud undersides that catch fire
   at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
@@ -224,6 +228,13 @@ Open-Meteo), not the browser TZ — so a 24h tour stays coherent under VPN.
 Use `sky.localHour()` when starting your own sweep.
 
 ![24-hour tour at golden hour — the forecast rides beside the clock while the weather card tracks the swept hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/tour.png)
+
+The demo turns this API into a **day strip** — one cell per coming hour with
+icon, temperature, and precip-probability meter, a temperature curve across
+the day, sunrise/sunset marks, and shaded night hours. Click or drag to pin
+the sky to that hour:
+
+![Day strip — the coming 24 hours as scrubbable cells with a temperature curve; the sky pinned to 20:00, golden hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/daystrip.png)
 
 Current conditions carry detail too: `humidity`, `cloudCover`,
 `pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to
