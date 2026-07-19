@@ -408,6 +408,49 @@ function stripSlots(): ForecastHour[] {
 }
 
 let stripStartISO = "";
+let stripCellCount = 0;
+
+/** Temperature curve + sunrise/sunset marks overlaid on the cell track. */
+function buildStripOverlays(track: HTMLDivElement, slots: ForecastHour[]): void {
+	const temps = slots.map((s) => s.temperatureC);
+	const lo = Math.min(...temps);
+	const hi = Math.max(...temps);
+	const span = Math.max(2, hi - lo);
+	const w = slots.length * 10;
+	// y: 16 (warmest) .. 46 (coldest) inside a 0..56 box — clears the labels.
+	const pts = slots
+		.map((s, i) => `${i * 10 + 5},${(16 + ((hi - s.temperatureC) / span) * 30).toFixed(1)}`)
+		.join(" ");
+	const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+	svg.setAttribute("class", "ds-curve");
+	svg.setAttribute("viewBox", `0 0 ${w} 56`);
+	svg.setAttribute("preserveAspectRatio", "none");
+	svg.setAttribute("aria-hidden", "true");
+	const area = document.createElementNS("http://www.w3.org/2000/svg", "path");
+	area.setAttribute("d", `M5,46 L${pts.split(" ").join(" L")} L${w - 5},46 Z`);
+	const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+	line.setAttribute("points", pts);
+	svg.append(area, line);
+	track.appendChild(svg);
+
+	const wx = sky.conditions();
+	const startH = slots[0].hour;
+	const hoursShown = slots.length;
+	for (const [hourVal, glyph, cls, label] of [
+		[wx?.sunriseH, "☀", "", "Sunrise"],
+		[wx?.sunsetH, "☽", "ds-sunmark--set", "Sunset"],
+	] as const) {
+		if (hourVal == null) continue;
+		const offset = (hourVal - startH + 24) % 24;
+		if (offset >= hoursShown) continue;
+		const mark = document.createElement("div");
+		mark.className = `ds-sunmark ${cls}`.trim();
+		mark.dataset.glyph = glyph;
+		mark.style.left = `${((offset / hoursShown) * 100).toFixed(2)}%`;
+		mark.title = `${label} ${formatHour(hourVal)}`;
+		track.appendChild(mark);
+	}
+}
 
 /** Rebuild the cells when the forecast window moves; cheap no-op otherwise. */
 function renderStrip(): void {
@@ -417,16 +460,21 @@ function renderStrip(): void {
 		if (!stripEl.hidden) {
 			stripEl.hidden = true;
 			stripStartISO = "";
+			stripCellCount = 0;
 			if (scrubHour !== null) clearScrub(true);
 		}
 		return;
 	}
 	stripEl.hidden = false;
-	if (slots[0].timeISO === stripStartISO && stripCellsEl.childElementCount === slots.length) {
+	if (slots[0].timeISO === stripStartISO && stripCellCount === slots.length) {
 		return;
 	}
 	stripStartISO = slots[0].timeISO;
+	stripCellCount = slots.length;
 	stripCellsEl.textContent = "";
+	const track = document.createElement("div");
+	track.className = "daystrip-track";
+	buildStripOverlays(track, slots);
 	for (const slot of slots) {
 		const h = Math.floor(slot.hour);
 		const cell = document.createElement("button");
@@ -452,19 +500,21 @@ function renderStrip(): void {
 			<span class="ds-icon" aria-hidden="true">${iconForCode(slot.weatherCode, slot.isDay)}</span>
 			<span class="ds-temp">${Math.round(slot.temperatureC)}°</span>
 			<span class="ds-pop" style="--pop:${pop != null ? Math.round(pop) / 100 : 0}" aria-hidden="true"></span>`;
-		stripCellsEl.appendChild(cell);
+		if (!slot.isDay) cell.classList.add("is-night");
+		track.appendChild(cell);
 	}
-	(stripCellsEl.firstElementChild as HTMLElement | null)?.classList.add("is-now");
+	track.querySelector(".ds-cell")?.classList.add("is-now");
+	stripCellsEl.appendChild(track);
 	syncStripHighlight();
 }
 
 /** Mark the cell containing `hour` active (tour progress / scrub pin). */
 function highlightStripHour(hour: number | null): void {
-	const cells = stripCellsEl.children;
+	const cells = stripCellsEl.querySelectorAll<HTMLElement>(".ds-cell");
 	const target =
 		hour === null ? null : String(((Math.floor(hour) % 24) + 24) % 24);
 	for (const cell of cells) {
-		const on = target !== null && (cell as HTMLElement).dataset.hour === target;
+		const on = target !== null && cell.dataset.hour === target;
 		cell.classList.toggle("is-active", on);
 		cell.setAttribute("aria-selected", on ? "true" : "false");
 	}

@@ -1053,8 +1053,6 @@ body:has(.daystrip:not([hidden])) .chrome {
 }
 
 .daystrip-cells {
-	display: flex;
-	gap: 1px;
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
 	scrollbar-width: none;
@@ -1063,6 +1061,79 @@ body:has(.daystrip:not([hidden])) .chrome {
 
 .daystrip-cells::-webkit-scrollbar {
 	display: none;
+}
+
+/* Inner track scrolls with the cells so overlays (curve, sun marks) align. */
+.daystrip-track {
+	position: relative;
+	display: flex;
+	gap: 1px;
+	width: 100%;
+	min-width: max-content;
+}
+
+/* Temperature curve behind the cells, spanning the whole 24 h. */
+.ds-curve {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.ds-curve path {
+	fill: rgba(244, 165, 116, 0.10);
+}
+
+.ds-curve polyline {
+	fill: none;
+	stroke: rgba(244, 165, 116, 0.55);
+	stroke-width: 1.4;
+	vector-effect: non-scaling-stroke;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+/* Night hours read darker so the day arc is visible at a glance. */
+.ds-cell.is-night {
+	background: rgba(6, 10, 22, 0.32);
+}
+
+.ds-cell.is-night:hover {
+	background: rgba(30, 38, 58, 0.45);
+}
+
+.ds-cell.is-active.is-night {
+	background: var(--chip-on);
+}
+
+/* Sunrise / sunset hairlines with a small glyph on top. */
+.ds-sunmark {
+	position: absolute;
+	top: 0.9rem;
+	bottom: 0.25rem;
+	width: 1px;
+	background: linear-gradient(rgba(244, 165, 116, 0.55), transparent 75%);
+	pointer-events: none;
+}
+
+.ds-sunmark::after {
+	content: attr(data-glyph);
+	position: absolute;
+	top: -0.85rem;
+	left: 0;
+	transform: translateX(-50%);
+	font-size: 0.54rem;
+	line-height: 1;
+	color: var(--accent-warm);
+}
+
+.ds-sunmark--set::after {
+	color: #b9a8e8;
+}
+
+.ds-sunmark--set {
+	background: linear-gradient(rgba(185, 168, 232, 0.5), transparent 75%);
 }
 
 .ds-cell {

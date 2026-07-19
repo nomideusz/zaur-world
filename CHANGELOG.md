@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `WorldHandle.location()` — resolved coordinates the sky is keyed to (manual pin → GPS/IP), `null` until known
 - Demo: **Day strip** — a 24-hour forecast dock along the bottom edge: one cell per hour (time, condition icon, temperature, precip-probability meter), starting at the current hour in the forecast location's timezone (VPN-safe). Click or drag across it to pin the sky, clock, and weather card to that hour; click again, press Esc, or hit "Back to live" to return. Doubles as the progress bar for the 24-hour tour. Toggle via Tweaks → Day strip or `?strip=0`.
+- Demo: the day strip carries a temperature curve across all 24 hours, sunrise ☀ / sunset ☽ hairline markers at their exact times, and darker night-hour cells — the whole day's shape reads at a glance
 
 ### Fixed
 
