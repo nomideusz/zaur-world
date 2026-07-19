@@ -82,6 +82,8 @@ interface Geo {
 
 const REFRESH_MS = 15 * 60_000;
 const MINUTELY_APPLY_MS = 60_000;
+/** Data older than this refreshes on tab wake / reconnect. */
+const STALE_MS = 5 * 60_000;
 const FIRST_SHOW_DELAY_MS = 4_000;
 const REPEAT_SHOW_INTERVAL_MS = 6 * 60_000;
 const CARD_DURATION_MS = 9_000;
@@ -132,6 +134,8 @@ export class WeatherClient {
   private timezoneName: string | null = null;
   private currentLine: string | null = null;
   private currentDetails = "";
+  private lastFetchMs = 0;
+  private fetching = false;
   private previewKey: string | null = null;
   private cachedGeo: Geo | null = null;
   private readonly card: WeatherCard | null;
@@ -180,11 +184,26 @@ export class WeatherClient {
         window.setInterval(() => this.card?.show(CARD_DURATION_MS), REPEAT_SHOW_INTERVAL_MS)
       );
     }
+    // Background tabs throttle timers and phones sleep mid-day — for a page
+    // left open as an all-day sky, catch up the moment it is looked at again.
+    document.addEventListener("visibilitychange", this.onWake);
+    window.addEventListener("online", this.onWake);
   }
+
+  /** Catch up after the tab was hidden, the device slept, or the network came back. */
+  private readonly onWake = (): void => {
+    if (document.visibilityState !== "visible") return;
+    // Slots may have passed while timers were throttled — apply instantly…
+    this.applyMinutely();
+    // …and re-fetch when the data is stale enough to matter.
+    if (Date.now() - this.lastFetchMs > STALE_MS) void this.refresh();
+  };
 
   /** Stop polling and remove the card (if any). */
   destroy(): void {
     for (const t of this.timers) window.clearInterval(t);
+    document.removeEventListener("visibilitychange", this.onWake);
+    window.removeEventListener("online", this.onWake);
     this.card?.remove();
   }
 
@@ -292,8 +311,14 @@ export class WeatherClient {
   }
 
   /** Re-fetch weather (e.g. when the tab becomes visible again). */
-  refresh(): Promise<void> {
-    return this.fetchWeather();
+  async refresh(): Promise<void> {
+    if (this.fetching) return;
+    this.fetching = true;
+    try {
+      await this.fetchWeather();
+    } finally {
+      this.fetching = false;
+    }
   }
 
   /**
@@ -437,6 +462,7 @@ export class WeatherClient {
         this.timezoneName = data.timezone;
       }
 
+      this.lastFetchMs = Date.now();
       this.hourly = buildHourlyForecast(data.hourly);
       this.minutely = buildMinutely15(data.minutely_15);
       this.todayHighC = data.daily?.temperature_2m_max?.[0] ?? null;
