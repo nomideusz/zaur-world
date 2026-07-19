@@ -208,9 +208,13 @@ export function drawCelestial(
   }
 
   const x = width * (0.08 + t * 0.84);
-  const baseY = height * 0.22;
-  const arcHeight = height * 0.13;
-  const y = baseY - Math.sin(t * Math.PI) * arcHeight;
+  // Arc endpoints sit below the ridge line (hills paint over the body), so
+  // the sun/moon visibly rise from and set behind the hills — the handoff
+  // at sunrise/sunset happens out of sight instead of popping mid-sky.
+  // The noon/midnight apex stays at 9% height, same as before.
+  const riseY = height * 0.68;
+  const topY = height * 0.09;
+  const y = riseY - Math.sin(t * Math.PI) * (riseY - topY);
 
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, dim));
