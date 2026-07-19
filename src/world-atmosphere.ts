@@ -178,6 +178,53 @@ export function drawAurora(
   }
 }
 
+/**
+ * High thin cirrus filaments — the look of a lightly veiled (~10–40%
+ * cover) sky that the puffy cumulus layers can't express. Deterministic
+ * seeds keep the pattern stable; filaments drift slowly, blush warm at
+ * golden hour, and fade to a faint veil at night.
+ */
+export function drawCirrus(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  alpha: number,
+  h: number
+): void {
+  const day = daylight(h);
+  const vis = alpha * (0.3 + day * 0.7);
+  if (vis <= 0.02) return;
+  const t = performance.now() / 1000;
+  const glow = horizonGlowStrength(h);
+  const r = Math.round(232 + glow * 23);
+  const g = Math.round(236 - glow * 46);
+  const b = Math.round(246 - glow * 96);
+  for (let i = 0; i < 7; i++) {
+    const seed = i * 137 + 31;
+    const y = height * (0.05 + ((seed * 29) % 26) / 100);
+    const len = width * (0.2 + ((seed * 13) % 28) / 100);
+    const drift = t * (0.0022 + (i % 3) * 0.0008);
+    const x = width * (((((seed * 61) % 100) / 100 + drift) % 1.24) - 0.12);
+    const a = vis * (0.14 + ((seed * 7) % 26) / 130);
+    const grad = ctx.createLinearGradient(x - len / 2, 0, x + len / 2, 0);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+    grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    ctx.fillStyle = grad;
+    // A long filament with two thinner feathers riding above and below.
+    const ry = 1.8 + ((seed * 3) % 4);
+    ctx.beginPath();
+    ctx.ellipse(x, y, len / 2, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x - len * 0.12, y - ry * 2.2, len * 0.34, ry * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + len * 0.16, y + ry * 2.6, len * 0.28, ry * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 export function drawCityGlow(
   ctx: CanvasRenderingContext2D,
   width: number,

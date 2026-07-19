@@ -37,6 +37,7 @@ import {
 } from "./solar.js";
 import {
   drawAurora,
+  drawCirrus,
   drawCityGlow,
   drawFog,
   drawFrost,
@@ -459,6 +460,15 @@ export class World {
 
     // Venus — evening or morning star per its real 584-day cycle.
     drawVenus(ctx, width, height, h, date, cloudAlpha);
+
+    // High thin cirrus for lightly veiled skies — real cover % that is
+    // too sparse for the puffy buckets. Fades out as those take over.
+    const cirrusA =
+      wx && wx.precipitation === "none" && !wx.fog && wx.cloudCover != null
+        ? Math.min(1, Math.max(0, (wx.cloudCover - 5) / 28)) *
+          Math.max(0, 1 - cloudAlpha * 2.4)
+        : 0;
+    if (cirrusA > 0.03) drawCirrus(ctx, width, height, cirrusA, h);
 
     // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
     if (this.clouds.length > 0 && cloudAlpha > 0) {

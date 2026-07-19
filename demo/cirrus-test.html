@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>cirrus test</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+			}
+			#sky {
+				position: fixed;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+			}
+		</style>
+	</head>
+	<body>
+		<canvas id="sky"></canvas>
+		<script type="module">
+			import { createWorld } from "@nomideusz/zaur-world";
+
+			const p = new URLSearchParams(location.search);
+			const cover = Number(p.get("cover") ?? 25);
+			const t = Number(p.get("t") ?? 13);
+			const wx = {
+				cloudiness: 0,
+				precipitation: "none",
+				intensity: 0,
+				thunder: false,
+				fog: false,
+				isDay: t > 6 && t < 20,
+				windSpeed: 10,
+				temperatureC: 20,
+				sunriseH: 5.5,
+				sunsetH: 20.5,
+				latitude: 50,
+				weatherCode: 1,
+				humidity: 55,
+				cloudCover: cover,
+				pressureMsl: 1015,
+				windDirection: 270,
+				windGusts: null,
+			};
+			const d = new Date();
+			d.setHours(Math.floor(t), Math.round((t % 1) * 60), 0, 0);
+			createWorld(document.getElementById("sky"), {
+				weather: () => wx,
+				terrain: false,
+				satellites: false,
+			}).setTime(() => d);
+		</script>
+	</body>
+</html>
