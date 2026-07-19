@@ -92,6 +92,14 @@ export {
   SUN_SET,
 } from "./solar.js";
 export { resolveQuality, type Quality, type ResolvedQuality } from "./quality.js";
+export {
+  equatorialToHorizontal,
+  gmstHours,
+  lstDegrees,
+  projectStar,
+  starBrightness,
+} from "./star-math.js";
+export { STAR_CATALOG, STAR_COUNT } from "./star-catalog.js";
 export { prefersReducedMotion } from "./motion.js";
 export { angularDistanceDeg, predictIssPass } from "./satellite-math.js";
 export {
@@ -368,6 +376,9 @@ export function createWorld(
       gridColor: opts.gridColor,
       terrain: () => (terrainEnabled ? terrainProfile : null),
       satellites: () => (satellitesEnabled ? watcher?.current() ?? null : null),
+      // Real night sky: catalog stars at their true positions for the
+      // visitor's coordinates (pin → GPS/IP), falling back to decorative.
+      location,
       time: resolveTime,
       quality: resolvedQuality,
       birds: opts.birds !== false,

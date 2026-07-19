@@ -2,7 +2,7 @@
 
 A living ambient sky for any web page, on a single `<canvas>`.
 
-**~17 kB min+gzip · zero dependencies · no API keys · no build step required.**
+**~25 kB min+gzip · zero dependencies · no API keys · no build step required.**
 
 Born as the backdrop of [dino.zaur.app](https://dino.zaur.app), where a small dinosaur
 named Zaur walks on the day's news under it.
@@ -22,6 +22,11 @@ tap **Use my location** so the tour matches your real sky.
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
   (Open-Meteo), so summer evenings stay light late and winter days end early.
   Sun arcs by day; a phase-accurate moon with craters and earthshine by night.
+- **The real night sky** — once location is known, the stars are the ~330
+  brightest (Yale catalog, to magnitude 3.6) at their true positions for that
+  place and moment: Orion in winter, the Summer Triangle in July, wheeling
+  with the sidereal clock over a faint scatter for the rest. Falls back to a
+  decorative field until a location resolves.
 - **Live weather** — per-visitor location (IP by default, or browser GPS with
   `geolocation: "prefer"` / `sky.relocate()` — accurate even on a VPN) drives
   clouds (three parallax layers), rain with splashes, snow, fog, thunderstorms

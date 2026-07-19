@@ -55,6 +55,12 @@ import {
   drawVenus,
   type Star,
 } from "./world-celestial.js";
+import { STAR_CATALOG } from "./star-catalog.js";
+import {
+  equatorialToHorizontal,
+  projectStar,
+  starBrightness,
+} from "./star-math.js";
 
 export interface WorldState {
   width: number;
@@ -70,6 +76,12 @@ export interface WorldOptions {
   terrain?: () => TerrainProfile | null;
   /** Polled each frame for an active ISS pass (see SatelliteWatcher). */
   satellites?: () => SatellitePass | null;
+  /**
+   * Polled for the visitor's coordinates. When known, the night sky shows
+   * the real brightest stars (Yale BSC to mag 3.6) at their true positions
+   * for that place and time; null keeps the seeded decorative layout.
+   */
+  location?: () => { lat: number; lon: number } | null;
   /** Wall clock override for demos and tests. */
   time?: () => Date;
   /** Performance / effects preset (resolved before passing in). */
@@ -243,6 +255,11 @@ export class World {
   private showGrid: boolean;
   private gridEnabled: boolean;
   private gridPattern: CanvasPattern | null = null;
+  private readonly locationFn: () => { lat: number; lon: number } | null;
+  /** Memo of the last real-star computation (time bucket, geo, size). */
+  private realStarKey = "";
+  /** Seeded decorative layout — the sky when no geo, the faint backdrop when real stars show. */
+  private baseStars: Star[] = [];
   private birdsEnabled: boolean;
   private batsEnabled: boolean;
   private firefliesEnabled: boolean;
@@ -261,6 +278,7 @@ export class World {
     this.gridColor = this.showGrid && this.baseGridColor ? this.baseGridColor : null;
     this.terrainFn = opts.terrain ?? (() => null);
     this.satFn = opts.satellites ?? (() => null);
+    this.locationFn = opts.location ?? (() => null);
     this.timeFn = opts.time ?? (() => new Date());
     this.regenStars();
     this.regenClouds();
@@ -450,7 +468,10 @@ export class World {
 
     // Stars (only at night-ish hours; heavy clouds also dim them).
     const sa = starAlpha(h) * Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
-    if (sa > 0.01) drawStars(ctx, this.stars, sa);
+    if (sa > 0.01) {
+      this.updateRealStars(date);
+      drawStars(ctx, this.stars, sa);
+    }
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
     const issPass = this.satFn();
@@ -965,9 +986,9 @@ export class World {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
-    this.stars = [];
+    this.baseStars = [];
     for (let i = 0; i < count; i++) {
-      this.stars.push({
+      this.baseStars.push({
         x: rand() * this.state.width,
         // Keep stars in the upper ~70% so they read as "sky"
         y: rand() * (this.state.height * 0.7),
@@ -975,6 +996,49 @@ export class World {
         twinklePhase: rand() * Math.PI * 2,
       });
     }
+    this.stars = this.baseStars;
+    this.realStarKey = "";
+  }
+
+  /**
+   * Replace the decorative layout with the real sky: catalog stars at
+   * their true alt/az for the visitor's location and the displayed time.
+   * Cheap enough to recompute whenever the memo key moves (30 s of real
+   * time, a location change, a resize — or every frame during time sweeps).
+   */
+  private updateRealStars(date: Date): void {
+    const loc = this.locationFn();
+    if (!loc) return; // no geo yet — keep the seeded decorative stars
+    const { width, height } = this.state;
+    const key = `${Math.round(date.getTime() / 30_000)}|${loc.lat.toFixed(1)},${loc.lon.toFixed(1)}|${width}x${height}`;
+    if (key === this.realStarKey) return;
+    this.realStarKey = key;
+    // A real sky also has thousands of stars fainter than the catalog cut —
+    // keep the seeded scatter as a dim backdrop under the true bright stars.
+    const stars: Star[] = this.baseStars.map((s) => ({
+      ...s,
+      brightness: s.brightness * 0.5,
+    }));
+    for (let i = 0; i < STAR_CATALOG.length; i += 3) {
+      const { altDeg, azDeg } = equatorialToHorizontal(
+        STAR_CATALOG[i] / 10,
+        STAR_CATALOG[i + 1] / 10,
+        loc.lat,
+        loc.lon,
+        date
+      );
+      const p = projectStar(azDeg, altDeg, loc.lat);
+      if (!p) continue;
+      stars.push({
+        x: p.x * width,
+        y: p.y * height,
+        // Floor above the backdrop so every catalog star reads as "real".
+        brightness: Math.max(0.4, starBrightness(STAR_CATALOG[i + 2] / 10)),
+        // Golden-angle spread keeps each star's twinkle stable across frames.
+        twinklePhase: (i / 3) * 2.399,
+      });
+    }
+    this.stars = stars;
   }
 
   /** Horizon silhouette, shaped by the local terrain profile when present. */

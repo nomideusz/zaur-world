@@ -50,6 +50,12 @@
 				weather: () => wx,
 				terrain: false,
 				satellites: false,
+				// Fixed pin so the real-star sky engages (lat/lon params optional).
+				geo: {
+					lat: Number(p.get("lat") ?? 50.06),
+					lon: Number(p.get("lon") ?? 19.94),
+					city: "Test",
+				},
 			}).setTime(() => d);
 		</script>
 	</body>
