@@ -32,6 +32,7 @@ const customHourVal = document.getElementById("custom-hour-val") as HTMLOutputEl
 const timeHint = document.getElementById("row-time-hint") as HTMLParagraphElement;
 const captureBtn = document.getElementById("btn-capture") as HTMLButtonElement;
 const tourBtn = document.getElementById("btn-tour") as HTMLButtonElement;
+const locateBtn = document.getElementById("btn-locate") as HTMLButtonElement;
 const birdsToggle = document.getElementById("opt-birds") as HTMLInputElement;
 const batsToggle = document.getElementById("opt-bats") as HTMLInputElement;
 const firefliesToggle = document.getElementById("opt-fireflies") as HTMLInputElement;
@@ -53,9 +54,18 @@ const windSlider = document.getElementById("opt-wind") as HTMLInputElement;
 const windVal = document.getElementById("wind-val") as HTMLOutputElement;
 const climateResetBtn = document.getElementById("btn-climate-reset") as HTMLButtonElement;
 const climateHint = document.getElementById("climate-hint") as HTMLParagraphElement;
+const latInput = document.getElementById("opt-lat") as HTMLInputElement;
+const lonInput = document.getElementById("opt-lon") as HTMLInputElement;
+const cityInput = document.getElementById("opt-city") as HTMLInputElement;
+const locApplyBtn = document.getElementById("btn-loc-apply") as HTMLButtonElement;
+const locClearBtn = document.getElementById("btn-loc-clear") as HTMLButtonElement;
+const locHint = document.getElementById("loc-hint") as HTMLParagraphElement;
+const locPresets = document.querySelectorAll(".loc-presets .chip-btn") as NodeListOf<HTMLButtonElement>;
 
 type ClimateKey = "intensity" | "temperatureC" | "windSpeed";
 const climateLocks = new Set<ClimateKey>();
+/** True while a manual pin (or ?lat=&lon=) is active. */
+let manualLocation = false;
 
 function updatePlace(a: AtmosphereSnapshot): void {
 	const line = formatAtmosphereCaption(a)
@@ -104,9 +114,17 @@ if (params.has("wind")) {
 	windSlider.value = params.get("wind")!;
 	climateLocks.add("windSpeed");
 }
+const latParam = params.get("lat");
+const lonParam = params.get("lon");
+const cityParam = params.get("city");
+if (latParam) latInput.value = latParam;
+if (lonParam) lonInput.value = lonParam;
+if (cityParam) cityInput.value = cityParam;
 
 const sky: WorldHandle = createWorld(canvas, {
 	weatherCard: { parent: document.body, position: "top-right" },
+	// Prefer GPS so the 24h tour matches the visitor's real sky under VPN.
+	geolocation: "prefer",
 	gridColor: "rgba(232, 228, 216, 0.32)",
 	terrain: terrainToggle.checked,
 	satellites: satellitesToggle.checked,
@@ -252,8 +270,8 @@ function effectiveHour(): number {
 	const mode = timeMode();
 	if (mode === "golden") return goldenHour(sky.conditions());
 	if (mode === "custom") return Number(customHourSlider.value);
-	const d = new Date();
-	return d.getHours() + d.getMinutes() / 60;
+	// Forecast-location hour so the 24h tour matches Open-Meteo under VPN.
+	return sky.localHour();
 }
 
 function updateTimeLabels(): void {
@@ -376,18 +394,134 @@ function syncUrl(): void {
 	if (climateLocks.has("intensity")) p.set("int", intensitySlider.value);
 	if (climateLocks.has("temperatureC")) p.set("temp", tempSlider.value);
 	if (climateLocks.has("windSpeed")) p.set("wind", windSlider.value);
+	if (manualLocation) {
+		const geo = readManualGeo();
+		if (geo) {
+			p.set("lat", String(Math.round(geo.lat * 100) / 100));
+			p.set("lon", String(Math.round(geo.lon * 100) / 100));
+			if (geo.city) p.set("city", geo.city);
+		}
+	}
 	const search = p.toString() ? `?${p.toString()}` : "";
 	if (location.search !== search) {
 		history.replaceState(null, "", search || location.pathname);
 	}
 }
 
+function syncLocateHint(): void {
+	const hint = sky.locationHint();
+	locateBtn.classList.toggle("btn--locate-hint", !!hint && !manualLocation);
+	locateBtn.title = hint
+		? hint
+		: "Use your device location — accurate sky even on a VPN";
+}
+
+function syncLocChrome(): void {
+	locClearBtn.hidden = !manualLocation;
+	const city = sky.city();
+	const src = sky.locationSource();
+	if (manualLocation && city) {
+		locHint.textContent = `Pinned · ${city}`;
+	} else if (src === "gps" && city) {
+		locHint.textContent = `GPS · ${city}`;
+	} else if (src === "ip" && city) {
+		locHint.textContent = `Network · ${city}`;
+	} else {
+		locHint.textContent = "GPS / network, or pin a place for the 24h tour.";
+	}
+	for (const btn of locPresets) {
+		const active =
+			manualLocation &&
+			Math.abs(Number(btn.dataset.lat) - Number(latInput.value)) < 0.05 &&
+			Math.abs(Number(btn.dataset.lon) - Number(lonInput.value)) < 0.05;
+		btn.classList.toggle("is-active", active);
+	}
+}
+
+function readManualGeo(): { lat: number; lon: number; city?: string } | null {
+	const lat = Number(latInput.value);
+	const lon = Number(lonInput.value);
+	if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+	if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+	const city = cityInput.value.trim();
+	return city ? { lat, lon, city } : { lat, lon };
+}
+
+async function applyManualLocation(): Promise<void> {
+	const geo = readManualGeo();
+	if (!geo) {
+		statusEl.textContent = "Enter valid latitude (−90…90) and longitude (−180…180)";
+		return;
+	}
+	locApplyBtn.disabled = true;
+	statusEl.textContent = "Updating location…";
+	try {
+		const g = await sky.setGeo(geo);
+		manualLocation = !!g;
+		if (g) {
+			const city = sky.city();
+			if (city && !cityInput.value.trim()) cityInput.value = city;
+			statusEl.textContent = city ? `Pinned · ${city}` : `Pinned · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;
+			updatePlace(sky.atmosphere());
+		} else {
+			statusEl.textContent = "Could not apply that location";
+		}
+		syncLocChrome();
+		syncLocateHint();
+		updateStatus();
+	} finally {
+		locApplyBtn.disabled = false;
+	}
+}
+
+async function clearManualLocation(): Promise<void> {
+	locClearBtn.hidden = true;
+	statusEl.textContent = "Returning to auto location…";
+	manualLocation = false;
+	await sky.setGeo(null);
+	const loc = sky.location();
+	if (loc) {
+		latInput.value = loc.lat.toFixed(2);
+		lonInput.value = loc.lon.toFixed(2);
+	}
+	const city = sky.city();
+	cityInput.value = city && city !== "your area" ? city : "";
+	updatePlace(sky.atmosphere());
+	syncLocChrome();
+	syncLocateHint();
+	updateStatus();
+}
+
+function fillLocFromSky(): void {
+	const loc = sky.location();
+	if (!loc || manualLocation) return;
+	if (!latInput.value) latInput.value = loc.lat.toFixed(2);
+	if (!lonInput.value) lonInput.value = loc.lon.toFixed(2);
+	if (!cityInput.value) {
+		const city = sky.city();
+		if (city && city !== "your area") cityInput.value = city;
+	}
+	syncLocChrome();
+}
+
 function updateStatus(): void {
 	updateClock();
 	mirrorClimateFromSky();
+	syncLocateHint();
+	syncLocChrome();
+	fillLocFromSky();
 	if (tourRaf !== 0) return;
 
 	const parts: string[] = [];
+	const locHintText = sky.locationHint();
+	if (locHintText && !manualLocation) parts.push(locHintText);
+
+	const city = sky.city();
+	const src = sky.locationSource();
+	if (city && (src === "gps" || src === "fixed" || src === "ip")) {
+		const tag = src === "fixed" ? "pinned" : src === "gps" ? "GPS" : "network";
+		parts.push(`${city} · ${tag}`);
+	}
 
 	if (terrainToggle.checked) {
 		const t = sky.terrainProfile();
@@ -504,6 +638,62 @@ tourBtn.addEventListener("click", () => {
 	}
 });
 
+locateBtn.addEventListener("click", async () => {
+	locateBtn.disabled = true;
+	const prev = locateBtn.textContent;
+	locateBtn.textContent = "Locating…";
+	statusEl.textContent = "Asking for your location…";
+	try {
+		const g = await sky.relocate();
+		manualLocation = false;
+		if (g) {
+			latInput.value = g.lat.toFixed(2);
+			lonInput.value = g.lon.toFixed(2);
+			const city = sky.city();
+			cityInput.value = city && city !== "your area" ? city : "";
+			statusEl.textContent = city
+				? `Located · ${city}`
+				: `Location updated · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;
+			updatePlace(sky.atmosphere());
+		} else {
+			statusEl.textContent =
+				"Location denied or unavailable — sky still follows IP estimate";
+		}
+		syncLocChrome();
+		syncLocateHint();
+		updateStatus();
+	} finally {
+		locateBtn.disabled = false;
+		locateBtn.textContent = prev;
+	}
+});
+
+locApplyBtn.addEventListener("click", () => {
+	void applyManualLocation();
+});
+
+locClearBtn.addEventListener("click", () => {
+	void clearManualLocation();
+});
+
+for (const btn of locPresets) {
+	btn.addEventListener("click", () => {
+		latInput.value = btn.dataset.lat ?? "";
+		lonInput.value = btn.dataset.lon ?? "";
+		cityInput.value = btn.dataset.city ?? "";
+		void applyManualLocation();
+	});
+}
+
+for (const input of [latInput, lonInput, cityInput]) {
+	input.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			void applyManualLocation();
+		}
+	});
+}
+
 captureBtn.addEventListener("click", () => {
 	const moment = sky.captureMoment();
 	const a = document.createElement("a");
@@ -586,5 +776,13 @@ else applyClimate();
 applyTime();
 mirrorClimateFromSky();
 updateStatus();
+
+// Shareable ?lat=&lon=&city= — apply after mount so weather + terrain refresh.
+if (latParam && lonParam && readManualGeo()) {
+	void applyManualLocation();
+} else {
+	window.setTimeout(fillLocFromSky, 1500);
+}
+
 window.setInterval(updateStatus, 2000);
 window.setInterval(updateClock, 1000);

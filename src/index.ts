@@ -12,6 +12,8 @@ import {
   type ForecastHour,
   type WeatherConditions,
   type GeoLocation,
+  type GeolocationMode,
+  type LocationSource,
   type WeatherCardOptions,
 } from "./weather.js";
 import { fetchTerrain, type TerrainProfile } from "./terrain.js";
@@ -47,6 +49,8 @@ export {
   type Cloudiness,
   type Precipitation,
   type GeoLocation,
+  type GeolocationMode,
+  type LocationSource,
   type WeatherCardOptions,
   type WeatherCardPosition,
   type ForecastHour,
@@ -60,7 +64,13 @@ export {
   forecastConditionsAt,
   formatForecastDetails,
   formatForecastLine,
+  dateAsLocationLocal,
+  decimalHourInUtcOffset,
+  geoDistanceKm,
+  intensityFromPrecip,
+  isoInUtcOffset,
   isoToHour,
+  timezoneOffsetMismatch,
   weatherIcon,
 } from "./weather.js";
 export { fetchTerrain, type TerrainProfile } from "./terrain.js";
@@ -125,10 +135,11 @@ export interface CreateWorldOptions {
   /** Persist geo in localStorage. Default true. */
   cache?: boolean;
   /**
-   * After IP geolocation fails, ask the browser for precise location.
-   * Requires user consent. Default false.
+   * Resolve coordinates via the browser Geolocation API.
+   * `true` / `"prefer"` asks for GPS before IP (real location under VPN).
+   * `"fallback"` keeps IP-first behavior. Default false.
    */
-  geolocation?: boolean;
+  geolocation?: GeolocationMode;
   /** Called when live weather conditions change. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
   /**
@@ -190,6 +201,20 @@ export interface WorldHandle {
   /** Override the wall clock, or pass undefined to use real time again. */
   setTime(fn?: () => Date): void;
   /**
+   * Current decimal hour at the forecast location (browser clock before
+   * the first weather fetch). Use for 24h tours so the sweep matches
+   * sunrise/sunset and hourly forecast slots under a mismatched TZ/VPN.
+   */
+  localHour(date?: Date): number;
+  /** UTC offset (seconds east of UTC) for the forecast location, or null. */
+  utcOffsetSeconds(): number | null;
+  /** City label from geo / reverse-geocode (null until known). */
+  city(): string | null;
+  /** How coordinates were resolved (`gps`, `ip`, …). */
+  locationSource(): LocationSource | null;
+  /** VPN / mismatched-location hint for host UI, or null when confident. */
+  locationHint(): string | null;
+  /**
    * Drive the sky from the hourly forecast at a local decimal hour
    * (0..24) instead of current conditions — pairs with `setTime` so a
    * time sweep shows the weather each hour will actually bring. The next
@@ -235,6 +260,17 @@ export interface WorldHandle {
   setFireflies(enabled: boolean): void;
   /** Current terrain profile, or null while loading / disabled. */
   terrainProfile(): TerrainProfile | null;
+  /**
+   * Ask the browser for a precise location (works under VPN), refresh
+   * weather and terrain, and return the new coordinates. Null if denied
+   * or unavailable. Clears any manual `setGeo` pin.
+   */
+  relocate(): Promise<{ lat: number; lon: number } | null>;
+  /**
+   * Pin the sky to an explicit location, or pass `null` to clear and
+   * re-detect (GPS/IP). Refreshes weather and terrain.
+   */
+  setGeo(geo: GeoLocation | null): Promise<{ lat: number; lon: number } | null>;
   destroy: () => void;
 }
 
@@ -280,8 +316,10 @@ export function createWorld(
     return wx;
   };
 
+  /** Runtime pin from setGeo; falls back to createWorld({ geo }). */
+  let runtimeGeo: GeoLocation | null | undefined = opts.geo;
   const location = (): { lat: number; lon: number } | null => {
-    if (opts.geo) return { lat: opts.geo.lat, lon: opts.geo.lon };
+    if (runtimeGeo) return { lat: runtimeGeo.lat, lon: runtimeGeo.lon };
     return client?.location() ?? null;
   };
 
@@ -292,9 +330,10 @@ export function createWorld(
   let watcher: SatelliteWatcher | null = null;
 
   const loadTerrain = async (): Promise<void> => {
+    const pinned = runtimeGeo ?? opts.geo;
     const g =
-      opts.geo != null
-        ? { lat: opts.geo.lat, lon: opts.geo.lon }
+      pinned != null
+        ? { lat: pinned.lat, lon: pinned.lon }
         : client
           ? await client.whenLocated()
           : location();
@@ -311,6 +350,11 @@ export function createWorld(
   if (terrainEnabled) void loadTerrain();
   if (satellitesEnabled) ensureWatcher();
 
+  let timeOverride: (() => Date) | undefined = opts.time;
+  /** Wall clock in the forecast location's timezone when offset is known. */
+  const locationClock = (): Date => client?.locationDate() ?? new Date();
+  const resolveTime = (): Date => (timeOverride ? timeOverride() : locationClock());
+
   const world = new World(
     { width: canvas.clientWidth || 1, height: canvas.clientHeight || 1 },
     {
@@ -318,7 +362,7 @@ export function createWorld(
       gridColor: opts.gridColor,
       terrain: () => (terrainEnabled ? terrainProfile : null),
       satellites: () => (satellitesEnabled ? watcher?.current() ?? null : null),
-      time: opts.time,
+      time: resolveTime,
       quality: resolvedQuality,
       birds: opts.birds !== false,
       bats: opts.bats !== false,
@@ -361,7 +405,6 @@ export function createWorld(
   let pausedByUser = false;
   let lastAtmosphere: AtmosphereSnapshot | null = null;
   let atmosphereAcc = 0;
-  let timeOverride: (() => Date) | undefined = opts.time;
   const atmosphereRoot =
     opts.atmosphereRoot === null
       ? null
@@ -370,12 +413,12 @@ export function createWorld(
 
   const snapshotAtmosphere = (): AtmosphereSnapshot =>
     buildAtmosphere({
-      date: timeOverride ? timeOverride() : new Date(),
+      date: resolveTime(),
       wx: conditions(),
       wetness: world.getWetness(),
       snowCover: world.getSnowCover(),
       issActive: !!(satellitesEnabled && watcher?.current()),
-      city: opts.geo?.city ?? client?.city() ?? null,
+      city: runtimeGeo?.city ?? client?.city() ?? null,
     });
 
   const publishAtmosphere = (force = false): void => {
@@ -507,8 +550,33 @@ export function createWorld(
     },
     setTime(fn?: () => Date): void {
       timeOverride = fn;
-      world.setTime(fn);
+      // Keep the World on resolveTime so clearing the override returns to
+      // the forecast location clock (not the browser TZ).
+      world.setTime(resolveTime);
       publishAtmosphere(true);
+    },
+    localHour(date?: Date): number {
+      if (timeOverride) {
+        const d = timeOverride();
+        return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+      }
+      if (client) return client.localHour(date);
+      const d = date ?? new Date();
+      return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    },
+    utcOffsetSeconds(): number | null {
+      return client?.utcOffsetSeconds() ?? null;
+    },
+    city(): string | null {
+      return runtimeGeo?.city ?? client?.city() ?? null;
+    },
+    locationSource(): LocationSource | null {
+      if (runtimeGeo) return "fixed";
+      return client?.locationSource() ?? null;
+    },
+    locationHint(): string | null {
+      if (runtimeGeo) return null;
+      return client?.locationHint() ?? null;
     },
     setForecastHour(hour: number | null): void {
       // No publishAtmosphere here — tours call this per frame; the regular
@@ -543,14 +611,14 @@ export function createWorld(
       if (scene !== null && WEATHER_PREVIEWS.includes(scene as WeatherPreview)) {
         weatherPreview = scene as WeatherPreview;
         timeOverride = undefined;
-        world.setTime();
+        world.setTime(resolveTime);
         publishAtmosphere(true);
         return;
       }
       weatherPreview = null;
       if (scene === null) {
         timeOverride = undefined;
-        world.setTime();
+        world.setTime(resolveTime);
         publishAtmosphere(true);
         return;
       }
@@ -562,7 +630,7 @@ export function createWorld(
         return d;
       };
       timeOverride = fn;
-      world.setTime(fn);
+      world.setTime(resolveTime);
       publishAtmosphere(true);
     },
     setFireflies(enabled: boolean): void {
@@ -576,6 +644,28 @@ export function createWorld(
     },
     terrainProfile(): TerrainProfile | null {
       return terrainEnabled ? terrainProfile : null;
+    },
+    async relocate(): Promise<{ lat: number; lon: number } | null> {
+      if (!client) return null;
+      runtimeGeo = undefined;
+      const g = await client.relocate();
+      if (g && terrainEnabled) {
+        terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
+      }
+      publishAtmosphere(true);
+      return g;
+    },
+    async setGeo(geo: GeoLocation | null): Promise<{ lat: number; lon: number } | null> {
+      if (!client) return null;
+      runtimeGeo = geo;
+      const g = await client.setGeo(geo);
+      if (g && terrainEnabled) {
+        terrainProfile = await fetchTerrain(g.lat, g.lon, { cache: opts.cache });
+      } else if (!g) {
+        terrainProfile = null;
+      }
+      publishAtmosphere(true);
+      return g;
     },
     destroy(): void {
       stopLoop();

@@ -11,6 +11,7 @@ function sampleHourly() {
 	const precipitation_probability = [];
 	const cloud_cover = [];
 	const wind_speed_10m = [];
+	const wind_direction_10m = [];
 	const relative_humidity_2m = [];
 	const is_day = [];
 	for (let i = 0; i < 48; i++) {
@@ -23,6 +24,7 @@ function sampleHourly() {
 		precipitation_probability.push(h === 18 ? 80 : 5);
 		cloud_cover.push(h === 18 ? 95 : 40);
 		wind_speed_10m.push(h); // == hour, handy for interpolation checks
+		wind_direction_10m.push(h === 18 ? 270 : 90);
 		relative_humidity_2m.push(60);
 		is_day.push(h >= 6 && h <= 20 ? 1 : 0);
 	}
@@ -34,6 +36,7 @@ function sampleHourly() {
 		precipitation_probability,
 		cloud_cover,
 		wind_speed_10m,
+		wind_direction_10m,
 		relative_humidity_2m,
 		is_day,
 	};
@@ -69,6 +72,7 @@ describe("forecastConditionsAt", () => {
 		assert.equal(wx.precipProbability, 80);
 		assert.equal(wx.sunriseH, 5.5);
 		assert.equal(wx.latitude, 50.06);
+		assert.equal(wx.windDirection, 270);
 	});
 
 	it("keeps thunder hours thundery", () => {
@@ -87,6 +91,16 @@ describe("forecastConditionsAt", () => {
 		const wx = forecastConditionsAt(forecast, 14.5, now, base);
 		assert.equal(wx.temperatureC, 24.5); // halfway 24 → 25
 		assert.equal(wx.windSpeed, 14.5);
+	});
+
+	it("interpolates intensity and cloud cover toward the next hour", () => {
+		// 17:30 sits between clear 17:00 and rainy 18:00.
+		const wx = forecastConditionsAt(forecast, 17.5, now, base);
+		const at17 = forecastConditionsAt(forecast, 17, now, base);
+		const at18 = forecastConditionsAt(forecast, 18, now, base);
+		assert.ok(wx.intensity > at17.intensity);
+		assert.ok(wx.intensity < at18.intensity);
+		assert.equal(wx.cloudCover, (40 + 95) / 2);
 	});
 
 	it("returns null without forecast coverage", () => {

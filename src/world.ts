@@ -210,6 +210,8 @@ export class World {
   private snowCover = 0;
   /** Last precip intensity — regen drops when the slider moves. */
   private dropsIntensity = -1;
+  /** Last WMO code used to size the drop field (drizzle vs showers). */
+  private dropsCode: number | null = null;
   /** Wind speed (km/h) sampled with the current drop field. */
   private dropsWind = 0;
   /** Terrain profile currently baked into the hill paths. */
@@ -666,15 +668,18 @@ export class World {
     const windK = Math.min(1.5, this.dropsWind / 40);
     if (this.dropsKind === "rain") {
       // Wind tilts the streak — calm is near-vertical, a gale is a sheet.
-      const tilt = this.wind * (8 + i * 14) + windK * 22 * Math.sign(this.wind || 1);
-      const len = 6 + i * 16 + windK * 4;
-      const alpha = 0.38 + i * 0.5;
+      // Direction comes from tickWind (meteorological "from" + gust noise).
+      const tilt = this.wind * (10 + i * 16) + windK * 18 * Math.sign(this.wind || 1);
+      // Light intensity = fine drizzle threads; heavy = longer driving streaks.
+      const drizzle = i < 0.38;
+      const len = drizzle ? 3.5 + i * 8 : 6 + i * 16 + windK * 4;
+      const alpha = drizzle ? 0.28 + i * 0.35 : 0.38 + i * 0.5;
       ctx.strokeStyle = `rgba(170, 190, 220, ${alpha.toFixed(3)})`;
-      ctx.lineWidth = i > 0.7 ? 1.25 : 1;
+      ctx.lineWidth = i > 0.75 ? 1.35 : drizzle ? 0.85 : 1;
       ctx.beginPath();
       for (const d of this.drops) {
         ctx.moveTo(d.x, d.y);
-        ctx.lineTo(d.x - 1.5 + tilt, d.y + len);
+        ctx.lineTo(d.x + tilt * 0.85, d.y + len);
       }
       ctx.stroke();
     } else if (this.dropsKind === "snow") {
@@ -743,14 +748,24 @@ export class World {
   }
 
   private tickWind(wx: WeatherConditions | null, dt: number): void {
-    // Real wind speed sets the amplitude; the two summed sines keep the
-    // gusting organic (not perfectly periodic). ~40 km/h reads as full
+    // Real wind speed sets the amplitude; gusts add a little extra push.
+    // Two summed sines keep the gusting organic. ~40 km/h reads as full
     // bluster; 60 km/h pushes past that into a driving gale.
-    const strength = 0.2 + 0.9 * Math.min(1.35, (wx?.windSpeed ?? 8) / 40);
-    this.windPhase += dt * (0.07 + Math.min(0.08, (wx?.windSpeed ?? 0) / 500));
-    this.wind =
-      (Math.sin(this.windPhase) * 0.6 +
-        Math.sin(this.windPhase * 0.31 + 2.1) * 0.4) * strength;
+    const speed = wx?.windSpeed ?? 8;
+    const gusts = wx?.windGusts ?? speed;
+    const strength = 0.2 + 0.9 * Math.min(1.35, speed / 40);
+    const gustBoost = Math.min(0.35, Math.max(0, (gusts - speed) / 80));
+    this.windPhase += dt * (0.07 + Math.min(0.08, speed / 500));
+    const oscillate =
+      Math.sin(this.windPhase) * 0.6 + Math.sin(this.windPhase * 0.31 + 2.1) * 0.4;
+    // Meteorological "from" degrees → canvas horizontal (−1 = left, +1 = right).
+    // Wind from the west (270°) drives rain streaks to the right.
+    let directed = oscillate;
+    if (wx?.windDirection != null && Number.isFinite(wx.windDirection)) {
+      const axis = -Math.sin((wx.windDirection * Math.PI) / 180);
+      directed = axis * 0.78 + oscillate * 0.22;
+    }
+    this.wind = directed * (strength + gustBoost);
   }
 
   private tickClouds(wx: WeatherConditions | null, dt: number): void {
@@ -759,6 +774,7 @@ export class World {
     if (!wx || cloudAlphaFor(wx) < 0.05) return;
     // A wind nudge on top of each cloud's intrinsic drift — with real wind
     // speed in this.wind's amplitude, a blustery day visibly hurries them.
+    // Prefer meteorological direction so banks march with the prevailing wind.
     const windNudge = this.wind * 0.006;
     for (const cloud of this.clouds) {
       // Front-layer clouds are pushed harder — parallax sells depth.
@@ -773,13 +789,16 @@ export class World {
   private tickDrops(wx: WeatherConditions | null, dt: number): void {
     const wantKind: "rain" | "snow" | "none" = wx?.precipitation ?? "none";
     const wantIntensity = wx?.intensity ?? 0;
+    const wantCode = wx?.weatherCode ?? null;
     this.dropsWind = wx?.windSpeed ?? 0;
     if (
       wantKind !== this.dropsKind ||
+      wantCode !== this.dropsCode ||
       Math.abs(wantIntensity - this.dropsIntensity) > 0.04
     ) {
       this.dropsKind = wantKind;
       this.dropsIntensity = wantIntensity;
+      this.dropsCode = wantCode;
       this.regenDrops(wx);
     }
     if (this.drops.length === 0 || wantKind === "none") return;
@@ -887,10 +906,15 @@ export class World {
     }
     const isRain = wx.precipitation === "rain";
     const i = Math.max(0, Math.min(1, wx.intensity));
+    const code = wx.weatherCode ?? null;
+    // Drizzle / light snow codes keep the field sparse; showers pack denser.
+    const drizzle =
+      code != null && [51, 53, 55, 56, 57, 71, 73, 77].includes(code);
+    const shower = code != null && [80, 81, 82, 85, 86].includes(code);
     // Quadratic density: drizzle stays light, 100% is a wall of weather.
-    const dens = 0.2 + i * i * 5.5;
+    const dens = (drizzle ? 0.14 : 0.2) + i * i * (shower ? 6.2 : 5.5);
     const baseCount = Math.round(
-      (this.state.width * this.state.height) / (isRain ? 12_000 : 18_000)
+      (this.state.width * this.state.height) / (isRain ? (drizzle ? 16_000 : 12_000) : 18_000)
     );
     const count = Math.round(baseCount * dens * this.particleScale);
     this.drops = [];
@@ -905,7 +929,7 @@ export class World {
         x: Math.random() * this.state.width,
         y: Math.random() * this.state.height,
         vy: isRain
-          ? 240 + i * 340 + Math.random() * (160 + i * 280)
+          ? (drizzle ? 160 : 240) + i * (drizzle ? 220 : 340) + Math.random() * (160 + i * 280)
           : 22 + i * 45 + Math.random() * (35 + i * 50),
         sway: isRain ? 0 : 0.6 + Math.random() * (1.6 + i),
         swayPhase: Math.random() * Math.PI * 2,

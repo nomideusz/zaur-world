@@ -58,14 +58,24 @@
 		</header>
 
 		<footer class="chrome">
-			<button
-				class="btn btn--tour"
-				id="btn-tour"
-				type="button"
-				title="Sweep the coming 24 hours — the sky follows your hourly forecast"
-			>
-				Play 24 hours
-			</button>
+			<div class="chrome-actions">
+				<button
+					class="btn btn--tour"
+					id="btn-tour"
+					type="button"
+					title="Sweep the coming 24 hours — the sky follows your hourly forecast"
+				>
+					Play 24 hours
+				</button>
+				<button
+					class="btn btn--locate"
+					id="btn-locate"
+					type="button"
+					title="Use your device location — accurate sky even on a VPN"
+				>
+					Use my location
+				</button>
+			</div>
 
 			<details class="tweaks">
 				<summary class="tweaks-trigger">Tweaks</summary>
@@ -110,6 +120,74 @@
 						</label>
 					</div>
 
+					<div class="field" id="field-location">
+						<div class="field-head">
+							<span class="field-label" id="loc-label">Location</span>
+							<button class="btn-text" id="btn-loc-clear" type="button" hidden>
+								Auto
+							</button>
+						</div>
+						<p class="loc-hint" id="loc-hint">
+							GPS / network, or pin a place for the 24h tour.
+						</p>
+						<div class="loc-presets" role="group" aria-label="Place presets">
+							<button type="button" class="chip-btn" data-lat="50.06" data-lon="19.94" data-city="Kraków">
+								Kraków
+							</button>
+							<button type="button" class="chip-btn" data-lat="51.51" data-lon="-0.13" data-city="London">
+								London
+							</button>
+							<button type="button" class="chip-btn" data-lat="40.71" data-lon="-74.01" data-city="New York">
+								New York
+							</button>
+							<button type="button" class="chip-btn" data-lat="35.68" data-lon="139.69" data-city="Tokyo">
+								Tokyo
+							</button>
+						</div>
+						<div class="loc-grid">
+							<label class="loc-field">
+								<span>Lat</span>
+								<input
+									type="number"
+									id="opt-lat"
+									step="0.01"
+									min="-90"
+									max="90"
+									inputmode="decimal"
+									placeholder="50.06"
+									aria-label="Latitude"
+								/>
+							</label>
+							<label class="loc-field">
+								<span>Lon</span>
+								<input
+									type="number"
+									id="opt-lon"
+									step="0.01"
+									min="-180"
+									max="180"
+									inputmode="decimal"
+									placeholder="19.94"
+									aria-label="Longitude"
+								/>
+							</label>
+							<label class="loc-field loc-field--wide">
+								<span>City</span>
+								<input
+									type="text"
+									id="opt-city"
+									maxlength="48"
+									placeholder="optional"
+									autocomplete="address-level2"
+									aria-label="City name"
+								/>
+							</label>
+						</div>
+						<button class="btn btn--apply" id="btn-loc-apply" type="button">
+							Apply location
+						</button>
+					</div>
+
 					<div class="field">
 						<span class="field-label" id="clock-label">Time</span>
 						<div
@@ -141,7 +219,9 @@
 							<label for="time-custom">Custom</label>
 						</div>
 						<div class="field-extra">
-							<p class="time-hint" id="row-time-hint">Follows your local clock.</p>
+							<p class="time-hint" id="row-time-hint">
+								Follows your location’s clock (VPN-safe).
+							</p>
 							<div class="slider" id="row-golden-offset" hidden>
 								<input
 									type="range"

@@ -29,6 +29,7 @@ export interface OpenMeteoHourly {
 	precipitation_probability?: number[];
 	cloud_cover?: number[];
 	wind_speed_10m?: number[];
+	wind_direction_10m?: number[];
 	relative_humidity_2m?: number[];
 	is_day?: number[];
 }
@@ -45,6 +46,8 @@ export interface ForecastHour {
 	precipProbability: number | null;
 	cloudCover: number | null;
 	windSpeed: number | null;
+	/** Direction the wind blows *from*, degrees (0 = north). */
+	windDirection: number | null;
 	humidity: number | null;
 	isDay: boolean;
 }
@@ -60,31 +63,129 @@ export function isoToHour(s: string | undefined): number | null {
 	return Number.isFinite(h) && Number.isFinite(m) ? h + m / 60 : null;
 }
 
+/**
+ * Format an instant as "YYYY-MM-DDTHH:MM" in a fixed UTC offset (seconds east
+ * of UTC) — matches Open-Meteo `timezone=auto` wall-clock strings so forecast
+ * slot matching stays correct when the device TZ differs (e.g. VPN).
+ */
+export function isoInUtcOffset(d: Date, utcOffsetSeconds: number): string {
+	const shifted = new Date(d.getTime() + utcOffsetSeconds * 1000);
+	const pad = (n: number): string => String(n).padStart(2, "0");
+	return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(
+		shifted.getUTCDate()
+	)}T${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+}
+
+/** Decimal hour 0..24 in a fixed UTC offset (seconds east of UTC). */
+export function decimalHourInUtcOffset(d: Date, utcOffsetSeconds: number): number {
+	const shifted = new Date(d.getTime() + utcOffsetSeconds * 1000);
+	return (
+		shifted.getUTCHours() +
+		shifted.getUTCMinutes() / 60 +
+		shifted.getUTCSeconds() / 3600
+	);
+}
+
+/**
+ * Return a Date whose *local* getters (`getHours`, …) show the wall clock at
+ * `utcOffsetSeconds`, so the sky can stay keyed to the forecast location
+ * even when the browser timezone disagrees.
+ */
+export function dateAsLocationLocal(d: Date, utcOffsetSeconds: number): Date {
+	const systemOffsetSec = -d.getTimezoneOffset() * 60;
+	return new Date(d.getTime() + (utcOffsetSeconds - systemOffsetSec) * 1000);
+}
+
+/** Great-circle distance in kilometres (WGS84 sphere). */
+export function geoDistanceKm(
+	a: { lat: number; lon: number },
+	b: { lat: number; lon: number }
+): number {
+	const toRad = (d: number): number => (d * Math.PI) / 180;
+	const r = 6371;
+	const dLat = toRad(b.lat - a.lat);
+	const dLon = toRad(b.lon - a.lon);
+	const lat1 = toRad(a.lat);
+	const lat2 = toRad(b.lat);
+	const h =
+		Math.sin(dLat / 2) ** 2 +
+		Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+	return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * True when the forecast location's UTC offset disagrees with the browser
+ * clock — common under VPN (IP geo in one zone, device TZ in another).
+ */
+export function timezoneOffsetMismatch(
+	forecastOffsetSec: number | null | undefined,
+	browserOffsetSec: number,
+	thresholdSec = 45 * 60
+): boolean {
+	if (forecastOffsetSec == null || !Number.isFinite(forecastOffsetSec)) return false;
+	return Math.abs(forecastOffsetSec - browserOffsetSec) >= thresholdSec;
+}
+
+const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
+
+/**
+ * Continuous precip intensity 0..1 from WMO code + measured/forecast mm
+ * (+ optional probability). Replaces the old 0.4 / 0.65 / 0.95 buckets so
+ * drizzle, showers, and storms scale particle density smoothly.
+ */
+export function intensityFromPrecip(
+	code: number,
+	precipMm: number,
+	precipProbability?: number | null
+): number {
+	const wet = RAIN_CODES.has(code) || SNOW_CODES.has(code);
+	const mm = Number.isFinite(precipMm) ? Math.max(0, precipMm) : 0;
+
+	// Soft floor from WMO severity — keeps "heavy" codes punchy even when
+	// the hourly mm field is coarse or lagged.
+	let codeFloor = 0;
+	if ([55, 65, 67, 75, 82, 86, 99].includes(code)) codeFloor = 0.82;
+	else if ([53, 63, 73, 81, 96].includes(code)) codeFloor = 0.55;
+	else if ([51, 56, 57, 61, 66, 71, 77, 80, 85, 95].includes(code)) codeFloor = 0.32;
+
+	// Continuous mm curve: ~0.2 mm ≈ light veil, ~2 mm ≈ solid rain, 8+ ≈ max.
+	const fromMm = mm <= 0 ? 0 : Math.min(1, 0.18 + (1 - Math.exp(-mm / 2.4)) * 0.82);
+
+	let intensity = Math.max(codeFloor, fromMm);
+
+	// Forecast-only: a dry slot with high precip chance still shows a hint.
+	if (
+		intensity < 0.2 &&
+		precipProbability != null &&
+		Number.isFinite(precipProbability) &&
+		precipProbability >= 40
+	) {
+		intensity = Math.max(intensity, (precipProbability / 100) * 0.42);
+	}
+
+	if (!wet && mm < 0.05 && intensity < 0.2) return 0;
+	return Math.max(0, Math.min(1, intensity));
+}
+
 /** WMO weather code → the sky fields the renderer cares about. */
 function skyFromCode(
 	code: number,
-	precipMm: number
+	precipMm: number,
+	precipProbability?: number | null
 ): Pick<WeatherConditions, "cloudiness" | "precipitation" | "intensity" | "thunder" | "fog"> {
 	let cloudiness: Cloudiness = 0;
 	if ([1, 2].includes(code)) cloudiness = 1;
 	else if (code === 3 || (code >= 45 && code <= 99)) cloudiness = 2;
 
 	let precipitation: Precipitation = "none";
-	if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code)) {
-		precipitation = "rain";
-	} else if ([71, 73, 75, 77, 85, 86].includes(code)) {
-		precipitation = "snow";
-	}
-
-	let intensity = 0.4;
-	if ([55, 65, 67, 75, 82, 86, 99].includes(code)) intensity = 0.95;
-	else if ([53, 63, 73, 81, 96].includes(code)) intensity = 0.65;
-	else if (precipMm >= 1) intensity = Math.min(0.9, 0.35 + precipMm * 0.05);
+	if (RAIN_CODES.has(code)) precipitation = "rain";
+	else if (SNOW_CODES.has(code)) precipitation = "snow";
 
 	return {
 		cloudiness,
 		precipitation,
-		intensity,
+		intensity: intensityFromPrecip(code, precipMm, precipProbability),
 		thunder: [95, 96, 99].includes(code),
 		fog: [45, 48].includes(code),
 	};
@@ -105,6 +206,12 @@ export function deriveConditions(
 	return {
 		...sky,
 		cloudiness: refineCloudiness(sky.cloudiness, c.cloud_cover),
+		// Cloud cover also lifts dry-overcast intensity slightly so a sealed
+		// gray sky feels heavier than a clear day with the same code.
+		intensity:
+			sky.precipitation === "none" && c.cloud_cover != null
+				? Math.max(sky.intensity, Math.min(0.35, (c.cloud_cover / 100) * 0.35))
+				: sky.intensity,
 		isDay: c.is_day !== 0,
 		windSpeed: c.wind_speed_10m ?? 0,
 		temperatureC: c.temperature_2m,
@@ -138,6 +245,7 @@ export function buildHourlyForecast(hourly: OpenMeteoHourly | undefined): Foreca
 			precipProbability: hourly.precipitation_probability?.[i] ?? null,
 			cloudCover: hourly.cloud_cover?.[i] ?? null,
 			windSpeed: hourly.wind_speed_10m?.[i] ?? null,
+			windDirection: hourly.wind_direction_10m?.[i] ?? null,
 			humidity: hourly.relative_humidity_2m?.[i] ?? null,
 			isDay: (hourly.is_day?.[i] ?? 1) !== 0,
 		});
@@ -155,8 +263,9 @@ function lerp(a: number, b: number, t: number): number {
  * `hour` is a local decimal hour (0..24); the slot chosen is the *next*
  * occurrence of that hour at or after `nowISO` (a local "YYYY-MM-DDTHH:MM"
  * string), so a 24-hour sweep starting from the current hour naturally
- * rolls into tomorrow's forecast. Temperature and wind interpolate toward
- * the following slot; sunrise/sunset/latitude carry over from `base`.
+ * rolls into tomorrow's forecast. Temperature, wind, intensity, cloud cover,
+ * humidity, and precip chance interpolate toward the following slot;
+ * sunrise/sunset/latitude carry over from `base`.
  * Returns null when the forecast doesn't cover the requested hour.
  */
 export function forecastConditionsAt(
@@ -185,11 +294,32 @@ export function forecastConditionsAt(
 
 	const slot = forecast[idx];
 	const next = forecast[idx + 1] ?? null;
-	const sky = skyFromCode(slot.weatherCode, slot.precipMm);
+	const sky = skyFromCode(slot.weatherCode, slot.precipMm, slot.precipProbability);
+	const nextSky = next
+		? skyFromCode(next.weatherCode, next.precipMm, next.precipProbability)
+		: null;
 	const windSpeed = slot.windSpeed ?? base?.windSpeed ?? 0;
+	const intensity =
+		nextSky && frac > 0 ? lerp(sky.intensity, nextSky.intensity, frac) : sky.intensity;
+	const cloudCover =
+		next && slot.cloudCover != null && next.cloudCover != null && frac > 0
+			? lerp(slot.cloudCover, next.cloudCover, frac)
+			: slot.cloudCover;
+	const humidity =
+		next && slot.humidity != null && next.humidity != null && frac > 0
+			? lerp(slot.humidity, next.humidity, frac)
+			: slot.humidity;
+	const precipProbability =
+		next &&
+		slot.precipProbability != null &&
+		next.precipProbability != null &&
+		frac > 0
+			? lerp(slot.precipProbability, next.precipProbability, frac)
+			: slot.precipProbability;
 	return {
 		...sky,
-		cloudiness: refineCloudiness(sky.cloudiness, slot.cloudCover),
+		intensity,
+		cloudiness: refineCloudiness(sky.cloudiness, cloudCover),
 		isDay: slot.isDay,
 		windSpeed: next?.windSpeed != null ? lerp(windSpeed, next.windSpeed, frac) : windSpeed,
 		temperatureC: next ? lerp(slot.temperatureC, next.temperatureC, frac) : slot.temperatureC,
@@ -197,11 +327,11 @@ export function forecastConditionsAt(
 		sunsetH: base?.sunsetH ?? null,
 		latitude: base?.latitude,
 		weatherCode: slot.weatherCode,
-		humidity: slot.humidity,
-		cloudCover: slot.cloudCover,
+		humidity,
+		cloudCover,
 		pressureMsl: base?.pressureMsl ?? null,
-		windDirection: base?.windDirection ?? null,
+		windDirection: slot.windDirection ?? base?.windDirection ?? null,
 		windGusts: null,
-		precipProbability: slot.precipProbability,
+		precipProbability,
 	};
 }

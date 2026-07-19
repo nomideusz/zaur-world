@@ -3,7 +3,16 @@
 // that fades in and back out on its own, and the World reads `conditions()`
 // each frame to tint the sky with clouds and precipitation.
 
-import { buildHourlyForecast, deriveConditions, forecastConditionsAt } from "./weather-logic.js";
+import {
+  buildHourlyForecast,
+  dateAsLocationLocal,
+  decimalHourInUtcOffset,
+  deriveConditions,
+  forecastConditionsAt,
+  geoDistanceKm,
+  isoInUtcOffset,
+  timezoneOffsetMismatch,
+} from "./weather-logic.js";
 import type {
   ForecastHour,
   OpenMeteoCurrent,
@@ -75,6 +84,17 @@ const WEATHER_FETCH_TIMEOUT_MS = 8_000;
 const FALLBACK_GEO: Geo = { lat: 51.5074, lon: -0.1278, city: "London" };
 const GEO_CACHE_KEY = "zaur-world-geo";
 
+/**
+ * How to resolve the visitor's coordinates when `geo` is not set.
+ * - `false` / omitted — IP geolocation only (geojs), then cache / London.
+ * - `true` / `"prefer"` — browser GPS first (real location under VPN), then IP.
+ * - `"fallback"` — IP first; browser GPS only if IP fails.
+ */
+export type GeolocationMode = boolean | "prefer" | "fallback";
+
+/** How the active coordinates were resolved. */
+export type LocationSource = "gps" | "ip" | "fixed" | "cache" | "fallback";
+
 export interface WeatherClientOptions {
   /** @deprecated Use `weatherCard.parent` instead. */
   cardParent?: HTMLElement | null;
@@ -87,10 +107,12 @@ export interface WeatherClientOptions {
   /** Called when conditions change after a successful fetch. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
   /**
-   * After IP geolocation fails, ask the browser for precise location.
-   * Requires user consent. Default false.
+   * Resolve coordinates via the browser Geolocation API.
+   * `true` / `"prefer"` asks for GPS before IP (works under VPN).
+   * `"fallback"` keeps the legacy IP-first behavior.
+   * Default false.
    */
-  geolocation?: boolean;
+  geolocation?: GeolocationMode;
 }
 
 export class WeatherClient {
@@ -98,6 +120,9 @@ export class WeatherClient {
   private hourly: ForecastHour[] = [];
   private todayHighC: number | null = null;
   private todayLowC: number | null = null;
+  /** Seconds east of UTC from the last Open-Meteo response (`timezone=auto`). */
+  private utcOffsetSec: number | null = null;
+  private timezoneName: string | null = null;
   private currentLine: string | null = null;
   private currentDetails = "";
   private previewKey: string | null = null;
@@ -106,15 +131,22 @@ export class WeatherClient {
   private readonly timers: number[] = [];
   private readonly cache: boolean;
   private readonly onChange: ((conditions: WeatherConditions) => void) | null;
-  private readonly useGeolocation: boolean;
-  private readonly seedGeo: Geo | null;
+  private readonly geoMode: "off" | "prefer" | "fallback";
+  /** Fixed location from createWorld({ geo }) — cleared only by setGeo(null). */
+  private seedGeo: Geo | null;
+  /** Runtime override from setGeo() — wins over seed and auto-detect. */
+  private manualGeo: Geo | null = null;
   private readonly located: Promise<{ lat: number; lon: number }>;
   private resolveLocated!: (g: { lat: number; lon: number }) => void;
+  private locatedSettled = false;
+  private geoSource: LocationSource | null = null;
+  /** IP estimate kept for VPN/mismatch hints even when GPS wins. */
+  private ipEstimate: Geo | null = null;
 
   constructor(opts: WeatherClientOptions = {}) {
     this.cache = opts.cache !== false;
     this.onChange = opts.onConditionsChange ?? null;
-    this.useGeolocation = opts.geolocation === true;
+    this.geoMode = resolveGeoMode(opts.geolocation);
     const cardOpts = opts.weatherCard ?? (opts.cardParent ? { parent: opts.cardParent } : null);
     this.card = cardOpts ? new WeatherCard(cardOpts) : null;
     this.located = new Promise((resolve) => {
@@ -127,6 +159,8 @@ export class WeatherClient {
         city: opts.geo.city ?? "your area",
       };
       this.cachedGeo = this.seedGeo;
+      this.geoSource = "fixed";
+      this.locatedSettled = true;
       this.resolveLocated({ lat: this.seedGeo.lat, lon: this.seedGeo.lon });
     } else {
       this.seedGeo = null;
@@ -162,7 +196,7 @@ export class WeatherClient {
    * Null until the forecast has loaded.
    */
   conditionsAtHour(hour: number): WeatherConditions | null {
-    return forecastConditionsAt(this.hourly, hour, localIso(new Date()), this.state);
+    return forecastConditionsAt(this.hourly, hour, this.nowISO(), this.state);
   }
 
   /** Today's forecast high/low °C, or null until known. */
@@ -182,6 +216,68 @@ export class WeatherClient {
     return this.cachedGeo?.city ?? null;
   }
 
+  /** How the active coordinates were resolved (null before first resolve). */
+  locationSource(): LocationSource | null {
+    return this.geoSource;
+  }
+
+  /**
+   * Short UX hint when the sky likely follows a VPN/network IP rather than
+   * the visitor's real place. Null when GPS/fixed geo is in use or offsets match.
+   */
+  locationHint(): string | null {
+    if (this.geoSource === "gps" || this.geoSource === "fixed") return null;
+    const browserOffsetSec = -new Date().getTimezoneOffset() * 60;
+    const tzMismatch = timezoneOffsetMismatch(this.utcOffsetSec, browserOffsetSec);
+    const ipFar =
+      this.ipEstimate &&
+      this.cachedGeo &&
+      this.geoSource !== "ip" &&
+      geoDistanceKm(this.ipEstimate, this.cachedGeo) > 150;
+    // Classic VPN: IP city drives the sky while the device TZ disagrees.
+    if (this.geoSource === "ip" && tzMismatch) {
+      return "Sky may follow your VPN — use precise location for your real sky";
+    }
+    if (tzMismatch || ipFar) {
+      return "Location looks off — use precise location for your real sky";
+    }
+    return null;
+  }
+
+  /**
+   * UTC offset (seconds east of UTC) for the forecast location, or null
+   * until the first successful weather fetch.
+   */
+  utcOffsetSeconds(): number | null {
+    return this.utcOffsetSec;
+  }
+
+  /** IANA timezone from Open-Meteo when available (e.g. "Europe/Warsaw"). */
+  timezone(): string | null {
+    return this.timezoneName;
+  }
+
+  /**
+   * Current decimal hour at the forecast location (falls back to the
+   * browser clock before the first fetch).
+   */
+  localHour(date: Date = new Date()): number {
+    if (this.utcOffsetSec != null) {
+      return decimalHourInUtcOffset(date, this.utcOffsetSec);
+    }
+    return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  }
+
+  /**
+   * A Date whose local getters match the forecast location's wall clock —
+   * keeps sunrise/sunset and the day cycle aligned under a mismatched
+   * browser timezone (VPN). Falls back to `date` before the first fetch.
+   */
+  locationDate(date: Date = new Date()): Date {
+    if (this.utcOffsetSec == null) return date;
+    return dateAsLocationLocal(date, this.utcOffsetSec);
+  }
+
   /** Resolves once approximate location is known (IP, cache, seed, or fallback). */
   whenLocated(): Promise<{ lat: number; lon: number }> {
     return this.located;
@@ -190,6 +286,56 @@ export class WeatherClient {
   /** Re-fetch weather (e.g. when the tab becomes visible again). */
   refresh(): Promise<void> {
     return this.fetchWeather();
+  }
+
+  /**
+   * Ask the browser for a precise location, replace any IP/cached geo,
+   * and refresh weather. Use when the visitor is on a VPN or moved.
+   * Returns null if permission is denied or geolocation is unavailable.
+   */
+  async relocate(): Promise<{ lat: number; lon: number } | null> {
+    // GPS always wins over a manual/seed pin when the visitor asks to relocate.
+    this.manualGeo = null;
+    const browser = await this.browserGeo();
+    if (!browser) return null;
+    const named = await this.withCityName(browser);
+    this.commitGeo(named, "gps");
+    await this.fetchWeather();
+    return { lat: named.lat, lon: named.lon };
+  }
+
+  /**
+   * Pin the sky to an explicit location (lat/lon, optional city), or pass
+   * `null` to clear the pin and re-detect (GPS/IP). Refreshes weather.
+   */
+  async setGeo(geo: GeoLocation | null): Promise<{ lat: number; lon: number } | null> {
+    if (geo == null) {
+      this.manualGeo = null;
+      this.seedGeo = null;
+      this.cachedGeo = null;
+      this.geoSource = null;
+      this.utcOffsetSec = null;
+      this.timezoneName = null;
+      await this.fetchWeather();
+      const cleared = this.location();
+      return cleared;
+    }
+    if (!Number.isFinite(geo.lat) || !Number.isFinite(geo.lon)) return null;
+    const next: Geo = {
+      lat: geo.lat,
+      lon: geo.lon,
+      city: geo.city?.trim() || "your area",
+    };
+    if (next.city === "your area") {
+      const named = await this.withCityName(next);
+      this.manualGeo = named;
+      this.commitGeo(named, "fixed");
+    } else {
+      this.manualGeo = next;
+      this.commitGeo(next, "fixed");
+    }
+    await this.fetchWeather();
+    return this.location();
   }
 
   /** Show or hide the ambient weather card. */
@@ -242,7 +388,7 @@ export class WeatherClient {
       url.searchParams.set(
         "hourly",
         "temperature_2m,weather_code,precipitation,precipitation_probability," +
-          "cloud_cover,wind_speed_10m,relative_humidity_2m,is_day"
+          "cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day"
       );
       url.searchParams.set("forecast_days", "2");
       url.searchParams.set("timezone", "auto");
@@ -252,9 +398,18 @@ export class WeatherClient {
         current?: OpenMeteoCurrent;
         daily?: OpenMeteoDaily;
         hourly?: OpenMeteoHourly;
+        utc_offset_seconds?: number;
+        timezone?: string;
       };
       const c = data.current;
       if (!c) return;
+
+      if (typeof data.utc_offset_seconds === "number" && Number.isFinite(data.utc_offset_seconds)) {
+        this.utcOffsetSec = data.utc_offset_seconds;
+      }
+      if (typeof data.timezone === "string" && data.timezone.length > 0) {
+        this.timezoneName = data.timezone;
+      }
 
       this.hourly = buildHourlyForecast(data.hourly);
       this.todayHighC = data.daily?.temperature_2m_max?.[0] ?? null;
@@ -275,75 +430,92 @@ export class WeatherClient {
   }
 
   private async geo(): Promise<Geo> {
+    if (this.manualGeo) {
+      return this.commitGeo(this.manualGeo, "fixed");
+    }
     if (this.cachedGeo) return this.cachedGeo;
     if (this.seedGeo) {
-      this.cachedGeo = this.seedGeo;
-      this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
-      return this.cachedGeo;
+      return this.commitGeo(this.seedGeo, "fixed");
     }
-    try {
-      const res = await fetchWithTimeout("https://get.geojs.io/v1/ip/geo.json");
-      if (res.ok) {
-        const j = (await res.json()) as {
-          latitude?: string | number;
-          longitude?: string | number;
-          city?: string;
-        };
-        const lat = Number(j.latitude);
-        const lon = Number(j.longitude);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-          this.cachedGeo = {
-            lat,
-            lon,
-            city: typeof j.city === "string" && j.city.length > 0 ? j.city : "your area",
-          };
-          if (this.cache) {
-            try {
-              localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(this.cachedGeo));
-            } catch {
-              /* private mode */
-            }
-          }
-          this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
-          return this.cachedGeo;
-        }
-      }
-    } catch {
-      /* fall through */
-    }
-    if (this.useGeolocation) {
+
+    // Always learn the IP estimate (for VPN hints) even when GPS is preferred.
+    const fromIp = await this.ipGeo();
+    if (fromIp) this.ipEstimate = fromIp;
+
+    if (this.geoMode === "prefer") {
       const browser = await this.browserGeo();
       if (browser) {
-        this.cachedGeo = browser;
-        if (this.cache) {
-          try {
-            localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(this.cachedGeo));
-          } catch {
-            /* private mode */
-          }
-        }
-        this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
-        return this.cachedGeo;
+        const named = await this.withCityName(browser);
+        return this.commitGeo(named, "gps");
       }
     }
+
+    if (fromIp) return this.commitGeo(fromIp, "ip");
+
+    if (this.geoMode === "fallback") {
+      const browser = await this.browserGeo();
+      if (browser) {
+        const named = await this.withCityName(browser);
+        return this.commitGeo(named, "gps");
+      }
+    }
+
     if (this.cache) {
       try {
         const saved = localStorage.getItem(GEO_CACHE_KEY);
         if (saved) {
           const g = JSON.parse(saved) as Partial<Geo>;
           if (Number.isFinite(g.lat) && Number.isFinite(g.lon) && typeof g.city === "string") {
-            this.cachedGeo = { lat: g.lat as number, lon: g.lon as number, city: g.city };
-            this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
-            return this.cachedGeo;
+            return this.commitGeo(
+              { lat: g.lat as number, lon: g.lon as number, city: g.city },
+              "cache"
+            );
           }
         }
       } catch {
         /* fall through */
       }
     }
-    this.cachedGeo = FALLBACK_GEO;
-    this.resolveLocated({ lat: this.cachedGeo.lat, lon: this.cachedGeo.lon });
-    return this.cachedGeo;
+    return this.commitGeo(FALLBACK_GEO, "fallback");
+  }
+
+  private async ipGeo(): Promise<Geo | null> {
+    try {
+      const res = await fetchWithTimeout("https://get.geojs.io/v1/ip/geo.json");
+      if (!res.ok) return null;
+      const j = (await res.json()) as {
+        latitude?: string | number;
+        longitude?: string | number;
+        city?: string;
+      };
+      const lat = Number(j.latitude);
+      const lon = Number(j.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        lat,
+        lon,
+        city: typeof j.city === "string" && j.city.length > 0 ? j.city : "your area",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private commitGeo(geo: Geo, source: LocationSource): Geo {
+    this.cachedGeo = geo;
+    this.geoSource = source;
+    if (this.cache) {
+      try {
+        localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geo));
+      } catch {
+        /* private mode */
+      }
+    }
+    if (!this.locatedSettled) {
+      this.locatedSettled = true;
+      this.resolveLocated({ lat: geo.lat, lon: geo.lon });
+    }
+    return geo;
   }
 
   private browserGeo(): Promise<Geo | null> {
@@ -359,10 +531,29 @@ export class WeatherClient {
             city: "your area",
           }),
         () => resolve(null),
-        { timeout: 12_000, maximumAge: 600_000 }
+        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 }
       );
     });
   }
+
+  /** Fill in a real city name for GPS pins that only have "your area". */
+  private async withCityName(geo: Geo): Promise<Geo> {
+    if (geo.city && geo.city !== "your area") return geo;
+    const city = await reverseGeocodeCity(geo.lat, geo.lon);
+    return city ? { ...geo, city } : geo;
+  }
+
+  /** "Now" as a location-local ISO string comparable to Open-Meteo hours. */
+  private nowISO(d: Date = new Date()): string {
+    if (this.utcOffsetSec != null) return isoInUtcOffset(d, this.utcOffsetSec);
+    return localIso(d);
+  }
+}
+
+function resolveGeoMode(mode: GeolocationMode | undefined): "off" | "prefer" | "fallback" {
+  if (mode === true || mode === "prefer") return "prefer";
+  if (mode === "fallback") return "fallback";
+  return "off";
 }
 
 function conditionsEqual(a: WeatherConditions, b: WeatherConditions): boolean {
@@ -393,6 +584,31 @@ function localIso(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}`;
+}
+
+/** Browser-friendly reverse geocode (no API key). */
+async function reverseGeocodeCity(lat: number, lon: number): Promise<string | null> {
+  try {
+    const url = new URL("https://api.bigdatacloud.net/data/reverse-geocode-client");
+    url.searchParams.set("latitude", String(lat));
+    url.searchParams.set("longitude", String(lon));
+    url.searchParams.set("localityLanguage", "en");
+    const res = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      city?: string;
+      locality?: string;
+      principalSubdivision?: string;
+    };
+    const city =
+      (typeof j.city === "string" && j.city) ||
+      (typeof j.locality === "string" && j.locality) ||
+      (typeof j.principalSubdivision === "string" && j.principalSubdivision) ||
+      "";
+    return city.length > 0 ? city : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -666,6 +882,34 @@ function injectStylesOnce(): void {
       letter-spacing: 0.03em;
       opacity: 0.72;
     }
+    @media (max-width: 480px) {
+      .wx-card,
+      .wx-card[data-position="top-right"],
+      .wx-card[data-position="top-left"] {
+        top: auto;
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        right: 12px;
+        left: auto;
+        max-width: min(92vw, 300px);
+        font-size: 11px;
+        padding: 7px 11px;
+        z-index: 11;
+      }
+      .wx-card[data-position="bottom-left"] {
+        left: 12px;
+        right: auto;
+      }
+      .wx-card[data-position="top-left"] {
+        /* Still bottom on phones so it clears the brand block. */
+        left: 12px;
+        right: auto;
+      }
+      .wx-card__line {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
       .wx-card { transition: opacity 200ms ease; transform: none; }
     }
@@ -675,9 +919,15 @@ function injectStylesOnce(): void {
 
 export {
   buildHourlyForecast,
+  dateAsLocationLocal,
+  decimalHourInUtcOffset,
   deriveConditions,
   forecastConditionsAt,
+  geoDistanceKm,
+  intensityFromPrecip,
+  isoInUtcOffset,
   isoToHour,
+  timezoneOffsetMismatch,
   type ForecastHour,
   type OpenMeteoCurrent,
   type OpenMeteoDaily,

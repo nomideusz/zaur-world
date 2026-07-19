@@ -9,7 +9,8 @@ named Zaur walks on the day's news under it.
 
 **[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play 24 hours** for a
 30-second tour through dawn, golden hour, dusk, and the night sky, with the
-hourly forecast riding along beside the clock.
+hourly forecast riding along beside the clock. On a VPN, tap **Use my location**
+so the tour matches your real sky.
 
 | Golden hour | Night |
 | --- | --- |
@@ -20,13 +21,14 @@ hourly forecast riding along beside the clock.
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
   (Open-Meteo), so summer evenings stay light late and winter days end early.
   Sun arcs by day; a phase-accurate moon with craters and earthshine by night.
-- **Live weather** — per-visitor IP geolocation drives clouds (three parallax
-  layers), rain with splashes, snow, fog, thunderstorms with procedural
-  lightning, and wind that slants rain, drives flakes sideways, and hurries
-  the clouds. Intensity scales the whole scene: light drizzle is a veil;
-  100% is a sealed overcast with no sun visible. Overcast desaturates the
-  sky; clear days are genuinely blue. Conditions stay physically coherent
-  (warm snow melts to rain; sub-zero rain falls as snow).
+- **Live weather** — per-visitor location (IP by default, or browser GPS with
+  `geolocation: "prefer"` / `sky.relocate()` — accurate even on a VPN) drives
+  clouds (three parallax layers), rain with splashes, snow, fog, thunderstorms
+  with procedural lightning, and wind that slants rain, drives flakes
+  sideways, and hurries the clouds. Intensity scales the whole scene: light
+  drizzle is a veil; 100% is a sealed overcast with no sun visible. Overcast
+  desaturates the sky; clear days are genuinely blue. Conditions stay
+  physically coherent (warm snow melts to rain; sub-zero rain falls as snow).
 - **Golden hour** — horizon glow, and cloud undersides that catch fire
   at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
@@ -217,11 +219,35 @@ with precip chance, wind, and humidity — and stays on screen until you pass
 `null`. Building your own readout instead? `formatForecastLine(hour, wx)`,
 `formatForecastDetails(wx)`, and `weatherIcon(wx)` are exported.
 
+The sky clock and forecast slots use the **location's** timezone (from
+Open-Meteo), not the browser TZ — so a 24h tour stays coherent under VPN.
+Use `sky.localHour()` when starting your own sweep.
+
 ![24-hour tour at golden hour — the forecast rides beside the clock while the weather card tracks the swept hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/tour.png)
 
 Current conditions carry detail too: `humidity`, `cloudCover`,
 `pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to
-`describeWeather()`).
+`describeWeather()`). Intensity scales continuously from precip mm (and
+WMO code), and forecast hours interpolate intensity, cloud cover, humidity,
+and precip chance between slots.
+
+### Location (VPN-safe)
+
+```ts
+createWorld(canvas, { geolocation: "prefer" }); // GPS first, IP fallback
+
+await sky.relocate();           // re-ask for GPS; reverse-geocodes the city
+await sky.setGeo({ lat: 50.06, lon: 19.94, city: "Kraków" }); // pin a place
+await sky.setGeo(null);         // clear pin → re-detect
+sky.city();                     // "Kraków" (from IP, GPS, or reverse-geocode)
+sky.locationSource();           // "gps" | "ip" | "fixed" | …
+sky.locationHint();             // VPN/mismatch tip for your UI, or null
+```
+
+`locationHint()` is non-null when the forecast timezone disagrees with the
+device clock (typical VPN). The demo pulses **Use my location** in that case,
+and Tweaks → **Location** lets visitors pin coords or pick a preset city
+(`?lat=&lon=&city=` shareable).
 
 ### Options
 
@@ -254,8 +280,9 @@ createWorld(canvas, {
   bats: true,
   fireflies: true,
 
-  // Browser geolocation fallback when IP lookup fails (opt-in).
-  geolocation: true,
+  // Prefer browser GPS over IP (real location under VPN). Opt-in.
+  // Also: "fallback" (IP first), or sky.relocate() after mount.
+  geolocation: "prefer",
 
   // Wall clock override for demos and screenshots.
   time: () => new Date("2026-07-12T19:30:00"),

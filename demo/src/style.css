@@ -420,10 +420,12 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	box-shadow: inset 0 0 calc(var(--zw-frost, 0) * 18px)
 		rgba(200, 220, 255, calc(var(--zw-frost, 0) * 0.35));
 	animation: tweaks-in 0.28s var(--ease);
-	max-height: min(62vh, 28rem);
+	max-height: min(72vh, 34rem);
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(230, 234, 240, 0.22) transparent;
 }
 
 .tweaks-panel > * {
@@ -554,6 +556,125 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 .climate-hint[hidden] {
 	display: none;
+}
+
+.loc-hint {
+	margin: 0;
+	font-size: 0.62rem;
+	color: var(--ink-faint);
+	line-height: 1.4;
+}
+
+.loc-presets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+}
+
+.chip-btn {
+	pointer-events: auto;
+	margin: 0;
+	padding: 0.28rem 0.55rem;
+	border-radius: 6px;
+	border: 1px solid var(--panel-edge);
+	background: var(--chip);
+	color: var(--ink-muted);
+	font: 500 0.62rem var(--font-sans);
+	letter-spacing: 0.02em;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-btn:hover {
+	color: var(--ink);
+	background: var(--chip-on);
+	border-color: var(--chip-on-edge);
+}
+
+.chip-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.chip-btn.is-active {
+	color: var(--ink);
+	background: var(--chip-on);
+	border-color: var(--chip-on-edge);
+}
+
+.loc-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.4rem;
+}
+
+.loc-field {
+	display: grid;
+	gap: 0.2rem;
+	font-size: 0.58rem;
+	font-weight: 500;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-faint);
+}
+
+.loc-field--wide {
+	grid-column: 1 / -1;
+}
+
+.loc-field input {
+	pointer-events: auto;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 0.4rem 0.5rem;
+	border-radius: 6px;
+	border: 1px solid var(--panel-edge);
+	background: rgba(0, 0, 0, 0.28);
+	color: var(--ink);
+	font: 500 0.72rem var(--font-sans);
+	letter-spacing: 0.01em;
+	text-transform: none;
+}
+
+.loc-field input::placeholder {
+	color: var(--ink-faint);
+}
+
+.loc-field input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* Hide number spinners — coords are typed, not nudged. */
+.loc-field input[type="number"]::-webkit-outer-spin-button,
+.loc-field input[type="number"]::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.loc-field input[type="number"] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.btn--apply {
+	pointer-events: auto;
+	width: 100%;
+	margin-top: 0.15rem;
+	padding: 0.45rem 0.7rem;
+	font-size: 0.68rem;
+	color: var(--accent);
+	background: var(--chip-on);
+	border-color: var(--chip-on-edge);
+}
+
+.btn--apply:hover:not(:disabled) {
+	background: rgba(142, 197, 255, 0.28);
+}
+
+.btn--apply:disabled {
+	opacity: 0.6;
+	cursor: wait;
 }
 
 .btn-text {
@@ -735,8 +856,15 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	color: var(--ink-muted);
 }
 
-.btn--tour {
+.chrome-actions {
 	pointer-events: auto;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.btn--tour {
 	padding: 0.4rem 0.85rem;
 	font-size: 0.72rem;
 	letter-spacing: 0.02em;
@@ -750,6 +878,43 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 .btn--tour:hover {
 	background: rgba(244, 165, 116, 0.14);
+}
+
+.btn--locate {
+	padding: 0.4rem 0.75rem;
+	font-size: 0.68rem;
+	letter-spacing: 0.02em;
+	color: var(--accent);
+	background: var(--panel);
+	border-color: rgba(142, 197, 255, 0.35);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	text-shadow: none;
+}
+
+.btn--locate:hover:not(:disabled) {
+	background: rgba(142, 197, 255, 0.14);
+}
+
+.btn--locate:disabled {
+	opacity: 0.65;
+	cursor: wait;
+}
+
+.btn--locate-hint {
+	border-color: rgba(244, 165, 116, 0.55);
+	color: var(--accent-warm);
+	animation: locate-hint-pulse 2.4s var(--ease) infinite;
+}
+
+@keyframes locate-hint-pulse {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(244, 165, 116, 0);
+	}
+	50% {
+		box-shadow: 0 0 0 3px rgba(244, 165, 116, 0.22);
+	}
 }
 
 .tweaks-status {
@@ -837,6 +1002,20 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 	.chrome {
 		max-width: min(20rem, 94vw);
+		/* Leave room for the weather card parked bottom-right on phones. */
+		padding-bottom: 2.75rem;
+	}
+
+	.chrome-actions {
+		width: 100%;
+	}
+
+	.btn--tour,
+	.btn--locate {
+		flex: 1 1 auto;
+		min-height: 2.4rem;
+		padding: 0.5rem 0.7rem;
+		font-size: 0.74rem;
 	}
 
 	.tweaks {
@@ -849,6 +1028,11 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 	.code {
 		font-size: 0.62rem;
+	}
+
+	.wx {
+		font-size: 0.68rem;
+		max-width: 88vw;
 	}
 }
 
@@ -873,5 +1057,9 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	.btn--tour {
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
+	}
+
+	.btn--locate-hint {
+		animation: none;
 	}
 }

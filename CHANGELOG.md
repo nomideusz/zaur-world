@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-19
+
+### Added
+
+- `geolocation: "prefer" | "fallback" | boolean` — GPS-first mode for real location under VPN (`true` means prefer)
+- `sky.relocate()` / `WeatherClient.relocate()` — re-resolve via browser geolocation and refresh weather + terrain
+- `sky.setGeo(geo | null)` / `WeatherClient.setGeo()` — pin an explicit location at runtime (or clear back to auto-detect)
+- `sky.localHour()`, `utcOffsetSeconds()`, `city()`, `locationSource()`, `locationHint()` — location-aware clock and VPN mismatch hints
+- Reverse-geocode for GPS pins (BigDataCloud, no API key) so the card shows a city name instead of "your area"
+- Continuous precip intensity from mm + WMO code (`intensityFromPrecip`); forecast slots also interpolate intensity, cloud cover, humidity, and precip chance
+- Hourly `wind_direction_10m` in the forecast; rain/snow slant and cloud drift follow meteorological wind direction + gusts
+- Pure helpers: `isoInUtcOffset`, `decimalHourInUtcOffset`, `dateAsLocationLocal`, `geoDistanceKm`, `timezoneOffsetMismatch`
+- Demo: **Use my location**; Tweaks → **Location** (lat/lon/city, city presets, shareable `?lat=&lon=&city=`); mobile weather card + action buttons; VPN hint pulses the locate button
+
+### Changed
+
+- Default live clock follows the forecast location timezone when the Open-Meteo offset is known (fixes 24h tour vs forecast mismatch under VPN)
+- Drizzle vs shower WMO codes tune particle density and streak length
+- Weather card on narrow viewports moves to the bottom to clear the brand block
+- Demo Tweaks panel taller/scrollable to fit the location controls
+
 ## [0.10.0] - 2026-07-16
 
 ### Added

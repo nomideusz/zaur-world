@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { deriveConditions, isoToHour } from "../dist/weather-logic.js";
+import {
+	decimalHourInUtcOffset,
+	deriveConditions,
+	geoDistanceKm,
+	intensityFromPrecip,
+	isoInUtcOffset,
+	isoToHour,
+	timezoneOffsetMismatch,
+} from "../dist/weather-logic.js";
 
 describe("isoToHour", () => {
 	it("parses Open-Meteo local time strings", () => {
@@ -10,6 +18,22 @@ describe("isoToHour", () => {
 	it("returns null for invalid input", () => {
 		assert.equal(isoToHour(undefined), null);
 		assert.equal(isoToHour("bad"), null);
+	});
+});
+
+describe("isoInUtcOffset", () => {
+	it("formats an instant in a fixed UTC offset", () => {
+		// 2026-07-14T12:00:00.000Z + 2h → 14:00 local
+		const d = new Date("2026-07-14T12:00:00.000Z");
+		assert.equal(isoInUtcOffset(d, 7200), "2026-07-14T14:00");
+		assert.equal(isoInUtcOffset(d, -14400), "2026-07-14T08:00");
+	});
+});
+
+describe("decimalHourInUtcOffset", () => {
+	it("returns the location wall-clock hour", () => {
+		const d = new Date("2026-07-14T12:30:00.000Z");
+		assert.equal(decimalHourInUtcOffset(d, 7200), 14.5);
 	});
 });
 
@@ -66,5 +90,57 @@ describe("deriveConditions", () => {
 		});
 		// Never demoted below what the code promises.
 		assert.equal(overcastCode.cloudiness, 2);
+	});
+
+	it("scales intensity continuously with precip mm", () => {
+		const drizzle = deriveConditions({
+			temperature_2m: 12,
+			weather_code: 51,
+			precipitation: 0.2,
+		});
+		const heavy = deriveConditions({
+			temperature_2m: 12,
+			weather_code: 65,
+			precipitation: 6,
+		});
+		assert.ok(drizzle.intensity > 0.25 && drizzle.intensity < 0.55);
+		assert.ok(heavy.intensity > drizzle.intensity);
+		assert.ok(heavy.intensity > 0.8);
+	});
+});
+
+describe("intensityFromPrecip", () => {
+	it("returns 0 for dry clear skies", () => {
+		assert.equal(intensityFromPrecip(0, 0), 0);
+	});
+
+	it("ramps with mm between light and heavy rain", () => {
+		const light = intensityFromPrecip(61, 0.4);
+		const heavy = intensityFromPrecip(61, 5);
+		assert.ok(light < heavy);
+		assert.ok(heavy > 0.7);
+	});
+});
+
+describe("geoDistanceKm", () => {
+	it("is ~0 for the same point", () => {
+		assert.ok(geoDistanceKm({ lat: 50, lon: 20 }, { lat: 50, lon: 20 }) < 0.01);
+	});
+
+	it("measures a known city pair roughly", () => {
+		// London ↔ Paris is ~340 km
+		const km = geoDistanceKm(
+			{ lat: 51.5074, lon: -0.1278 },
+			{ lat: 48.8566, lon: 2.3522 }
+		);
+		assert.ok(km > 300 && km < 400);
+	});
+});
+
+describe("timezoneOffsetMismatch", () => {
+	it("flags VPN-sized offset gaps", () => {
+		assert.equal(timezoneOffsetMismatch(7200, -14400), true);
+		assert.equal(timezoneOffsetMismatch(7200, 7200), false);
+		assert.equal(timezoneOffsetMismatch(null, 7200), false);
 	});
 });
