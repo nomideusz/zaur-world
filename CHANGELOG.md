@@ -9,17 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `WorldHandle.location()` — resolved coordinates the sky is keyed to (manual pin → GPS/IP), `null` until known
 - 15-minute precipitation nowcast: the weather fetch pulls Open-Meteo `minutely_15` (precipitation + weather code, next 2 h) and current conditions advance along it every minute — rain or thunder starting/stopping mid-hour reaches the sky within a minute of its slot instead of waiting out the coarse hourly value. Natively modelled in Europe/North America, interpolated elsewhere; degrades to previous behavior when the series is missing or stale
 - Pure helpers `buildMinutely15` / `refineWithMinutely` and types `MinutelySlot` / `OpenMeteoMinutely15` exported for host pages
+- Wake catch-up: when the tab becomes visible again or the network reconnects, the sky applies the current 15-minute slot immediately and re-fetches weather if the data is older than 5 minutes — a page left open all day (throttled background timers, phone sleep) no longer shows stale conditions; `refresh()` also guards against overlapping fetches
 - Cirrus layer: lightly veiled skies (~10–40% real cloud cover, no precip) now show high thin feathery filaments instead of reading fully clear — deterministic pattern, slow drift, warm blush at golden hour, faint at night, fades out as the puffy layers take over
 - Distant rain curtains: heavy rain (intensity > ~0.45) hangs three soft shafts from the cloud base toward the ridge, slanted with the wind and slowly crossing the sky — the downpour reads in the distance, not just as foreground streaks
-- Wake catch-up: when the tab becomes visible again or the network reconnects, the sky applies the current 15-minute slot immediately and re-fetches weather if the data is older than 5 minutes — a page left open all day (throttled background timers, phone sleep) no longer shows stale conditions; `refresh()` also guards against overlapping fetches
-- Demo: `theme-color` + `viewport-fit=cover` meta for a cleaner mobile chrome
-- Demo installs to a phone home screen: web app manifest (standalone display, 192/512 + maskable icons rendered from the brand mark), apple-touch-icon, and a proper favicon (fixing the 404 on every load)
-
-- `WorldHandle.location()` — resolved coordinates the sky is keyed to (manual pin → GPS/IP), `null` until known
 - Demo: **Day strip** — a 24-hour forecast dock along the bottom edge: one cell per hour (time, condition icon, temperature, precip-probability meter), starting at the current hour in the forecast location's timezone (VPN-safe). Click or drag across it to pin the sky, clock, and weather card to that hour; click again, press Esc, or hit "Back to live" to return. Doubles as the progress bar for the 24-hour tour. Toggle via Tweaks → Day strip or `?strip=0`.
 - Demo: the day strip carries a temperature curve across all 24 hours, sunrise ☀ / sunset ☽ hairline markers at their exact times, and darker night-hour cells — the whole day's shape reads at a glance
+- Demo installs to a phone home screen: web app manifest (standalone display, 192/512 + maskable icons rendered from the brand mark), apple-touch-icon, and a proper favicon (fixing the 404 on every load)
+- Demo: `theme-color` + `viewport-fit=cover` meta for a cleaner mobile chrome
 
 ### Fixed
 
