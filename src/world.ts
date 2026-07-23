@@ -502,7 +502,7 @@ export class World {
       0,
       1 - cloudAlpha * (0.75 + intensity * intensity * 0.5)
     );
-    drawCelestial(ctx, width, height, h, celestialDim, date);
+    drawCelestial(ctx, width, height, h, celestialDim, date, wx?.eclipse ?? undefined);
 
     // Warm dome of city light beyond the ridge — the visitor's IP resolved
     // to a town, after all. Overcast makes it stronger: clouds bounce the

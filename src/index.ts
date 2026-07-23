@@ -35,11 +35,8 @@ import {
   formatAtmosphereCaption,
   type AtmosphereSnapshot,
 } from "./atmosphere.js";
-import {
-  atmosphereEquals,
-  captureWithCaption,
-  type CaptureMomentResult,
-} from "./capture.js";
+import { atmosphereEquals, captureWithCaption, type CaptureMomentResult } from "./capture.js";
+import { currentEclipse } from "./eclipse.js";
 
 export { World, type WorldOptions, type WorldState } from "./world.js";
 export {
@@ -327,6 +324,16 @@ export function createWorld(
     if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
     if (weatherOverride) wx = applyWeatherOverride(wx, weatherOverride);
     else if (wx) wx = normalizeWeather(wx);
+
+    if (wx) {
+      if (weatherOverride?.forceEclipse) {
+        wx.eclipse = { type: weatherOverride.forceEclipse, progress: 1.0 };
+      } else {
+        const d = resolveTime();
+        const loc = location();
+        wx.eclipse = currentEclipse(d, loc?.lat, loc?.lon) ?? undefined;
+      }
+    }
     return wx;
   };
 

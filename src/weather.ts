@@ -59,6 +59,8 @@ export interface WeatherConditions {
   windGusts?: number | null;
   /** Chance of precipitation, % (forecast hours only). */
   precipProbability?: number | null;
+  /** Eclipse state, if any is active right now. */
+  eclipse?: { type: "solar" | "lunar"; progress: number } | null;
 }
 
 export interface GeoLocation {

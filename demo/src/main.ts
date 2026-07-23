@@ -41,6 +41,9 @@ const firefliesToggle = document.getElementById("opt-fireflies") as HTMLInputEle
 const wxRadios = document.querySelectorAll(
 	'input[name="wx"]'
 ) as NodeListOf<HTMLInputElement>;
+const eclipseRadios = document.querySelectorAll(
+	'input[name="eclipse-mode"]'
+) as NodeListOf<HTMLInputElement>;
 const qualityRadios = document.querySelectorAll(
 	'input[name="quality"]'
 ) as NodeListOf<HTMLInputElement>;
@@ -112,6 +115,10 @@ if (qParam === "high" || qParam === "low") {
 const modeParam = params.get("mode");
 if (modeParam === "golden" || modeParam === "custom") {
 	(document.getElementById(`time-${modeParam}`) as HTMLInputElement).checked = true;
+}
+const eclipseParam = params.get("eclipse");
+if (eclipseParam && ["solar", "lunar"].includes(eclipseParam)) {
+	(document.getElementById(`eclipse-${eclipseParam}`) as HTMLInputElement).checked = true;
 }
 const offParam = params.get("off");
 if (offParam) goldenOffsetSlider.value = offParam;
@@ -189,6 +196,13 @@ function selectedWx(): WeatherPreview | null {
 	return null;
 }
 
+function selectedEclipse(): "solar" | "lunar" | "none" {
+	for (const radio of eclipseRadios) {
+		if (radio.checked) return radio.value as "solar" | "lunar" | "none";
+	}
+	return "none";
+}
+
 function selectedQuality(): Quality {
 	for (const radio of qualityRadios) {
 		if (radio.checked) return radio.value as Quality;
@@ -202,11 +216,13 @@ function precipPreview(): boolean {
 }
 
 function buildClimateOverride(): WeatherOverride | null {
-	if (climateLocks.size === 0) return null;
+	const eclipseMode = selectedEclipse();
+	if (climateLocks.size === 0 && eclipseMode === "none") return null;
 	const o: WeatherOverride = {};
 	if (climateLocks.has("intensity")) o.intensity = Number(intensitySlider.value);
 	if (climateLocks.has("temperatureC")) o.temperatureC = Number(tempSlider.value);
 	if (climateLocks.has("windSpeed")) o.windSpeed = Number(windSlider.value);
+	if (eclipseMode !== "none") o.forceEclipse = eclipseMode;
 	return Object.keys(o).length ? o : null;
 }
 
@@ -657,6 +673,14 @@ stripToggle.addEventListener("change", () => {
 	updateStatus();
 });
 
+for (const radio of eclipseRadios) {
+	radio.addEventListener("change", () => {
+		applyClimate();
+		updateStatus();
+		syncUrl();
+	});
+}
+
 function syncUrl(): void {
 	const p = new URLSearchParams();
 	if (!terrainToggle.checked) p.set("terrain", "0");
@@ -679,6 +703,10 @@ function syncUrl(): void {
 	} else if (mode === "custom") {
 		p.set("mode", "custom");
 		p.set("t", customHourSlider.value);
+	}
+	const eclipseMode = selectedEclipse();
+	if (eclipseMode !== "none") {
+		p.set("eclipse", eclipseMode);
 	}
 	if (climateLocks.has("intensity")) p.set("int", intensitySlider.value);
 	if (climateLocks.has("temperatureC")) p.set("temp", tempSlider.value);
@@ -921,6 +949,9 @@ function updateStatus(): void {
 		if (climateLocks.has("windSpeed")) bits.push(`wind ${windSlider.value}`);
 		if (bits.length) parts.push(`Climate: ${bits.join(", ")}`);
 	}
+	
+	const eclipse = selectedEclipse();
+	if (eclipse !== "none") parts.push(`Eclipse: ${eclipse}`);
 
 	const atm = sky.atmosphere();
 	if (atm.moments.length) parts.push(atm.moments.join(", "));

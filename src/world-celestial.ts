@@ -52,7 +52,8 @@ export function drawSun(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  horizonness: number
+  horizonness: number,
+  eclipseProgress = 0
 ): void {
   // Atmospheric refraction: sun appears significantly larger near the horizon
   const r = 24 + 16 * horizonness;
@@ -60,15 +61,18 @@ export function drawSun(
   const ease = horizonness * horizonness;
   const easeExp = ease * horizonness;
   
+  // During a solar eclipse, the sun dims
+  const eclipseDim = 1 - Math.min(1, eclipseProgress * 1.05);
+
   // Core colors shift from warm white at zenith to deep red-orange at sunset
   const discR = 255;
-  const discG = clampByte(248 - 120 * ease);
-  const discB = clampByte(220 - 180 * easeExp);
+  const discG = clampByte((248 - 120 * ease) * eclipseDim);
+  const discB = clampByte((220 - 180 * easeExp) * eclipseDim);
 
   // Outer glow matches but is even richer
-  const glowR = 255;
-  const glowG = clampByte(220 - 100 * ease);
-  const glowB = clampByte(180 - 150 * easeExp);
+  const glowR = clampByte(255 * eclipseDim);
+  const glowG = clampByte((220 - 100 * ease) * eclipseDim);
+  const glowB = clampByte((180 - 150 * easeExp) * eclipseDim);
 
   // Impressive, simple wide glow (wider at sunset)
   const glowSteps = 4;
@@ -79,17 +83,49 @@ export function drawSun(
     ctx.arc(x, y, r * (1 + i * (0.6 + horizonness * 0.4)), 0, Math.PI * 2);
     ctx.fill();
   }
+  
+  // Total eclipse corona
+  if (eclipseProgress > 0.95) {
+    const coronaAlpha = (eclipseProgress - 0.95) * 20; // 0 to 1
+    ctx.fillStyle = `rgba(255, 255, 255, ${(0.3 * coronaAlpha).toFixed(3)})`;
+    for(let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y, r * (2 + i * 1.5), 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Solar flares
+    ctx.strokeStyle = `rgba(255, 200, 200, ${(0.8 * coronaAlpha).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    for(let i=0; i<4; i++) {
+        ctx.beginPath();
+        const angle = i * Math.PI / 2 + (performance.now() / 10000);
+        ctx.moveTo(x + Math.cos(angle) * r, y + Math.sin(angle) * r);
+        ctx.lineTo(x + Math.cos(angle) * r * 1.4, y + Math.sin(angle) * r * 1.4);
+        ctx.stroke();
+    }
+  }
 
   // Simpler, cleaner gradient for the sun disc: white hot center to colored edge
   const discGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-  discGrad.addColorStop(0, "rgba(255, 255, 255, 1)");
-  discGrad.addColorStop(0.5, `rgba(255, 255, ${clampByte(255 - 50 * ease)}, 1)`);
+  discGrad.addColorStop(0, `rgba(${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, 1)`);
+  discGrad.addColorStop(0.5, `rgba(${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, ${clampByte(255 - 50 * ease)*eclipseDim}, 1)`);
   discGrad.addColorStop(1, `rgba(${discR}, ${discG}, ${discB}, 1)`);
   
   ctx.fillStyle = discGrad;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
+
+  // The eclipsing Moon (drawn as a dark circle moving across the sun)
+  if (eclipseProgress > 0) {
+    ctx.fillStyle = "#0a0a0c";
+    ctx.beginPath();
+    // Progress 0 -> 1 means moon moves from edge to center
+    // Let's sweep it from top-right to bottom-left
+    const offset = r * 2.2 * (1 - eclipseProgress);
+    ctx.arc(x + offset, y - offset, r * 1.01, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawCraters(
@@ -136,20 +172,33 @@ export function drawMoon(
   x: number,
   y: number,
   date: Date,
-  horizonness: number
+  horizonness: number,
+  eclipseProgress = 0
 ): void {
   // Atmospheric refraction: moon appears larger near the horizon (Moon Illusion)
   const r = 16 + 12 * horizonness;
   const phase = lunarPhase(date);
-  const illum = (1 - Math.cos(phase * Math.PI * 2)) / 2;
+  
+  // During a lunar eclipse, the moon is full (illum = 1)
+  const isEclipse = eclipseProgress > 0;
+  const illum = isEclipse ? 1 : (1 - Math.cos(phase * Math.PI * 2)) / 2;
   const waxing = phase < 0.5;
 
   const ease = horizonness * horizonness;
 
   // Harvest Moon effect: white/silver at zenith, warm yellow/orange near horizon
-  const litR = clampByte(226 + 29 * ease);
-  const litG = clampByte(227 - 10 * ease);
-  const litB = clampByte(235 - 75 * ease);
+  let litR = clampByte(226 + 29 * ease);
+  let litG = clampByte(227 - 10 * ease);
+  let litB = clampByte(235 - 75 * ease);
+  
+  // Blood moon effect during lunar eclipse
+  if (isEclipse) {
+    const bloodPhase = Math.min(1, eclipseProgress * 1.5); // Reaches full blood before peak
+    litR = clampByte(litR * (1 - bloodPhase) + 180 * bloodPhase);
+    litG = clampByte(litG * (1 - bloodPhase) + 40 * bloodPhase);
+    litB = clampByte(litB * (1 - bloodPhase) + 20 * bloodPhase);
+  }
+  
   const litCss = rgbToCss([litR, litG, litB]);
 
   // Halo colors matching the moon tint
@@ -161,7 +210,8 @@ export function drawMoon(
   const haloBoost = 0.05 * illum + (illum > 0.9 ? 0.08 : 0);
   const haloSteps = 3;
   for (let i = haloSteps; i >= 0; i--) {
-    const a = (0.02 + (haloSteps - i) * 0.02 + haloBoost * 0.5) * (1 + horizonness * 0.3);
+    // Halo dims during eclipse
+    const a = (0.02 + (haloSteps - i) * 0.02 + haloBoost * 0.5) * (1 + horizonness * 0.3) * (1 - eclipseProgress * 0.7);
     ctx.fillStyle = `rgba(${haloR}, ${haloG}, ${haloB}, ${a.toFixed(3)})`;
     ctx.beginPath();
     ctx.arc(x, y, r * (1 + i * (illum > 0.9 ? 0.9 : 0.75) * (1 + horizonness * 0.2)), 0, Math.PI * 2);
@@ -220,7 +270,8 @@ export function drawCelestial(
   height: number,
   h: number,
   dim: number,
-  date: Date
+  date: Date,
+  eclipse?: { type: "solar" | "lunar"; progress: number }
 ): void {
   if (dim < 0.02) return;
 
@@ -237,10 +288,6 @@ export function drawCelestial(
   }
 
   const x = width * (0.08 + t * 0.84);
-  // Arc endpoints sit below the ridge line (hills paint over the body), so
-  // the sun/moon visibly rise from and set behind the hills — the handoff
-  // at sunrise/sunset happens out of sight instead of popping mid-sky.
-  // The noon/midnight apex stays at 9% height, same as before.
   const riseY = height * 0.68;
   const topY = height * 0.09;
   const y = riseY - Math.sin(t * Math.PI) * (riseY - topY);
@@ -249,10 +296,18 @@ export function drawCelestial(
   ctx.globalAlpha = Math.max(0, Math.min(1, dim));
 
   const horizonness = Math.min(1, Math.abs(t - 0.5) * 2);
+  
+  let solarProg = 0;
+  let lunarProg = 0;
+  if (eclipse) {
+      if (eclipse.type === "solar") solarProg = eclipse.progress;
+      if (eclipse.type === "lunar") lunarProg = eclipse.progress;
+  }
+
   if (isSun) {
-    drawSun(ctx, x, y, horizonness);
+    drawSun(ctx, x, y, horizonness, solarProg);
   } else {
-    drawMoon(ctx, x, y, date, horizonness);
+    drawMoon(ctx, x, y, date, horizonness, lunarProg);
   }
 
   ctx.restore();

@@ -10,12 +10,14 @@ export type WeatherOverride = Partial<
     | "cloudiness"
     | "precipitation"
     | "intensity"
-    | "thunder"
     | "fog"
+    | "thunder"
     | "windSpeed"
     | "temperatureC"
   >
->;
+> & {
+  forceEclipse?: "solar" | "lunar" | null;
+};
 
 export const WEATHER_PREVIEWS: readonly WeatherPreview[] = [
   "storm",
