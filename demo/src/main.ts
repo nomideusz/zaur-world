@@ -68,6 +68,15 @@ const stripEl = document.getElementById("daystrip") as HTMLDivElement;
 const stripCellsEl = document.getElementById("daystrip-cells") as HTMLDivElement;
 const stripLiveBtn = document.getElementById("btn-strip-live") as HTMLButtonElement;
 
+const mainActionsEl = document.getElementById("main-actions") as HTMLDivElement;
+const tourActionsEl = document.getElementById("tour-actions") as HTMLDivElement;
+const tourToggleBtn = document.getElementById("btn-tour-toggle") as HTMLButtonElement;
+const tourStopBtn = document.getElementById("btn-tour-stop") as HTMLButtonElement;
+const tourSpeedSlider = document.getElementById("opt-tour-speed") as HTMLInputElement;
+const tourSpeedVal = document.getElementById("tour-speed-val") as HTMLOutputElement;
+const tourTimeSlider = document.getElementById("opt-tour-time") as HTMLInputElement;
+const tourTimeVal = document.getElementById("tour-time-val") as HTMLOutputElement;
+
 type ClimateKey = "intensity" | "temperatureC" | "windSpeed";
 const climateLocks = new Set<ClimateKey>();
 /** True while a manual pin (or ?lat=&lon=) is active. */
@@ -303,9 +312,11 @@ function applyTime(): void {
 // so both start and end are seamless — no clock jump. In live weather mode
 // each hour of the sweep pulls that hour's real forecast, so you watch the
 // coming day's weather actually arrive.
-const TOUR_SECONDS = 30;
 let tourRaf = 0;
 let tourHour = 0;
+let tourPaused = false;
+let tourProgress = 0;
+let tourStartHour = 0;
 /** Hour pinned from the day strip, or null when the strip is idle. */
 let scrubHour: number | null = null;
 
@@ -348,40 +359,91 @@ function stopTour(): void {
 	if (tourRaf === 0) return;
 	cancelAnimationFrame(tourRaf);
 	tourRaf = 0;
-	tourBtn.textContent = "▶ Play 24 hours";
 	wxEl.hidden = true;
 	sky.setForecastHour(null);
 	applyTime();
 	syncStripHighlight();
 	updateStatus();
+	
+	mainActionsEl.hidden = false;
+	tourActionsEl.hidden = true;
 }
 
 function startTour(): void {
 	clearScrub(false);
-	const start = performance.now();
-	const from = effectiveHour();
-	tourBtn.textContent = "■ Stop tour";
-	tourHour = from;
+	tourStartHour = effectiveHour();
+	tourHour = tourStartHour;
+	tourProgress = 0;
+	tourPaused = false;
+	tourToggleBtn.textContent = "Pause";
 	sky.setTime(() => dateAtHour(tourHour));
 	// Storm/Snow/Fog/Gray presets stay in charge; only live weather follows
 	// the hourly forecast around the clock.
 	const followForecast = selectedWx() === null;
+	
+	mainActionsEl.hidden = true;
+	tourActionsEl.hidden = false;
+	tourSpeedVal.textContent = `${tourSpeedSlider.value}x`;
+	tourTimeSlider.value = "0";
+	tourTimeVal.textContent = formatHour(tourHour);
+
+	let lastTime = performance.now();
 	const step = (now: number): void => {
-		const t = (now - start) / 1000 / TOUR_SECONDS;
-		if (t >= 1) {
-			stopTour();
-			return;
+		const dt = (now - lastTime) / 1000;
+		lastTime = now;
+		
+		if (!tourPaused) {
+			const speedSec = 30 / Number(tourSpeedSlider.value);
+			tourProgress += dt / speedSec;
+			if (tourProgress >= 1) {
+				stopTour();
+				return;
+			}
+			tourHour = (tourStartHour + tourProgress * 24) % 24;
+			
+			tourTimeSlider.value = String(tourProgress * 24);
+			tourTimeVal.textContent = formatHour(tourHour);
+			
+			if (followForecast) sky.setForecastHour(tourHour);
+			highlightStripHour(tourHour);
+			updateClock();
+			updateTourWx();
+			statusEl.textContent = tourStatus();
 		}
-		tourHour = (from + t * 24) % 24;
-		if (followForecast) sky.setForecastHour(tourHour);
-		highlightStripHour(tourHour);
-		updateClock();
-		updateTourWx();
-		statusEl.textContent = tourStatus();
 		tourRaf = requestAnimationFrame(step);
 	};
 	tourRaf = requestAnimationFrame(step);
 }
+
+tourToggleBtn.addEventListener("click", () => {
+	tourPaused = !tourPaused;
+	tourToggleBtn.textContent = tourPaused ? "Play" : "Pause";
+});
+
+tourStopBtn.addEventListener("click", stopTour);
+
+tourSpeedSlider.addEventListener("input", () => {
+	tourSpeedVal.textContent = `${tourSpeedSlider.value}x`;
+});
+
+tourTimeSlider.addEventListener("input", () => {
+	if (!tourRaf) return;
+	tourProgress = Number(tourTimeSlider.value) / 24;
+	tourHour = (tourStartHour + tourProgress * 24) % 24;
+	tourTimeVal.textContent = formatHour(tourHour);
+	
+	const followForecast = selectedWx() === null;
+	if (followForecast) sky.setForecastHour(tourHour);
+	sky.setTime(() => dateAtHour(tourHour));
+	
+	highlightStripHour(tourHour);
+	updateClock();
+	updateTourWx();
+	statusEl.textContent = tourStatus();
+	
+	tourPaused = true;
+	tourToggleBtn.textContent = "Play";
+});
 
 // —— Day strip: the next 24 hours as a scrubbable forecast dock ——————————————
 

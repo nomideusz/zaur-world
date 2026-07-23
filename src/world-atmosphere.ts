@@ -294,7 +294,9 @@ export function drawRainCurtain(
       width * 0.15;
     const a = (0.06 + k * 0.1) * (0.7 + ((i * 13) % 40) / 100);
     const grad = ctx.createLinearGradient(0, top, 0, bottom);
-    grad.addColorStop(0, `rgba(148, 162, 188, ${a.toFixed(3)})`);
+    // Fade in at the top so there's no hard square edge under the clouds
+    grad.addColorStop(0, "rgba(148, 162, 188, 0)");
+    grad.addColorStop(0.2, `rgba(148, 162, 188, ${a.toFixed(3)})`);
     grad.addColorStop(0.8, `rgba(148, 162, 188, ${(a * 0.5).toFixed(3)})`);
     grad.addColorStop(1, "rgba(148, 162, 188, 0)");
     ctx.fillStyle = grad;

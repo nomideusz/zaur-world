@@ -668,7 +668,7 @@ export class World {
     const baseAlpha =
       alpha * (0.38 + i * 0.28 + i * i * 0.28 + (wx?.thunder ? 0.12 : 0)) * layerOpacity;
     // Heavy weather swells the bank — same silhouettes, thicker coverage.
-    const sizeMul = 1 + i * 0.35 + i * i * 0.75;
+    const sizeMul = 1 + i * 0.8 + i * i * 1.8;
 
     for (const cloud of this.clouds) {
       if (cloud.layer !== layer) continue;
@@ -682,11 +682,26 @@ export class World {
       const grad = ctx.createLinearGradient(0, cy - ch * 0.6, 0, cy + ch * 0.7);
       grad.addColorStop(0, `rgba(${topR}, ${topG}, ${topB}, ${baseAlpha.toFixed(3)})`);
       grad.addColorStop(1, `rgba(${botR}, ${botG}, ${botB}, ${(baseAlpha * 0.85).toFixed(3)})`);
-      ctx.fillStyle = grad;
-
+      
       // A cloud is 4–5 overlapping ellipses; the seed deterministically
-      // varies the puff pattern so each one looks distinct.
-      const lobes = 4 + (cloud.seed & 1) + (i > 0.7 ? 1 : 0);
+      // varies the puff pattern so each one looks distinct. Intense weather adds more lobes.
+      const lobes = 4 + (cloud.seed & 1) + Math.floor(i * 4) + (wx?.thunder ? 2 : 0);
+      
+      // Draw a subtle rim light/highlight behind the cloud first for depth
+      if (layer === 2 && baseAlpha > 0.3) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${(baseAlpha * 0.15).toFixed(3)})`;
+        for (let n = 0; n < lobes; n++) {
+          const offX = ((cloud.seed * (n + 1) * 31) % 100) / 100 - 0.5;
+          const offY = ((cloud.seed * (n + 2) * 17) % 60) / 100 - 0.3;
+          const rx = (w / 2) * (0.55 + ((cloud.seed * (n + 3) * 7) % 40) / 100);
+          const ry = (ch / 2) * (0.65 + ((cloud.seed * (n + 4) * 5) % 30) / 100);
+          ctx.beginPath();
+          ctx.ellipse(cx + offX * w * 0.6, cy + offY * ch * 0.8 - ry * 0.15, rx * 1.05, ry * 1.05, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      
+      ctx.fillStyle = grad;
       for (let n = 0; n < lobes; n++) {
         const offX = ((cloud.seed * (n + 1) * 31) % 100) / 100 - 0.5;
         const offY = ((cloud.seed * (n + 2) * 17) % 60) / 100 - 0.3;
@@ -713,6 +728,7 @@ export class World {
       const alpha = drizzle ? 0.28 + i * 0.35 : 0.38 + i * 0.5;
       ctx.strokeStyle = `rgba(170, 190, 220, ${alpha.toFixed(3)})`;
       ctx.lineWidth = i > 0.75 ? 1.35 : drizzle ? 0.85 : 1;
+      
       ctx.beginPath();
       for (const d of this.drops) {
         ctx.moveTo(d.x, d.y);
@@ -721,23 +737,32 @@ export class World {
       ctx.stroke();
     } else if (this.dropsKind === "snow") {
       const alpha = 0.75 + i * 0.2;
-      ctx.fillStyle = `rgba(232, 234, 244, ${alpha.toFixed(3)})`;
       for (const d of this.drops) {
         const ix = d.x | 0;
         const iy = d.y | 0;
+        
         if (d.size === 0) {
+          ctx.fillStyle = `rgba(232, 234, 244, ${(alpha * 0.6).toFixed(3)})`;
           ctx.fillRect(ix, iy, 1, 1);
         } else if (d.size === 1) {
+          ctx.fillStyle = `rgba(232, 234, 244, ${alpha.toFixed(3)})`;
           ctx.fillRect(ix, iy, 1, 1);
           ctx.fillRect(ix + 1, iy, 1, 1);
           ctx.fillRect(ix, iy + 1, 1, 1);
+          // Soft glow
+          ctx.fillStyle = `rgba(255, 255, 255, ${(alpha * 0.3).toFixed(3)})`;
+          ctx.fillRect(ix - 1, iy, 3, 2);
         } else {
-          // 3px cross — bigger flakes catch the eye.
+          // 3px cross — bigger flakes catch the eye with a glow
+          ctx.fillStyle = `rgba(232, 234, 244, ${alpha.toFixed(3)})`;
           ctx.fillRect(ix, iy, 1, 1);
           ctx.fillRect(ix + 1, iy, 1, 1);
           ctx.fillRect(ix - 1, iy, 1, 1);
           ctx.fillRect(ix, iy + 1, 1, 1);
           ctx.fillRect(ix, iy - 1, 1, 1);
+          // Stronger glow
+          ctx.fillStyle = `rgba(255, 255, 255, ${(alpha * 0.4).toFixed(3)})`;
+          ctx.fillRect(ix - 1, iy - 1, 3, 3);
         }
       }
     }
@@ -812,7 +837,7 @@ export class World {
     // A wind nudge on top of each cloud's intrinsic drift — with real wind
     // speed in this.wind's amplitude, a blustery day visibly hurries them.
     // Prefer meteorological direction so banks march with the prevailing wind.
-    const windNudge = this.wind * 0.006;
+    const windNudge = this.wind * 0.035;
     for (const cloud of this.clouds) {
       // Front-layer clouds are pushed harder — parallax sells depth.
       const layerScale = cloud.layer === 0 ? 0.35 : cloud.layer === 1 ? 1.0 : 1.6;
@@ -929,7 +954,8 @@ export class World {
         width: w,
         height: w * (0.34 + rand() * 0.16),
         // Base drift speed; tickClouds applies the per-layer parallax scale.
-        drift: (rand() < 0.5 ? -1 : 1) * (0.005 + rand() * 0.012),
+        // The intrinsic drift is extremely low; most movement comes from wind.
+        drift: (rand() < 0.5 ? -1 : 1) * (0.001 + rand() * 0.003),
         seed: 1 + Math.floor(rand() * 9999),
         layer,
       });
@@ -949,9 +975,9 @@ export class World {
       code != null && [51, 53, 55, 56, 57, 71, 73, 77].includes(code);
     const shower = code != null && [80, 81, 82, 85, 86].includes(code);
     // Quadratic density: drizzle stays light, 100% is a wall of weather.
-    const dens = (drizzle ? 0.14 : 0.2) + i * i * (shower ? 6.2 : 5.5);
+    const dens = (drizzle ? 0.14 : 0.2) + i * i * (shower ? 6.2 : 5.5) + (isRain ? 0 : i * 4.5);
     const baseCount = Math.round(
-      (this.state.width * this.state.height) / (isRain ? (drizzle ? 16_000 : 12_000) : 18_000)
+      (this.state.width * this.state.height) / (isRain ? (drizzle ? 16_000 : 12_000) : 7_000)
     );
     const count = Math.round(baseCount * dens * this.particleScale);
     this.drops = [];
@@ -959,9 +985,9 @@ export class World {
       // Snow flake size distribution: lots of tiny, few medium — feels natural.
       // Heavy snow skews larger.
       const sizeRoll = Math.random();
-      const bigBias = i * 0.2;
+      const bigBias = i * 0.45;
       const size: 0 | 1 | 2 =
-        sizeRoll < 0.55 - bigBias ? 0 : sizeRoll < 0.9 - bigBias * 0.5 ? 1 : 2;
+        sizeRoll < 0.55 - bigBias ? 0 : sizeRoll < 0.9 - bigBias * 0.8 ? 1 : 2;
       this.drops.push({
         x: Math.random() * this.state.width,
         y: Math.random() * this.state.height,
@@ -1107,13 +1133,26 @@ export class World {
     const nearRGB = lerpRGB(bottomRGB, bg, 0.84);
 
     if (this.hillsPeaks.length > 0) {
-      ctx.fillStyle = rgbToCss(lerpRGB(bottomRGB, bg, 0.45));
+      const peakGrad = ctx.createLinearGradient(0, height * 0.4, 0, height);
+      const c = lerpRGB(bottomRGB, bg, 0.45);
+      peakGrad.addColorStop(0, rgbToCss(c));
+      peakGrad.addColorStop(1, rgbToCss(lerpRGB(c, bottomRGB, 0.5)));
+      ctx.fillStyle = peakGrad;
       fillHillPath(ctx, this.hillsPeaks, width, height);
     }
-    ctx.fillStyle = rgbToCss(farRGB);
+    
+    const farGrad = ctx.createLinearGradient(0, height * 0.5, 0, height);
+    farGrad.addColorStop(0, rgbToCss(farRGB));
+    farGrad.addColorStop(1, rgbToCss(lerpRGB(farRGB, bottomRGB, 0.3)));
+    ctx.fillStyle = farGrad;
     fillHillPath(ctx, this.hillsFar, width, height);
+    
     if (this.coastal) drawSeaBand(ctx, width, height);
-    ctx.fillStyle = rgbToCss(nearRGB);
+    
+    const nearGrad = ctx.createLinearGradient(0, height * 0.6, 0, height);
+    nearGrad.addColorStop(0, rgbToCss(nearRGB));
+    nearGrad.addColorStop(1, rgbToCss(lerpRGB(nearRGB, bottomRGB, 0.2)));
+    ctx.fillStyle = nearGrad;
     fillHillPath(ctx, this.hillsNear, width, height);
   }
 
@@ -1135,13 +1174,18 @@ export class World {
       const bx = b.x * width;
       const by = b.y * height;
       const flap = Math.sin(b.flapPhase);
-      // Wings up vs. wings down — a 2-frame flap silhouette.
+      
+      // More detailed pixel bird silhouette
+      // Body
+      ctx.fillRect(bx | 0, (by | 0) - 1, 2, 1);
       if (flap > 0) {
-        ctx.fillRect((bx | 0) - 3, (by | 0) - 1, 3, 1);
-        ctx.fillRect(bx | 0, (by | 0) - 1, 3, 1);
+        // Wings up
+        ctx.fillRect((bx | 0) - 2, (by | 0) - 2, 2, 1);
+        ctx.fillRect((bx | 0) + 2, (by | 0) - 2, 2, 1);
       } else {
-        ctx.fillRect((bx | 0) - 3, by | 0, 3, 1);
-        ctx.fillRect(bx | 0, by | 0, 3, 1);
+        // Wings down
+        ctx.fillRect((bx | 0) - 2, by | 0, 2, 1);
+        ctx.fillRect((bx | 0) + 2, by | 0, 2, 1);
       }
     }
   }
@@ -1255,12 +1299,15 @@ export class World {
       const bx = f.x - Math.abs(i) * 14;
       const by = f.y + Math.abs(i) * 7 + i * 1.5;
       const flap = Math.sin(t * 7 + i * 0.9);
+      
+      // Detailed migrating flock bird
+      ctx.fillRect((bx | 0), (by | 0) - 1, 2, 1); // body
       if (flap > 0) {
-        ctx.fillRect((bx | 0) - 4, (by | 0) - 1, 4, 1);
-        ctx.fillRect(bx | 0, (by | 0) - 1, 4, 1);
+        ctx.fillRect((bx | 0) - 2, (by | 0) - 2, 2, 1);
+        ctx.fillRect((bx | 0) + 2, (by | 0) - 2, 2, 1);
       } else {
-        ctx.fillRect((bx | 0) - 4, by | 0, 4, 1);
-        ctx.fillRect(bx | 0, by | 0, 4, 1);
+        ctx.fillRect((bx | 0) - 2, (by | 0), 2, 1);
+        ctx.fillRect((bx | 0) + 2, (by | 0), 2, 1);
       }
     }
   }
@@ -1422,13 +1469,23 @@ export class World {
     for (const b of this.bats) {
       const ix = b.x | 0;
       const iy = b.y | 0;
-      ctx.fillRect(ix, iy, 1, 1); // body
+      ctx.fillRect(ix, iy, 2, 2); // thicker body
+      // Ears
+      ctx.fillRect(ix, iy - 1, 1, 1);
+      ctx.fillRect(ix + 1, iy - 1, 1, 1);
+      
       if (Math.sin(b.flapPhase) > 0) {
-        ctx.fillRect(ix - 2, iy - 1, 2, 1);
-        ctx.fillRect(ix + 1, iy - 1, 2, 1);
+        // Wings up
+        ctx.fillRect(ix - 3, iy - 2, 3, 2);
+        ctx.fillRect(ix + 2, iy - 2, 3, 2);
+        ctx.fillRect(ix - 4, iy - 3, 1, 1);
+        ctx.fillRect(ix + 5, iy - 3, 1, 1);
       } else {
-        ctx.fillRect(ix - 2, iy + 1, 2, 1);
-        ctx.fillRect(ix + 1, iy + 1, 2, 1);
+        // Wings down
+        ctx.fillRect(ix - 3, iy + 1, 3, 2);
+        ctx.fillRect(ix + 2, iy + 1, 3, 2);
+        ctx.fillRect(ix - 4, iy + 2, 1, 1);
+        ctx.fillRect(ix + 5, iy + 2, 1, 1);
       }
     }
   }
@@ -1447,7 +1504,13 @@ export class World {
       const blink = 0.5 + 0.5 * Math.sin(t * 2 + f.blinkPhase);
       const a = blink * 0.7 * alpha;
       if (a > 0.02) {
-        ctx.fillStyle = `rgba(232, 228, 140, ${a.toFixed(3)})`;
+        // Glow
+        ctx.fillStyle = `rgba(232, 228, 140, ${(a * 0.25).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(fx + 1, fy + 1, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Core
+        ctx.fillStyle = `rgba(242, 248, 160, ${a.toFixed(3)})`;
         ctx.fillRect(fx | 0, fy | 0, 2, 2);
       }
     }

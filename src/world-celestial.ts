@@ -19,11 +19,32 @@ export function drawStars(
   for (const s of stars) {
     const twinkle = 0.65 + 0.35 * Math.sin(t * 1.4 + s.twinklePhase);
     const a = s.brightness * twinkle * alpha;
-    ctx.fillStyle = `rgba(232, 228, 216, ${a.toFixed(3)})`;
+    if (a < 0.02) continue;
+    
+    // Subtle star colors based on pseudo-random phase: some blue-white, some yellow-white, some pure white
+    const colorType = (s.twinklePhase * 10) % 3;
+    let r = 232, g = 228, b = 216; // default warm white
+    if (colorType < 1) { r = 200; g = 220; b = 255; } // blueish
+    else if (colorType < 2) { r = 255; g = 245; b = 210; } // yellowish
+    
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
     const ix = s.x | 0;
     const iy = s.y | 0;
+    
     ctx.fillRect(ix, iy, 1, 1);
-    if (s.brightness > 0.75) ctx.fillRect(ix + 1, iy, 1, 1);
+    
+    if (s.brightness > 0.6) {
+      // Small cross for medium-bright stars
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(a * 0.6).toFixed(3)})`;
+      ctx.fillRect(ix - 1, iy, 3, 1);
+      ctx.fillRect(ix, iy - 1, 1, 3);
+    }
+    if (s.brightness > 0.85) {
+      // Larger cross/glow for the brightest stars
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(a * 0.3).toFixed(3)})`;
+      ctx.fillRect(ix - 2, iy, 5, 1);
+      ctx.fillRect(ix, iy - 2, 1, 5);
+    }
   }
 }
 
@@ -35,49 +56,88 @@ export function drawSun(
 ): void {
   const r = 28 + 8 * horizonness;
   const ease = horizonness * horizonness;
-  const discR = clampByte(248 - 4 * ease);
-  const discG = clampByte(208 - 64 * ease);
-  const discB = clampByte(138 - 84 * ease);
+  const discR = clampByte(255);
+  const discG = clampByte(228 - 48 * ease);
+  const discB = clampByte(168 - 84 * ease);
   const glowR = clampByte(255);
   const glowG = clampByte(210 - 30 * ease);
   const glowB = clampByte(140 - 40 * ease);
 
-  for (let i = 4; i >= 0; i--) {
-    const a = 0.05 + (4 - i) * 0.02;
+  // Softer, wider glow with more steps
+  for (let i = 6; i >= 0; i--) {
+    const a = 0.03 + (6 - i) * 0.015;
     ctx.fillStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1 + i * 0.6), 0, Math.PI * 2);
+    ctx.arc(x, y, r * (1 + i * 0.7), 0, Math.PI * 2);
     ctx.fill();
   }
 
-  if (horizonness > 0.4) {
-    const rayAlpha = (horizonness - 0.4) * 0.3;
+  // Dynamic rays
+  if (horizonness > 0.2) {
+    const rayAlpha = (horizonness - 0.2) * 0.4;
     ctx.strokeStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${rayAlpha.toFixed(3)})`;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
+    const t = performance.now() * 0.00003;
+    
+    // Outer long rays
     ctx.beginPath();
-    const rayCount = 10;
-    const innerR = r * 1.7;
-    const outerR = r * 5.5;
+    const rayCount = 12;
+    const innerR = r * 1.5;
+    const outerR = r * 6.5;
     for (let i = 0; i < rayCount; i++) {
-      const a = (i / rayCount) * Math.PI * 2 + performance.now() * 0.00004;
+      const a = (i / rayCount) * Math.PI * 2 + t;
       const cx = Math.cos(a);
       const sy = Math.sin(a);
+      // Fade rays out at the ends
+      const rayGrad = ctx.createLinearGradient(x + cx * innerR, y + sy * innerR, x + cx * outerR, y + sy * outerR);
+      rayGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${rayAlpha.toFixed(3)})`);
+      rayGrad.addColorStop(1, `rgba(${glowR}, ${glowG}, ${glowB}, 0)`);
+      ctx.strokeStyle = rayGrad;
+      
+      ctx.beginPath();
       ctx.moveTo(x + cx * innerR, y + sy * innerR);
       ctx.lineTo(x + cx * outerR, y + sy * outerR);
+      ctx.stroke();
     }
-    ctx.stroke();
+    
+    // Inner short rotating rays
+    ctx.lineWidth = 2;
+    const shortRayCount = 24;
+    const shortOuterR = r * 2.5;
+    for (let i = 0; i < shortRayCount; i++) {
+      const a = (i / shortRayCount) * Math.PI * 2 - t * 1.5;
+      const cx = Math.cos(a);
+      const sy = Math.sin(a);
+      const rayGrad = ctx.createLinearGradient(x + cx * innerR, y + sy * innerR, x + cx * shortOuterR, y + sy * shortOuterR);
+      rayGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${(rayAlpha * 0.8).toFixed(3)})`);
+      rayGrad.addColorStop(1, `rgba(${glowR}, ${glowG}, ${glowB}, 0)`);
+      ctx.strokeStyle = rayGrad;
+      
+      ctx.beginPath();
+      ctx.moveTo(x + cx * innerR, y + sy * innerR);
+      ctx.lineTo(x + cx * shortOuterR, y + sy * shortOuterR);
+      ctx.stroke();
+    }
   }
 
-  const discGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.2, x, y, r);
-  discGrad.addColorStop(
-    0,
-    rgbToCss([clampByte(discR + 12), clampByte(discG + 12), clampByte(discB + 8)])
-  );
-  discGrad.addColorStop(1, rgbToCss([discR, discG, discB]));
+  // Hot bright center, warmer edges
+  const discGrad = ctx.createRadialGradient(x - r * 0.15, y - r * 0.15, 0, x, y, r);
+  discGrad.addColorStop(0, "rgba(255, 255, 255, 1)");
+  discGrad.addColorStop(0.3, rgbToCss([clampByte(discR + 20), clampByte(discG + 20), clampByte(discB + 10)]));
+  discGrad.addColorStop(0.8, rgbToCss([discR, discG, discB]));
+  discGrad.addColorStop(1, rgbToCss([clampByte(discR - 20), clampByte(discG - 30), clampByte(discB - 40)]));
+  
   ctx.fillStyle = discGrad;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
+  
+  // Inner corona
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.4)`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 function drawCraters(
@@ -130,12 +190,13 @@ export function drawMoon(
   const illum = (1 - Math.cos(phase * Math.PI * 2)) / 2;
   const waxing = phase < 0.5;
 
-  const haloBoost = 0.04 * illum + (illum > 0.9 ? 0.06 : 0);
-  for (let i = 3; i >= 0; i--) {
-    const a = 0.04 + (3 - i) * 0.02 + haloBoost;
-    ctx.fillStyle = `rgba(220, 222, 235, ${a.toFixed(3)})`;
+  // Richer halo
+  const haloBoost = 0.05 * illum + (illum > 0.9 ? 0.08 : 0);
+  for (let i = 5; i >= 0; i--) {
+    const a = 0.02 + (5 - i) * 0.015 + haloBoost * 0.5;
+    ctx.fillStyle = `rgba(220, 228, 245, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1 + i * (illum > 0.9 ? 0.85 : 0.7)), 0, Math.PI * 2);
+    ctx.arc(x, y, r * (1 + i * (illum > 0.9 ? 0.9 : 0.75)), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -259,11 +320,22 @@ export function drawVenus(
   if (a < 0.03) return;
   const ix = x | 0;
   const iy = y | 0;
+  
+  // Soft outer glow for Venus
+  ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.15).toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(ix + 1, iy + 1, 6, 0, Math.PI * 2);
+  ctx.fill();
+  
   ctx.fillStyle = `rgba(255, 252, 240, ${a.toFixed(3)})`;
   ctx.fillRect(ix, iy, 2, 2);
-  ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.35).toFixed(3)})`;
-  ctx.fillRect(ix - 1, iy, 1, 2);
-  ctx.fillRect(ix + 2, iy, 1, 2);
-  ctx.fillRect(ix, iy - 1, 2, 1);
-  ctx.fillRect(ix, iy + 2, 2, 1);
+  
+  // Bright cross
+  ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.6).toFixed(3)})`;
+  ctx.fillRect(ix - 2, iy, 6, 2);
+  ctx.fillRect(ix, iy - 2, 2, 6);
+  
+  // Sharp center
+  ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
+  ctx.fillRect(ix, iy, 2, 2);
 }
