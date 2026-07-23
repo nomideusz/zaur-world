@@ -316,25 +316,32 @@ export function createWorld(
   let weatherOverride: WeatherOverride | null = null;
   let forecastHour: number | null = null;
   const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
+  let evaluatingConditions = false;
   const conditions = (): WeatherConditions | null => {
-    let wx = liveConditions();
-    if (forecastHour !== null && client) {
-      wx = client.conditionsAtHour(forecastHour) ?? wx;
-    }
-    if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
-    if (weatherOverride) wx = applyWeatherOverride(wx, weatherOverride);
-    else if (wx) wx = normalizeWeather(wx);
-
-    if (wx) {
-      if (weatherOverride?.forceEclipse) {
-        wx.eclipse = { type: weatherOverride.forceEclipse, progress: 1.0 };
-      } else {
-        const d = resolveTime();
-        const loc = location();
-        wx.eclipse = currentEclipse(d, loc?.lat, loc?.lon) ?? undefined;
+    if (evaluatingConditions) return liveConditions();
+    evaluatingConditions = true;
+    try {
+      let wx = liveConditions();
+      if (forecastHour !== null && client) {
+        wx = client.conditionsAtHour(forecastHour) ?? wx;
       }
+      if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
+      if (weatherOverride) wx = applyWeatherOverride(wx, weatherOverride);
+      else if (wx) wx = normalizeWeather(wx);
+
+      if (wx) {
+        if (weatherOverride?.forceEclipse) {
+          wx.eclipse = { type: weatherOverride.forceEclipse, progress: 1.0 };
+        } else {
+          const d = resolveTime();
+          const loc = location();
+          wx.eclipse = currentEclipse(d, loc?.lat, loc?.lon) ?? undefined;
+        }
+      }
+      return wx;
+    } finally {
+      evaluatingConditions = false;
     }
-    return wx;
   };
 
   /** Runtime pin from setGeo; falls back to createWorld({ geo }). */
