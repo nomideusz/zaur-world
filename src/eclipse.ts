@@ -9,60 +9,66 @@ export interface EclipseEvent {
 	radiusDeg?: number;
 }
 
-// A curated list of major upcoming eclipses (2024 - 2030)
-// Extracted from NASA eclipse predictions.
+// A curated list of major upcoming eclipses (2026 - 2040)
+// Extracted from NASA eclipse predictions. Excludes penumbral/minor partials.
 export const KNOWN_ECLIPSES: EclipseEvent[] = [
 	// --- Lunar Eclipses ---
 	{
 		type: "lunar",
-		peakMs: Date.UTC(2024, 2, 25, 7, 12), // Mar 25, 2024 (Penumbral)
+		peakMs: Date.UTC(2026, 7, 28, 4, 14), // Aug 28, 2026 (Partial)
 		durationMs: 4 * 3600 * 1000,
 		magnitude: 0.9,
 	},
 	{
 		type: "lunar",
-		peakMs: Date.UTC(2024, 8, 18, 2, 44), // Sep 18, 2024 (Partial)
+		peakMs: Date.UTC(2028, 0, 12, 4, 14), // Jan 12, 2028 (Partial)
 		durationMs: 4 * 3600 * 1000,
+		magnitude: 0.9,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2028, 11, 31, 16, 53), // Dec 31, 2028 (Total)
+		durationMs: 5 * 3600 * 1000,
+		magnitude: 1.2,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2029, 5, 26, 3, 23), // Jun 26, 2029 (Total)
+		durationMs: 5 * 3600 * 1000,
+		magnitude: 1.8,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2029, 11, 20, 22, 43), // Dec 20, 2029 (Total)
+		durationMs: 5 * 3600 * 1000,
+		magnitude: 1.1,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2032, 3, 25, 15, 14), // Apr 25, 2032 (Total)
+		durationMs: 5 * 3600 * 1000,
+		magnitude: 1.1,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2032, 9, 18, 19, 3), // Oct 18, 2032 (Total)
+		durationMs: 5 * 3600 * 1000,
+		magnitude: 1.1,
+	},
+	{
+		type: "lunar",
+		peakMs: Date.UTC(2033, 3, 14, 18, 13), // Apr 14, 2033 (Total)
+		durationMs: 5 * 3600 * 1000,
 		magnitude: 1.0,
 	},
 	{
 		type: "lunar",
-		peakMs: Date.UTC(2025, 2, 14, 6, 58), // Mar 14, 2025 (Total)
-		durationMs: 6 * 3600 * 1000,
-		magnitude: 1.1,
-	},
-	{
-		type: "lunar",
-		peakMs: Date.UTC(2025, 8, 7, 18, 12), // Sep 7, 2025 (Total)
+		peakMs: Date.UTC(2033, 9, 8, 10, 56), // Oct 8, 2033 (Total)
 		durationMs: 5 * 3600 * 1000,
-		magnitude: 1.1,
-	},
-	{
-		type: "lunar",
-		peakMs: Date.UTC(2026, 2, 3, 11, 34), // Mar 3, 2026 (Total)
-		durationMs: 5 * 3600 * 1000,
-		magnitude: 1.1,
+		magnitude: 1.3,
 	},
 
 	// --- Solar Eclipses ---
-	{
-		type: "solar",
-		peakMs: Date.UTC(2024, 3, 8, 18, 17), // Apr 8, 2024 (Total, North America)
-		durationMs: 4 * 3600 * 1000,
-		magnitude: 1.0,
-		lat: 25.3,
-		lon: -104.1,
-		radiusDeg: 60,
-	},
-	{
-		type: "solar",
-		peakMs: Date.UTC(2024, 9, 2, 18, 45), // Oct 2, 2024 (Annular, South America)
-		durationMs: 4 * 3600 * 1000,
-		magnitude: 0.9,
-		lat: -22.0,
-		lon: -114.5,
-		radiusDeg: 60,
-	},
 	{
 		type: "solar",
 		peakMs: Date.UTC(2026, 7, 12, 17, 47), // Aug 12, 2026 (Total, Spain/Arctic)
@@ -74,12 +80,84 @@ export const KNOWN_ECLIPSES: EclipseEvent[] = [
 	},
 	{
 		type: "solar",
-		peakMs: Date.UTC(2027, 7, 2, 10, 7), // Aug 2, 2027 (Total, North Africa)
+		peakMs: Date.UTC(2027, 7, 2, 10, 7), // Aug 2, 2027 (Total, North Africa/Middle East)
 		durationMs: 4 * 3600 * 1000,
 		magnitude: 1.0,
 		lat: 25.5,
 		lon: 33.2,
 		radiusDeg: 70,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2028, 6, 22, 2, 56), // Jul 22, 2028 (Total, Australia/NZ)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: -15.6,
+		lon: 126.9,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2030, 5, 1, 6, 27), // Jun 1, 2030 (Annular, Europe/Asia)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 0.95,
+		lat: 36.5,
+		lon: 29.3,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2030, 10, 25, 6, 51), // Nov 25, 2030 (Total, South Africa/Australia)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: -43.6,
+		lon: 71.2,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2033, 2, 30, 18, 2), // Mar 30, 2033 (Total, Alaska/Russia)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: 71.3,
+		lon: -155.8,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2034, 2, 20, 10, 18), // Mar 20, 2034 (Total, Africa/Middle East)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: 16.1,
+		lon: 22.2,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2035, 8, 2, 1, 56), // Sep 2, 2035 (Total, China/Japan/Pacific)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: 29.1,
+		lon: 158.0,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2037, 6, 13, 2, 40), // Jul 13, 2037 (Total, Australia/NZ)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: -24.8,
+		lon: 139.1,
+		radiusDeg: 60,
+	},
+	{
+		type: "solar",
+		peakMs: Date.UTC(2038, 11, 26, 1, 0), // Dec 26, 2038 (Total, Australia/NZ)
+		durationMs: 4 * 3600 * 1000,
+		magnitude: 1.0,
+		lat: -43.4,
+		lon: 142.1,
+		radiusDeg: 60,
 	}
 ];
 
