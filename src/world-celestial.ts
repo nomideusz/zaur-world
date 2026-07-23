@@ -54,90 +54,42 @@ export function drawSun(
   y: number,
   horizonness: number
 ): void {
-  const r = 28 + 8 * horizonness;
+  // Atmospheric refraction: sun appears significantly larger near the horizon
+  const r = 24 + 16 * horizonness;
+  
   const ease = horizonness * horizonness;
-  const discR = clampByte(255);
-  const discG = clampByte(228 - 48 * ease);
-  const discB = clampByte(168 - 84 * ease);
-  const glowR = clampByte(255);
-  const glowG = clampByte(210 - 30 * ease);
-  const glowB = clampByte(140 - 40 * ease);
+  const easeExp = ease * horizonness;
+  
+  // Core colors shift from warm white at zenith to deep red-orange at sunset
+  const discR = 255;
+  const discG = clampByte(248 - 120 * ease);
+  const discB = clampByte(220 - 180 * easeExp);
 
-  // Softer, wider glow with more steps
-  for (let i = 6; i >= 0; i--) {
-    const a = 0.03 + (6 - i) * 0.015;
+  // Outer glow matches but is even richer
+  const glowR = 255;
+  const glowG = clampByte(220 - 100 * ease);
+  const glowB = clampByte(180 - 150 * easeExp);
+
+  // Impressive, simple wide glow (wider at sunset)
+  const glowSteps = 4;
+  for (let i = glowSteps; i >= 0; i--) {
+    const a = (0.04 + (glowSteps - i) * 0.02) * (1 + horizonness * 0.4);
     ctx.fillStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1 + i * 0.7), 0, Math.PI * 2);
+    ctx.arc(x, y, r * (1 + i * (0.6 + horizonness * 0.4)), 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Dynamic rays
-  if (horizonness > 0.2) {
-    const rayAlpha = (horizonness - 0.2) * 0.4;
-    ctx.strokeStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${rayAlpha.toFixed(3)})`;
-    ctx.lineWidth = 1.5;
-    const t = performance.now() * 0.00003;
-    
-    // Outer long rays
-    ctx.beginPath();
-    const rayCount = 12;
-    const innerR = r * 1.5;
-    const outerR = r * 6.5;
-    for (let i = 0; i < rayCount; i++) {
-      const a = (i / rayCount) * Math.PI * 2 + t;
-      const cx = Math.cos(a);
-      const sy = Math.sin(a);
-      // Fade rays out at the ends
-      const rayGrad = ctx.createLinearGradient(x + cx * innerR, y + sy * innerR, x + cx * outerR, y + sy * outerR);
-      rayGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${rayAlpha.toFixed(3)})`);
-      rayGrad.addColorStop(1, `rgba(${glowR}, ${glowG}, ${glowB}, 0)`);
-      ctx.strokeStyle = rayGrad;
-      
-      ctx.beginPath();
-      ctx.moveTo(x + cx * innerR, y + sy * innerR);
-      ctx.lineTo(x + cx * outerR, y + sy * outerR);
-      ctx.stroke();
-    }
-    
-    // Inner short rotating rays
-    ctx.lineWidth = 2;
-    const shortRayCount = 24;
-    const shortOuterR = r * 2.5;
-    for (let i = 0; i < shortRayCount; i++) {
-      const a = (i / shortRayCount) * Math.PI * 2 - t * 1.5;
-      const cx = Math.cos(a);
-      const sy = Math.sin(a);
-      const rayGrad = ctx.createLinearGradient(x + cx * innerR, y + sy * innerR, x + cx * shortOuterR, y + sy * shortOuterR);
-      rayGrad.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${(rayAlpha * 0.8).toFixed(3)})`);
-      rayGrad.addColorStop(1, `rgba(${glowR}, ${glowG}, ${glowB}, 0)`);
-      ctx.strokeStyle = rayGrad;
-      
-      ctx.beginPath();
-      ctx.moveTo(x + cx * innerR, y + sy * innerR);
-      ctx.lineTo(x + cx * shortOuterR, y + sy * shortOuterR);
-      ctx.stroke();
-    }
-  }
-
-  // Hot bright center, warmer edges
-  const discGrad = ctx.createRadialGradient(x - r * 0.15, y - r * 0.15, 0, x, y, r);
+  // Simpler, cleaner gradient for the sun disc: white hot center to colored edge
+  const discGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
   discGrad.addColorStop(0, "rgba(255, 255, 255, 1)");
-  discGrad.addColorStop(0.3, rgbToCss([clampByte(discR + 20), clampByte(discG + 20), clampByte(discB + 10)]));
-  discGrad.addColorStop(0.8, rgbToCss([discR, discG, discB]));
-  discGrad.addColorStop(1, rgbToCss([clampByte(discR - 20), clampByte(discG - 30), clampByte(discB - 40)]));
+  discGrad.addColorStop(0.5, `rgba(255, 255, ${clampByte(255 - 50 * ease)}, 1)`);
+  discGrad.addColorStop(1, `rgba(${discR}, ${discG}, ${discB}, 1)`);
   
   ctx.fillStyle = discGrad;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
-  
-  // Inner corona
-  ctx.strokeStyle = `rgba(255, 255, 255, 0.4)`;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(x, y, r - 1, 0, Math.PI * 2);
-  ctx.stroke();
 }
 
 function drawCraters(
