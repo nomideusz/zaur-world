@@ -135,20 +135,36 @@ export function drawMoon(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  date: Date
+  date: Date,
+  horizonness: number
 ): void {
-  const r = 18;
+  // Atmospheric refraction: moon appears larger near the horizon (Moon Illusion)
+  const r = 16 + 12 * horizonness;
   const phase = lunarPhase(date);
   const illum = (1 - Math.cos(phase * Math.PI * 2)) / 2;
   const waxing = phase < 0.5;
 
-  // Richer halo
+  const ease = horizonness * horizonness;
+
+  // Harvest Moon effect: white/silver at zenith, warm yellow/orange near horizon
+  const litR = clampByte(226 + 29 * ease);
+  const litG = clampByte(227 - 10 * ease);
+  const litB = clampByte(235 - 75 * ease);
+  const litCss = rgbToCss([litR, litG, litB]);
+
+  // Halo colors matching the moon tint
+  const haloR = clampByte(220 + 35 * ease);
+  const haloG = clampByte(228 - 10 * ease);
+  const haloB = clampByte(245 - 65 * ease);
+
+  // Simpler, cleaner halo (fewer steps) but wider near the horizon
   const haloBoost = 0.05 * illum + (illum > 0.9 ? 0.08 : 0);
-  for (let i = 5; i >= 0; i--) {
-    const a = 0.02 + (5 - i) * 0.015 + haloBoost * 0.5;
-    ctx.fillStyle = `rgba(220, 228, 245, ${a.toFixed(3)})`;
+  const haloSteps = 3;
+  for (let i = haloSteps; i >= 0; i--) {
+    const a = (0.02 + (haloSteps - i) * 0.02 + haloBoost * 0.5) * (1 + horizonness * 0.3);
+    ctx.fillStyle = `rgba(${haloR}, ${haloG}, ${haloB}, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1 + i * (illum > 0.9 ? 0.9 : 0.75)), 0, Math.PI * 2);
+    ctx.arc(x, y, r * (1 + i * (illum > 0.9 ? 0.9 : 0.75) * (1 + horizonness * 0.2)), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -159,14 +175,13 @@ export function drawMoon(
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.clip();
 
-  const darkR = clampByte(36 + 18 * earthshine);
-  const darkG = clampByte(38 + 18 * earthshine);
+  const darkR = clampByte(36 + 18 * earthshine + 20 * ease);
+  const darkG = clampByte(38 + 18 * earthshine + 10 * ease);
   const darkB = clampByte(54 + 22 * earthshine);
   const darkCss = rgbToCss([darkR, darkG, darkB]);
   ctx.fillStyle = darkCss;
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
 
-  const litCss = "#e2e3eb";
   ctx.fillStyle = litCss;
   if (waxing) {
     ctx.fillRect(x, y - r, r, r * 2);
@@ -189,9 +204,10 @@ export function drawMoon(
 
   drawCraters(ctx, x, y, r, waxing, illum);
 
+  // Simpler limb darkening shadow to make it a sphere
   const limbGrad = ctx.createRadialGradient(x, y, r * 0.85, x, y, r);
   limbGrad.addColorStop(0, "rgba(0,0,0,0)");
-  limbGrad.addColorStop(1, "rgba(20, 18, 28, 0.40)");
+  limbGrad.addColorStop(1, `rgba(20, 18, 28, ${0.4 + ease * 0.2})`);
   ctx.fillStyle = limbGrad;
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
 
@@ -232,11 +248,11 @@ export function drawCelestial(
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, dim));
 
+  const horizonness = Math.min(1, Math.abs(t - 0.5) * 2);
   if (isSun) {
-    const horizonness = Math.min(1, Math.abs(t - 0.5) * 2);
     drawSun(ctx, x, y, horizonness);
   } else {
-    drawMoon(ctx, x, y, date);
+    drawMoon(ctx, x, y, date, horizonness);
   }
 
   ctx.restore();
