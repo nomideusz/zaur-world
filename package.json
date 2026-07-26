@@ -1,6 +1,6 @@
 {
 	"name": "@nomideusz/zaur-world",
-	"version": "0.14.0",
+	"version": "0.14.1",
 	"description": "A living ambient sky for any web page — real sunrise/sunset, live weather, seasons, day/night cycle, and small delights on a single canvas. Zero dependencies.",
 	"type": "module",
 	"exports": {
@@ -59,7 +59,7 @@
 		"type": "git",
 		"url": "git+https://github.com/nomideusz/zaur-world.git"
 	},
-	"homepage": "https://zaur.app",
+	"homepage": "https://dino.zaur.app",
 	"publishConfig": {
 		"access": "public"
 	},
