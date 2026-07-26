@@ -408,10 +408,19 @@ export function createWorld(
     );
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+    const bw = Math.round(w * dpr);
+    const bh = Math.round(h * dpr);
+    // Mobile browsers fire resize continuously while the URL bar collapses
+    // during scroll. Setting canvas.width clears the bitmap, so a no-op
+    // reallocation here means a visible blank flash every scroll frame.
+    if (canvas.width === bw && canvas.height === bh) return;
+    canvas.width = bw;
+    canvas.height = bh;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     world.resize({ width: w, height: h });
+    // Repaint in the same task — resizing cleared the canvas, and waiting
+    // for the next animation frame would present one transparent frame.
+    world.draw(ctx);
   };
 
   const applyQualityPreset = (quality: Quality): void => {

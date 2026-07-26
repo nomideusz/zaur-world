@@ -123,6 +123,16 @@ const SKY: SkyKeyframe[] = [
 
 // Canonical sun window — see solar.ts for SUN_RISE / SUN_SET and warpHour().
 
+/**
+ * How much a solar eclipse darkens ambient light, 0..~0.8. The quartic
+ * keeps partial phases subtle (a 50% bite is barely noticeable in real
+ * life) and saves the plunge for the last stretch before totality.
+ */
+function solarEclipseDark(wx: WeatherConditions | null): number {
+  const p = wx?.eclipse?.type === "solar" ? wx.eclipse.progress : 0;
+  return p > 0 ? Math.pow(p, 4) * 0.8 : 0;
+}
+
 const GRID_PX = 24;
 interface Cloud {
   /** Anchor x in [0, 1] of world width — wraps at edges. */
@@ -445,14 +455,28 @@ export class World {
       bottomRGB = desatRGB(bottomRGB, Math.min(0.85, desat));
     }
     // Full moon nights lift the whole sky a touch — you can feel the silver.
+    // A lunar eclipse takes that silver away as the moon goes blood-red.
+    const lunarEclipse = wx?.eclipse?.type === "lunar" ? wx.eclipse.progress : 0;
     const moonIllum = (1 - Math.cos(lunarPhase(date) * Math.PI * 2)) / 2;
     if (moonIllum > 0.85 && daylight(h) < 0.2) {
-      const lift = (moonIllum - 0.85) / 0.15 * 0.12 * (1 - cloudAlpha * 0.6);
+      const lift =
+        ((moonIllum - 0.85) / 0.15) * 0.12 * (1 - cloudAlpha * 0.6) * (1 - lunarEclipse * 0.85);
       topRGB = lerpRGB(topRGB, [40, 48, 78], lift);
       bottomRGB = lerpRGB(bottomRGB, [55, 62, 95], lift);
     }
+    // Solar eclipse: ambient light barely changes through the partial
+    // phases, then plunges toward totality — twilight-dark, not black.
+    const eclipseDark = solarEclipseDark(wx);
+    if (eclipseDark > 0) {
+      topRGB = lerpRGB(topRGB, [16, 18, 34], eclipseDark);
+      bottomRGB = lerpRGB(bottomRGB, [42, 38, 56], eclipseDark);
+    }
     const grad = ctx.createLinearGradient(0, 0, 0, height);
     grad.addColorStop(0, rgbToCss(topRGB));
+    // Real skies change most near the horizon: keep the overhead sky nearly
+    // uniform and compress the warm wash into the bottom third, instead of
+    // one smooth top-to-bottom blend across the whole viewport.
+    grad.addColorStop(0.58, rgbToCss(lerpRGB(topRGB, bottomRGB, 0.3)));
     grad.addColorStop(1, rgbToCss(bottomRGB));
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
@@ -461,13 +485,26 @@ export class World {
     // Gone under a solid overcast.
     if (cloudAlpha < 0.92) drawHorizonGlow(ctx, width, height, h);
 
+    // Deep solar eclipse: the famous 360° sunset ring low on the horizon.
+    if (eclipseDark > 0.45 && cloudAlpha < 0.92) {
+      const ringA = (eclipseDark - 0.45) * 0.5;
+      const ring = ctx.createLinearGradient(0, height * 0.55, 0, height);
+      ring.addColorStop(0, "rgba(255, 150, 80, 0)");
+      ring.addColorStop(1, `rgba(255, 150, 80, ${ringA.toFixed(3)})`);
+      ctx.fillStyle = ring;
+      ctx.fillRect(0, 0, width, height);
+    }
+
     // Aurora bands at deep night when the sky is reasonably clear — drawn
     // before stars so it reads as a soft veil behind them.
     const auroraA = auroraAlpha(h) * auroraLatFactor(wx?.latitude) * (1 - cloudAlpha * 0.85);
     if (auroraA > 0.01) drawAurora(ctx, width, height, auroraA);
 
     // Stars (only at night-ish hours; heavy clouds also dim them).
-    const sa = starAlpha(h) * Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
+    // Near solar totality the brightest come out in the midday sky.
+    const sa =
+      Math.max(starAlpha(h), eclipseDark > 0.55 ? (eclipseDark - 0.55) * 1.4 : 0) *
+      Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
     if (sa > 0.01) {
       this.updateRealStars(date);
       drawStars(ctx, this.stars, sa);
@@ -660,6 +697,12 @@ export class World {
       const k = glow * (0.45 + (1 - heaviness) * 0.7);
       bot = lerpRGB(bot, [255, 120, 55], Math.min(1, 0.85 * k));
       top = lerpRGB(top, [255, 190, 130], Math.min(1, 0.55 * k));
+    }
+    // A deep solar eclipse takes the daylight off the clouds too.
+    const cloudEclipseDark = solarEclipseDark(wx);
+    if (cloudEclipseDark > 0) {
+      top = lerpRGB(top, [44, 46, 64], cloudEclipseDark);
+      bot = lerpRGB(bot, [22, 22, 36], cloudEclipseDark);
     }
     const [topR, topG, topB] = top;
     const [botR, botG, botB] = bot;

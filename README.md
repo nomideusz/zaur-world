@@ -4,10 +4,11 @@ A living ambient sky for any web page, on a single `<canvas>`.
 
 **~25 kB min+gzip · zero dependencies · no API keys · no build step required.**
 
-Born as the backdrop of [dino.zaur.app](https://dino.zaur.app), where a small dinosaur
-named Zaur walks on the day's news under it.
+Born as a page backdrop; now a small weather product of its own at
+[dino.zaur.app](https://dino.zaur.app), where a pixel dinosaur named Zaur
+walks beneath it.
 
-**[Live demo](https://zaur-world.netlify.app)** — hit **▶ Play 24 hours** for a
+**[Live demo](https://dino.zaur.app)** — hit **▶ Play 24 hours** for a
 30-second tour through dawn, golden hour, dusk, and the night sky, with the
 hourly forecast riding along beside the clock — or scrub the **day strip**
 along the bottom edge to jump the sky to any of the next 24 hours. On a VPN,
@@ -111,6 +112,7 @@ canvas {
   inset: 0;
   width: 100%;
   height: 100%;
+  height: 100lvh; /* mobile: don't resize when the URL bar collapses */
   z-index: 0;
   pointer-events: none;
 }
@@ -261,8 +263,8 @@ sky.locationHint();             // VPN/mismatch tip for your UI, or null
 ```
 
 `locationHint()` is non-null when the forecast timezone disagrees with the
-device clock (typical VPN). The demo pulses **Use my location** in that case,
-and Tweaks → **Location** lets visitors pin coords or pick a preset city
+device clock (typical VPN). The demo pulses the place name in that case —
+clicking it opens the location panel: GPS, city search, or a preset city
 (`?lat=&lon=&city=` shareable).
 
 ### Options
@@ -372,10 +374,10 @@ console.log(moment.caption); // "Kraków · 21:14 · golden hour"
 // moment.dataUrl → download or share
 ```
 
-Cinematic demo links work the same way — open
-`?mode=golden` or `?mode=custom&t=21.5&wx=snow&int=1&wind=40` on the live
-demo. The Tweaks panel includes Climate sliders (intensity, temp, wind)
-that layer via `setWeatherOverride`.
+Cinematic demo links work the same way — open `?wx=snow` or
+`?eclipse=solar&city=Tokyo&lat=35.68&lon=139.69` on the live demo, or use
+the **Golden** / **Night** buttons on the day strip to jump the sky to the
+moment worth seeing.
 
 Reacting to conditions elsewhere in your UI:
 

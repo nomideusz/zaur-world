@@ -11,15 +11,12 @@ export function drawHorizonGlow(
 ): void {
   const strength = horizonGlowStrength(h);
   if (strength <= 0.02) return;
-  const onLeft = h < 12;
-  const cx = onLeft ? width * 0.18 : width * 0.82;
-  const cy = height * 0.62;
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(width, height) * 0.7);
-  const a = (0.32 * strength).toFixed(3);
-  grad.addColorStop(0, `rgba(255, 150, 70, ${a})`);
-  grad.addColorStop(0.35, `rgba(240, 110, 60, ${(0.2 * strength).toFixed(3)})`);
-  grad.addColorStop(0.7, `rgba(160, 70, 80, ${(0.1 * strength).toFixed(3)})`);
-  grad.addColorStop(1, "rgba(60, 30, 60, 0)");
+  // A flat band hugging the horizon — real dawn/dusk glow has no bright
+  // center; it's a wash that fades evenly with altitude.
+  const grad = ctx.createLinearGradient(0, height * 0.42, 0, height);
+  grad.addColorStop(0, "rgba(255, 150, 70, 0)");
+  grad.addColorStop(0.5, `rgba(245, 125, 62, ${(0.1 * strength).toFixed(3)})`);
+  grad.addColorStop(1, `rgba(255, 150, 70, ${(0.28 * strength).toFixed(3)})`);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 }

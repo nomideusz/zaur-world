@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-27
+
+### Added
+
+- Solar eclipses now darken the world, not just the sun: ambient sky/cloud/hill light plunges quartically toward twilight-dark near totality, the brightest stars come out, and a 360° sunset-colored ring hugs the horizon at deep eclipse. Lunar eclipses remove the full-moon silver lift as the moon goes blood-red
+- Demo is now the product page for dino.zaur.app: Zaur the pixel dinosaur walks the bottom of the page (ambient routines driven by the sky's hour — he gets sleepy when you scrub to night; on by default, Tweaks → Zaur or `?zaur=0` to hide, remembered per visitor), the header place name is the single location control (popover with GPS, city search, presets), one global "Back to live" reset (also Esc), Golden/Night one-click moments on the day strip, tour speeds ¼×–4×, and a Share button (native share sheet / link copy)
+
+### Changed
+
+- Sunrise/sunset light is flatter and more real: the sky gradient compresses into the bottom third (near-uniform sky overhead), the horizon glow is a horizontal band instead of a bright-centered radial, the low sun is a flat deep-orange disc (white-hot core and wide glare fade out with horizonness)
+- Demo: Grid and ISS layers default off (`?grid=1` / `?iss=1` to enable); weather card, climate sliders, and lat/lon inputs removed in favor of the consolidated controls
+
+### Fixed
+
+- Canvas no longer blinks while scrolling on mobile: the resize path skips no-op reallocations (the collapsing URL bar fires them continuously) and repaints synchronously when a real resize clears the bitmap
+
 ## [0.12.0] - 2026-07-19
 
 ### Added

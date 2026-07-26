@@ -59,9 +59,53 @@
 					><span class="brand-world">world</span>
 				</span>
 			</a>
-			<p class="place" id="sky-place">Your sky</p>
+			<button
+				class="place"
+				id="sky-place"
+				type="button"
+				aria-haspopup="dialog"
+				aria-expanded="false"
+				title="Change location"
+			>
+				Your sky
+			</button>
 			<p class="clock" id="sky-clock" aria-live="polite">--:--</p>
 			<p class="wx" id="sky-wx" hidden></p>
+
+			<div class="loc-pop" id="loc-pop" role="dialog" aria-label="Location" hidden>
+				<button class="btn btn--locate" id="btn-locate" type="button">
+					Use my location
+				</button>
+				<div class="loc-search">
+					<input
+						type="text"
+						id="opt-city"
+						maxlength="48"
+						placeholder="Search a city…"
+						autocomplete="off"
+						aria-label="City name"
+					/>
+					<button class="btn btn--apply" id="btn-loc-apply" type="button">Go</button>
+				</div>
+				<div class="loc-presets" role="group" aria-label="Place presets">
+					<button type="button" class="chip-btn" data-lat="50.06" data-lon="19.94" data-city="Kraków">
+						Kraków
+					</button>
+					<button type="button" class="chip-btn" data-lat="51.51" data-lon="-0.13" data-city="London">
+						London
+					</button>
+					<button type="button" class="chip-btn" data-lat="40.71" data-lon="-74.01" data-city="New York">
+						New York
+					</button>
+					<button type="button" class="chip-btn" data-lat="35.68" data-lon="139.69" data-city="Tokyo">
+						Tokyo
+					</button>
+				</div>
+				<p class="loc-hint" id="loc-hint">GPS / network location.</p>
+				<button class="btn-text" id="btn-loc-clear" type="button" hidden>
+					⨯ Unpin — back to auto
+				</button>
+			</div>
 		</header>
 
 		<footer class="chrome">
@@ -75,29 +119,27 @@
 					Play 24 hours
 				</button>
 				<button
-					class="btn btn--locate"
-					id="btn-locate"
+					class="btn btn--live"
+					id="btn-live"
 					type="button"
-					title="Use your device location — accurate sky even on a VPN"
+					hidden
+					title="Clear previews and pins — back to your live sky (Esc)"
 				>
-					Use my location
+					⨯ Back to live
 				</button>
 			</div>
 
-			<div class="chrome-actions" id="tour-actions" hidden style="background: var(--panel); padding: 0.6rem; border-radius: 8px; border: 1px solid var(--panel-edge); backdrop-filter: blur(10px); gap: 0.6rem;">
-				<div style="display: flex; gap: 0.5rem; width: 100%;">
-					<button class="btn btn--tour" id="btn-tour-toggle" type="button" style="flex: 1;">Pause</button>
-					<button class="btn btn--locate" id="btn-tour-stop" type="button" style="flex: 1;">Stop</button>
+			<div class="chrome-actions chrome-actions--panel" id="tour-actions" hidden>
+				<div class="tour-row">
+					<button class="btn btn--tour" id="btn-tour-toggle" type="button">Pause</button>
+					<button class="btn btn--locate" id="btn-tour-stop" type="button">Stop</button>
 				</div>
-				<div class="slider slider--named" title="Tour duration (seconds)">
-					<span class="slider-name" style="width: 3rem;">Speed</span>
-					<input type="range" id="opt-tour-speed" min="0.5" max="6" step="0.5" value="1" style="width: 5.5rem;" />
-					<output id="tour-speed-val" for="opt-tour-speed" style="min-width: 1.8rem">1x</output>
-				</div>
-				<div class="slider slider--named" title="Scrub time">
-					<span class="slider-name" style="width: 3rem;">Time</span>
-					<input type="range" id="opt-tour-time" min="0" max="23.95" step="0.05" value="0" style="width: 5.5rem;" />
-					<output id="tour-time-val" for="opt-tour-time" style="min-width: 1.8rem">00:00</output>
+				<div class="tour-row" role="group" aria-label="Tour speed">
+					<button type="button" class="chip-btn tour-speed" data-speed="0.25">¼×</button>
+					<button type="button" class="chip-btn tour-speed" data-speed="0.5">½×</button>
+					<button type="button" class="chip-btn tour-speed is-active" data-speed="1">1×</button>
+					<button type="button" class="chip-btn tour-speed" data-speed="2">2×</button>
+					<button type="button" class="chip-btn tour-speed" data-speed="4">4×</button>
 				</div>
 			</div>
 
@@ -106,20 +148,20 @@
 
 				<div class="tweaks-panel">
 					<div class="chip-grid" role="group" aria-label="Layers">
+						<label class="chip" title="Zaur, the resident pixel dinosaur">
+							<input type="checkbox" id="opt-zaur" checked />
+							<span>Zaur</span>
+						</label>
 						<label class="chip" title="Horizon from nearby elevations">
 							<input type="checkbox" id="opt-terrain" checked />
 							<span>Terrain</span>
 						</label>
-						<label class="chip" title="Live conditions readout">
-							<input type="checkbox" id="opt-weather-card" checked />
-							<span>Card</span>
-						</label>
 						<label class="chip" id="row-grid" title="Foreground graph-paper overlay">
-							<input type="checkbox" id="opt-grid" checked />
+							<input type="checkbox" id="opt-grid" />
 							<span>Grid</span>
 						</label>
 						<label class="chip" title="Real ISS when overhead">
-							<input type="checkbox" id="opt-satellites" checked />
+							<input type="checkbox" id="opt-satellites" />
 							<span>ISS</span>
 						</label>
 						<label
@@ -146,139 +188,6 @@
 							<input type="checkbox" id="opt-strip" checked />
 							<span>Day strip</span>
 						</label>
-					</div>
-
-					<div class="field" id="field-location">
-						<div class="field-head">
-							<span class="field-label" id="loc-label">Location</span>
-							<button class="btn-text" id="btn-loc-clear" type="button" hidden>
-								Auto
-							</button>
-						</div>
-						<p class="loc-hint" id="loc-hint">
-							GPS / network, or pin a place for the 24h tour.
-						</p>
-						<div class="loc-presets" role="group" aria-label="Place presets">
-							<button type="button" class="chip-btn" data-lat="50.06" data-lon="19.94" data-city="Kraków">
-								Kraków
-							</button>
-							<button type="button" class="chip-btn" data-lat="51.51" data-lon="-0.13" data-city="London">
-								London
-							</button>
-							<button type="button" class="chip-btn" data-lat="40.71" data-lon="-74.01" data-city="New York">
-								New York
-							</button>
-							<button type="button" class="chip-btn" data-lat="35.68" data-lon="139.69" data-city="Tokyo">
-								Tokyo
-							</button>
-						</div>
-						<div class="loc-grid">
-							<label class="loc-field">
-								<span>Lat</span>
-								<input
-									type="number"
-									id="opt-lat"
-									step="0.01"
-									min="-90"
-									max="90"
-									inputmode="decimal"
-									placeholder="50.06"
-									aria-label="Latitude"
-								/>
-							</label>
-							<label class="loc-field">
-								<span>Lon</span>
-								<input
-									type="number"
-									id="opt-lon"
-									step="0.01"
-									min="-180"
-									max="180"
-									inputmode="decimal"
-									placeholder="19.94"
-									aria-label="Longitude"
-								/>
-							</label>
-							<label class="loc-field loc-field--wide">
-								<span>City</span>
-								<input
-									type="text"
-									id="opt-city"
-									maxlength="48"
-									placeholder="optional"
-									autocomplete="address-level2"
-									aria-label="City name"
-								/>
-							</label>
-						</div>
-						<button class="btn btn--apply" id="btn-loc-apply" type="button">
-							Apply location
-						</button>
-					</div>
-
-					<div class="field">
-						<span class="field-label" id="clock-label">Time</span>
-						<div
-							class="segmented"
-							role="radiogroup"
-							aria-labelledby="clock-label"
-						>
-							<input
-								type="radio"
-								name="time-mode"
-								id="time-live"
-								value="live"
-								checked
-							/>
-							<label for="time-live">Live</label>
-							<input
-								type="radio"
-								name="time-mode"
-								id="time-golden"
-								value="golden"
-							/>
-							<label for="time-golden">Golden</label>
-							<input
-								type="radio"
-								name="time-mode"
-								id="time-custom"
-								value="custom"
-							/>
-							<label for="time-custom">Custom</label>
-						</div>
-						<div class="field-extra">
-							<p class="time-hint" id="row-time-hint">
-								Follows your location’s clock (VPN-safe).
-							</p>
-							<div class="slider" id="row-golden-offset" hidden>
-								<input
-									type="range"
-									id="opt-golden-offset"
-									min="15"
-									max="90"
-									step="15"
-									value="30"
-									aria-label="Minutes before sunset"
-								/>
-								<output id="golden-offset-val" for="opt-golden-offset"
-									>−30m</output
-								>
-							</div>
-							<div class="slider" id="row-custom-hour" hidden>
-								<input
-									type="range"
-									id="opt-custom-hour"
-									min="0"
-									max="23.75"
-									step="0.25"
-									value="21"
-									aria-label="Hour of day"
-								/>
-								<output id="custom-hour-val" for="opt-custom-hour"
-									>21:00</output
-								>
-							</div>
-						</div>
 					</div>
 
 					<div class="field">
@@ -313,57 +222,6 @@
 						</div>
 					</div>
 
-					<div class="field">
-						<div class="field-head">
-							<span class="field-label" id="climate-label">Climate</span>
-							<button class="btn-text" id="btn-climate-reset" type="button" hidden>
-								Reset
-							</button>
-						</div>
-						<p class="climate-hint" id="climate-hint">
-							Dial intensity, temp, and wind — clouds follow precip.
-						</p>
-						<div class="slider slider--named" title="Rain / snow strength">
-							<span class="slider-name">Intensity</span>
-							<input
-								type="range"
-								id="opt-intensity"
-								min="0"
-								max="1"
-								step="0.05"
-								value="0.5"
-								aria-label="Precipitation intensity"
-							/>
-							<output id="intensity-val" for="opt-intensity">50%</output>
-						</div>
-						<div class="slider slider--named" title="Air temperature">
-							<span class="slider-name">Temp</span>
-							<input
-								type="range"
-								id="opt-temp"
-								min="-20"
-								max="40"
-								step="1"
-								value="18"
-								aria-label="Temperature Celsius"
-							/>
-							<output id="temp-val" for="opt-temp">18°</output>
-						</div>
-						<div class="slider slider--named" title="Wind speed">
-							<span class="slider-name">Wind</span>
-							<input
-								type="range"
-								id="opt-wind"
-								min="0"
-								max="60"
-								step="1"
-								value="12"
-								aria-label="Wind speed km/h"
-							/>
-							<output id="wind-val" for="opt-wind">12</output>
-						</div>
-					</div>
-
 					<div class="field field--split">
 						<div class="field field--grow">
 							<span class="field-label" id="qual-label">Quality</span>
@@ -386,8 +244,11 @@
 								<label for="qual-low">Low</label>
 							</div>
 						</div>
-						<button class="btn btn--ghost" id="btn-capture" type="button">
+						<button class="btn btn--ghost" id="btn-capture" type="button" title="Download a still of this sky">
 							PNG
+						</button>
+						<button class="btn btn--ghost" id="btn-share" type="button" title="Share a link to this exact scene">
+							Share
 						</button>
 					</div>
 
@@ -414,16 +275,21 @@ sky.destroy(); // on unmount</code></pre>
 			<nav class="links" aria-label="Related links">
 				<a href="https://www.npmjs.com/package/@nomideusz/zaur-world">npm</a>
 				<a href="https://github.com/nomideusz/zaur-world">GitHub</a>
-				<a href="https://dino.zaur.app">dino.zaur.app</a>
+				<a href="https://zaur.app">zaur.app</a>
 			</nav>
 		</footer>
 
 		<div class="daystrip" id="daystrip" hidden>
 			<div class="daystrip-head">
 				<span class="daystrip-label">Next 24 h</span>
-				<button class="btn-text daystrip-live" id="btn-strip-live" type="button" hidden>
-					⨯ Back to live
-				</button>
+				<span class="daystrip-moments" role="group" aria-label="Jump to a moment">
+					<button class="btn-text" id="btn-moment-golden" type="button" title="Golden hour — just before sunset">
+						Golden
+					</button>
+					<button class="btn-text" id="btn-moment-night" type="button" title="Deep night">
+						Night
+					</button>
+				</span>
 			</div>
 			<div
 				class="daystrip-cells"

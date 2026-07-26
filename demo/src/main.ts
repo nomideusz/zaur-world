@@ -8,39 +8,28 @@ import {
 	type ForecastHour,
 	type Quality,
 	type TerrainProfile,
-	type WeatherConditions,
-	type WeatherOverride,
 	type WeatherPreview,
 	type WorldHandle,
 } from "@nomideusz/zaur-world";
+import { mountZaur, type ZaurHandle } from "./zaur.js";
 
 const canvas = document.getElementById("sky") as HTMLCanvasElement;
+const zaurToggle = document.getElementById("opt-zaur") as HTMLInputElement;
 const terrainToggle = document.getElementById("opt-terrain") as HTMLInputElement;
 const satellitesToggle = document.getElementById("opt-satellites") as HTMLInputElement;
 const satDemoToggle = document.getElementById("opt-sat-demo") as HTMLInputElement;
 const satDemoRow = document.getElementById("row-sat-demo") as HTMLDivElement;
-const weatherCardToggle = document.getElementById("opt-weather-card") as HTMLInputElement;
 const gridToggle = document.getElementById("opt-grid") as HTMLInputElement;
 const gridRow = document.getElementById("row-grid") as HTMLDivElement;
-const timeModeRadios = document.querySelectorAll(
-	'input[name="time-mode"]'
-) as NodeListOf<HTMLInputElement>;
-const goldenOffsetSlider = document.getElementById("opt-golden-offset") as HTMLInputElement;
-const goldenOffsetRow = document.getElementById("row-golden-offset") as HTMLDivElement;
-const goldenOffsetVal = document.getElementById("golden-offset-val") as HTMLOutputElement;
-const customHourSlider = document.getElementById("opt-custom-hour") as HTMLInputElement;
-const customHourRow = document.getElementById("row-custom-hour") as HTMLDivElement;
-const customHourVal = document.getElementById("custom-hour-val") as HTMLOutputElement;
-const timeHint = document.getElementById("row-time-hint") as HTMLParagraphElement;
 const captureBtn = document.getElementById("btn-capture") as HTMLButtonElement;
+const shareBtn = document.getElementById("btn-share") as HTMLButtonElement;
 const tourBtn = document.getElementById("btn-tour") as HTMLButtonElement;
+const liveBtn = document.getElementById("btn-live") as HTMLButtonElement;
 const locateBtn = document.getElementById("btn-locate") as HTMLButtonElement;
 const birdsToggle = document.getElementById("opt-birds") as HTMLInputElement;
 const batsToggle = document.getElementById("opt-bats") as HTMLInputElement;
 const firefliesToggle = document.getElementById("opt-fireflies") as HTMLInputElement;
-const wxRadios = document.querySelectorAll(
-	'input[name="wx"]'
-) as NodeListOf<HTMLInputElement>;
+const wxRadios = document.querySelectorAll('input[name="wx"]') as NodeListOf<HTMLInputElement>;
 const eclipseRadios = document.querySelectorAll(
 	'input[name="eclipse-mode"]'
 ) as NodeListOf<HTMLInputElement>;
@@ -50,60 +39,55 @@ const qualityRadios = document.querySelectorAll(
 const statusEl = document.getElementById("extras-status") as HTMLParagraphElement;
 const clockEl = document.getElementById("sky-clock") as HTMLParagraphElement;
 const wxEl = document.getElementById("sky-wx") as HTMLParagraphElement;
-const placeEl = document.getElementById("sky-place") as HTMLParagraphElement;
-const intensitySlider = document.getElementById("opt-intensity") as HTMLInputElement;
-const intensityVal = document.getElementById("intensity-val") as HTMLOutputElement;
-const tempSlider = document.getElementById("opt-temp") as HTMLInputElement;
-const tempVal = document.getElementById("temp-val") as HTMLOutputElement;
-const windSlider = document.getElementById("opt-wind") as HTMLInputElement;
-const windVal = document.getElementById("wind-val") as HTMLOutputElement;
-const climateResetBtn = document.getElementById("btn-climate-reset") as HTMLButtonElement;
-const climateHint = document.getElementById("climate-hint") as HTMLParagraphElement;
-const latInput = document.getElementById("opt-lat") as HTMLInputElement;
-const lonInput = document.getElementById("opt-lon") as HTMLInputElement;
+const placeBtn = document.getElementById("sky-place") as HTMLButtonElement;
+const locPop = document.getElementById("loc-pop") as HTMLDivElement;
 const cityInput = document.getElementById("opt-city") as HTMLInputElement;
 const locApplyBtn = document.getElementById("btn-loc-apply") as HTMLButtonElement;
 const locClearBtn = document.getElementById("btn-loc-clear") as HTMLButtonElement;
 const locHint = document.getElementById("loc-hint") as HTMLParagraphElement;
-const locPresets = document.querySelectorAll(".loc-presets .chip-btn") as NodeListOf<HTMLButtonElement>;
+const locPresets = document.querySelectorAll(
+	".loc-presets .chip-btn"
+) as NodeListOf<HTMLButtonElement>;
 const stripToggle = document.getElementById("opt-strip") as HTMLInputElement;
 const stripEl = document.getElementById("daystrip") as HTMLDivElement;
 const stripCellsEl = document.getElementById("daystrip-cells") as HTMLDivElement;
-const stripLiveBtn = document.getElementById("btn-strip-live") as HTMLButtonElement;
+const momentGoldenBtn = document.getElementById("btn-moment-golden") as HTMLButtonElement;
+const momentNightBtn = document.getElementById("btn-moment-night") as HTMLButtonElement;
 
 const mainActionsEl = document.getElementById("main-actions") as HTMLDivElement;
 const tourActionsEl = document.getElementById("tour-actions") as HTMLDivElement;
 const tourToggleBtn = document.getElementById("btn-tour-toggle") as HTMLButtonElement;
 const tourStopBtn = document.getElementById("btn-tour-stop") as HTMLButtonElement;
-const tourSpeedSlider = document.getElementById("opt-tour-speed") as HTMLInputElement;
-const tourSpeedVal = document.getElementById("tour-speed-val") as HTMLOutputElement;
-const tourTimeSlider = document.getElementById("opt-tour-time") as HTMLInputElement;
-const tourTimeVal = document.getElementById("tour-time-val") as HTMLOutputElement;
+const tourSpeedBtns = document.querySelectorAll(".tour-speed") as NodeListOf<HTMLButtonElement>;
 
-type ClimateKey = "intensity" | "temperatureC" | "windSpeed";
-const climateLocks = new Set<ClimateKey>();
 /** True while a manual pin (or ?lat=&lon=) is active. */
 let manualLocation = false;
+/** The pinned coordinates, for shareable URLs. */
+let manualGeo: { lat: number; lon: number; city?: string } | null = null;
 
 function updatePlace(a: AtmosphereSnapshot): void {
 	const line = formatAtmosphereCaption(a)
 		.split(" · ")
 		.filter((part) => !/^\d{1,2}:\d{2}$/.test(part))
 		.join(" · ");
-	if (placeEl.textContent !== line) placeEl.textContent = line || "Your sky";
+	if (placeBtn.textContent !== line) placeBtn.textContent = line || "Your sky";
 }
 
 // Shareable scene URLs — apply query params to the controls before mounting.
 const params = new URLSearchParams(location.search);
 if (params.get("terrain") === "0") terrainToggle.checked = false;
-if (params.get("iss") === "0") satellitesToggle.checked = false;
+// Grid + ISS default off — the URL turns them ON ("=0" from old links is a no-op).
+if (params.get("iss") === "1") satellitesToggle.checked = true;
 if (params.get("pass") === "0") satDemoToggle.checked = false;
-if (params.get("card") === "0") weatherCardToggle.checked = false;
-if (params.get("grid") === "0") gridToggle.checked = false;
+if (params.get("grid") === "1") gridToggle.checked = true;
 if (params.get("birds") === "0") birdsToggle.checked = false;
 if (params.get("bats") === "0") batsToggle.checked = false;
 if (params.get("fly") === "0") firefliesToggle.checked = false;
 if (params.get("strip") === "0") stripToggle.checked = false;
+// Zaur: URL wins, then the visitor's saved choice, default on.
+if (params.get("zaur") === "0") zaurToggle.checked = false;
+else if (params.get("zaur") === "1") zaurToggle.checked = true;
+else if (localStorage.getItem("zw-zaur") === "0") zaurToggle.checked = false;
 const wxParam = params.get("wx") ?? (params.get("storm") === "1" ? "storm" : null);
 if (wxParam && ["storm", "snow", "fog", "overcast"].includes(wxParam)) {
 	(document.getElementById(`wx-${wxParam}`) as HTMLInputElement).checked = true;
@@ -112,40 +96,15 @@ const qParam = params.get("q");
 if (qParam === "high" || qParam === "low") {
 	(document.getElementById(`qual-${qParam}`) as HTMLInputElement).checked = true;
 }
-const modeParam = params.get("mode");
-if (modeParam === "golden" || modeParam === "custom") {
-	(document.getElementById(`time-${modeParam}`) as HTMLInputElement).checked = true;
-}
 const eclipseParam = params.get("eclipse");
 if (eclipseParam && ["solar", "lunar"].includes(eclipseParam)) {
 	(document.getElementById(`eclipse-${eclipseParam}`) as HTMLInputElement).checked = true;
 }
-const offParam = params.get("off");
-if (offParam) goldenOffsetSlider.value = offParam;
-const tParam = params.get("t");
-if (tParam) customHourSlider.value = tParam;
-
-if (params.has("int")) {
-	intensitySlider.value = params.get("int")!;
-	climateLocks.add("intensity");
-}
-if (params.has("temp")) {
-	tempSlider.value = params.get("temp")!;
-	climateLocks.add("temperatureC");
-}
-if (params.has("wind")) {
-	windSlider.value = params.get("wind")!;
-	climateLocks.add("windSpeed");
-}
-const latParam = params.get("lat");
-const lonParam = params.get("lon");
+const latParam = Number(params.get("lat"));
+const lonParam = Number(params.get("lon"));
 const cityParam = params.get("city");
-if (latParam) latInput.value = latParam;
-if (lonParam) lonInput.value = lonParam;
-if (cityParam) cityInput.value = cityParam;
 
 const sky: WorldHandle = createWorld(canvas, {
-	weatherCard: { parent: document.body, position: "top-right" },
 	// Prefer GPS so the 24h tour matches the visitor's real sky under VPN.
 	geolocation: "prefer",
 	gridColor: "rgba(232, 228, 216, 0.32)",
@@ -158,6 +117,34 @@ const sky: WorldHandle = createWorld(canvas, {
 	quality: selectedQuality(),
 	onAtmosphereChange: updatePlace,
 });
+
+// ── Zaur ───────────────────────────────────────────────────────────────
+
+let zaur: ZaurHandle | null = null;
+
+/** Ground line: on top of the day strip when it's open, else near the bottom. */
+function zaurFloorY(): number {
+	if (!stripEl.hidden) {
+		const top = stripEl.getBoundingClientRect().top;
+		if (top > 120) return top - 2;
+	}
+	return window.innerHeight - 8;
+}
+
+function syncZaur(): void {
+	if (zaurToggle.checked && !zaur) {
+		zaur = mountZaur({
+			floorY: zaurFloorY,
+			skyHour: () => (tourRaf !== 0 ? tourHour : effectiveHour()),
+		});
+	} else if (!zaurToggle.checked && zaur) {
+		zaur.destroy();
+		zaur = null;
+	}
+	localStorage.setItem("zw-zaur", zaurToggle.checked ? "1" : "0");
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
 
 function terrainLabel(t: TerrainProfile): string {
 	if (t.coastal) return `coast · ${Math.round(t.relief)} m relief`;
@@ -172,21 +159,9 @@ function dateAtHour(h: number): Date {
 	return d;
 }
 
-function goldenHour(wx: WeatherConditions | null): number {
-	const sunset = wx?.sunsetH ?? 19;
-	return Math.max(0, sunset - Number(goldenOffsetSlider.value) / 60);
-}
-
 function formatHour(h: number): string {
 	const m = Math.round(h * 60) % (24 * 60);
 	return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
-}
-
-function timeMode(): string {
-	for (const radio of timeModeRadios) {
-		if (radio.checked) return radio.value;
-	}
-	return "live";
 }
 
 function selectedWx(): WeatherPreview | null {
@@ -210,73 +185,9 @@ function selectedQuality(): Quality {
 	return "auto";
 }
 
-function precipPreview(): boolean {
-	const wx = selectedWx();
-	return wx === "storm" || wx === "snow";
-}
-
-function buildClimateOverride(): WeatherOverride | null {
-	const eclipseMode = selectedEclipse();
-	if (climateLocks.size === 0 && eclipseMode === "none") return null;
-	const o: WeatherOverride = {};
-	if (climateLocks.has("intensity")) o.intensity = Number(intensitySlider.value);
-	if (climateLocks.has("temperatureC")) o.temperatureC = Number(tempSlider.value);
-	if (climateLocks.has("windSpeed")) o.windSpeed = Number(windSlider.value);
-	if (eclipseMode !== "none") o.forceEclipse = eclipseMode;
-	return Object.keys(o).length ? o : null;
-}
-
-function applyClimate(): void {
-	sky.setWeatherOverride(buildClimateOverride());
-	syncClimateChrome();
-}
-
-function syncClimateChrome(): void {
-	climateResetBtn.hidden = climateLocks.size === 0;
-	climateHint.hidden = climateLocks.size > 0;
-	intensityVal.textContent = `${Math.round(Number(intensitySlider.value) * 100)}%`;
-	tempVal.textContent = `${tempSlider.value}°`;
-	windVal.textContent = windSlider.value;
-}
-
-/** Mirror unlocked controls from the current (previewed) sky so they stay honest. */
-function mirrorClimateFromSky(): void {
-	const wx = sky.conditions();
-	if (!wx) return;
-	if (!climateLocks.has("intensity")) {
-		intensitySlider.value = String(Math.round(wx.intensity * 20) / 20);
-	}
-	if (!climateLocks.has("temperatureC")) {
-		tempSlider.value = String(Math.round(wx.temperatureC));
-	}
-	if (!climateLocks.has("windSpeed")) {
-		windSlider.value = String(Math.round(Math.min(60, Math.max(0, wx.windSpeed))));
-	}
-	syncClimateChrome();
-}
-
-function resetClimate(): void {
-	climateLocks.clear();
-	applyClimate();
-	mirrorClimateFromSky();
-	// Storm/Snow re-bind intensity so the slider keeps working.
-	if (precipPreview()) bindPrecipIntensity();
-	updateStatus();
-}
-
-/** Seed intensity from the weather preset, then lock so the slider drives drops. */
-function bindPrecipIntensity(): void {
-	climateLocks.delete("intensity");
-	applyClimate();
-	mirrorClimateFromSky();
-	climateLocks.add("intensity");
-	applyClimate();
-}
-
-function lockClimate(key: ClimateKey): void {
-	climateLocks.add(key);
-	applyClimate();
-	updateStatus();
+function applyEclipse(): void {
+	const mode = selectedEclipse();
+	sky.setWeatherOverride(mode === "none" ? null : { forceEclipse: mode });
 }
 
 function syncGridRow(): void {
@@ -291,49 +202,56 @@ function syncSatDemoRow(): void {
 	satDemoToggle.disabled = !on;
 }
 
-function syncTimeRows(): void {
-	const mode = timeMode();
-	timeHint.hidden = mode !== "live";
-	goldenOffsetRow.hidden = mode !== "golden";
-	customHourRow.hidden = mode !== "custom";
-}
-
 function effectiveHour(): number {
 	if (scrubHour !== null) return scrubHour;
-	const mode = timeMode();
-	if (mode === "golden") return goldenHour(sky.conditions());
-	if (mode === "custom") return Number(customHourSlider.value);
 	// Forecast-location hour so the 24h tour matches Open-Meteo under VPN.
 	return sky.localHour();
 }
 
-function updateTimeLabels(): void {
-	goldenOffsetVal.textContent = `−${goldenOffsetSlider.value}m`;
-	customHourVal.textContent = formatHour(Number(customHourSlider.value));
+// ── Back to live: the one reset ────────────────────────────────────────
+
+function hasOverrides(): boolean {
+	return (
+		tourRaf !== 0 || scrubHour !== null || selectedWx() !== null || selectedEclipse() !== "none"
+	);
 }
 
-function applyTime(): void {
-	if (scrubHour !== null) return; // the day strip owns the clock while scrubbing
-	const mode = timeMode();
-	if (mode === "golden") {
-		sky.setTime(() => dateAtHour(goldenHour(sky.conditions())));
-	} else if (mode === "custom") {
-		sky.setTime(() => dateAtHour(Number(customHourSlider.value)));
-	} else {
-		sky.setTime();
-	}
+function syncLiveBtn(): void {
+	liveBtn.hidden = !hasOverrides() || tourRaf !== 0;
 }
 
-// 24-hour cinematic tour: full circle starting from the current sky time,
-// so both start and end are seamless — no clock jump. In live weather mode
-// each hour of the sweep pulls that hour's real forecast, so you watch the
-// coming day's weather actually arrive.
+/** Clear every preview and pin: tour, scrub, weather preset, eclipse. */
+function backToLive(): void {
+	if (tourRaf !== 0) stopTour();
+	clearScrub(false);
+	(document.getElementById("wx-live") as HTMLInputElement).checked = true;
+	(document.getElementById("eclipse-none") as HTMLInputElement).checked = true;
+	sky.setWeatherPreview(null);
+	sky.setWeatherOverride(null);
+	sky.setTime();
+	renderStrip();
+	updateStatus();
+}
+
+liveBtn.addEventListener("click", backToLive);
+
+window.addEventListener("keydown", (e) => {
+	if (e.key === "Escape" && locPopOpen()) closeLocPop();
+	else if (e.key === "Escape" && hasOverrides()) backToLive();
+});
+
+// ── 24-hour tour ───────────────────────────────────────────────────────
+// Full circle starting from the current sky time, so both start and end
+// are seamless. In live weather mode each hour of the sweep pulls that
+// hour's real forecast, so you watch the coming day's weather arrive.
+
 let tourRaf = 0;
 let tourHour = 0;
 let tourPaused = false;
 let tourProgress = 0;
 let tourStartHour = 0;
-/** Hour pinned from the day strip, or null when the strip is idle. */
+let tourSpeed = 1;
+/** Hour pinned from the day strip or a moment button; null = live. */
 let scrubHour: number | null = null;
 
 function updateClock(): void {
@@ -342,8 +260,8 @@ function updateClock(): void {
 	if (clockEl.textContent !== label) clockEl.textContent = label;
 }
 
-/** Header weather line while touring or scrubbing — forecast beside the clock. */
-function updateTourWx(): void {
+/** The single conditions readout, beside the clock. */
+function updateWx(): void {
 	const wx = sky.conditions();
 	if (!wx || wx.weatherCode == null) {
 		wxEl.hidden = true;
@@ -352,6 +270,7 @@ function updateTourWx(): void {
 	let s = `${weatherIcon(wx)} ${describeWeather(wx.weatherCode, wx.isDay)} · ${Math.round(
 		wx.temperatureC
 	)}°`;
+	if (wx.windSpeed >= 20) s += ` · wind ${Math.round(wx.windSpeed)}`;
 	if (wx.precipProbability != null && wx.precipProbability >= 20) {
 		s += ` · ${Math.round(wx.precipProbability)}%`;
 	}
@@ -375,12 +294,10 @@ function stopTour(): void {
 	if (tourRaf === 0) return;
 	cancelAnimationFrame(tourRaf);
 	tourRaf = 0;
-	wxEl.hidden = true;
 	sky.setForecastHour(null);
-	applyTime();
+	if (scrubHour === null) sky.setTime();
 	syncStripHighlight();
 	updateStatus();
-	
 	mainActionsEl.hidden = false;
 	tourActionsEl.hidden = true;
 }
@@ -396,34 +313,28 @@ function startTour(): void {
 	// Storm/Snow/Fog/Gray presets stay in charge; only live weather follows
 	// the hourly forecast around the clock.
 	const followForecast = selectedWx() === null;
-	
+
 	mainActionsEl.hidden = true;
 	tourActionsEl.hidden = false;
-	tourSpeedVal.textContent = `${tourSpeedSlider.value}x`;
-	tourTimeSlider.value = "0";
-	tourTimeVal.textContent = formatHour(tourHour);
 
 	let lastTime = performance.now();
 	const step = (now: number): void => {
 		const dt = (now - lastTime) / 1000;
 		lastTime = now;
-		
+
 		if (!tourPaused) {
-			const speedSec = 30 / Number(tourSpeedSlider.value);
+			const speedSec = 30 / tourSpeed;
 			tourProgress += dt / speedSec;
 			if (tourProgress >= 1) {
 				stopTour();
 				return;
 			}
 			tourHour = (tourStartHour + tourProgress * 24) % 24;
-			
-			tourTimeSlider.value = String(tourProgress * 24);
-			tourTimeVal.textContent = formatHour(tourHour);
-			
+
 			if (followForecast) sky.setForecastHour(tourHour);
 			highlightStripHour(tourHour);
 			updateClock();
-			updateTourWx();
+			updateWx();
 			statusEl.textContent = tourStatus();
 		}
 		tourRaf = requestAnimationFrame(step);
@@ -438,30 +349,19 @@ tourToggleBtn.addEventListener("click", () => {
 
 tourStopBtn.addEventListener("click", stopTour);
 
-tourSpeedSlider.addEventListener("input", () => {
-	tourSpeedVal.textContent = `${tourSpeedSlider.value}x`;
+for (const btn of tourSpeedBtns) {
+	btn.addEventListener("click", () => {
+		tourSpeed = Number(btn.dataset.speed) || 1;
+		for (const b of tourSpeedBtns) b.classList.toggle("is-active", b === btn);
+	});
+}
+
+tourBtn.addEventListener("click", () => {
+	if (tourRaf !== 0) stopTour();
+	else startTour();
 });
 
-tourTimeSlider.addEventListener("input", () => {
-	if (!tourRaf) return;
-	tourProgress = Number(tourTimeSlider.value) / 24;
-	tourHour = (tourStartHour + tourProgress * 24) % 24;
-	tourTimeVal.textContent = formatHour(tourHour);
-	
-	const followForecast = selectedWx() === null;
-	if (followForecast) sky.setForecastHour(tourHour);
-	sky.setTime(() => dateAtHour(tourHour));
-	
-	highlightStripHour(tourHour);
-	updateClock();
-	updateTourWx();
-	statusEl.textContent = tourStatus();
-	
-	tourPaused = true;
-	tourToggleBtn.textContent = "Play";
-});
-
-// —— Day strip: the next 24 hours as a scrubbable forecast dock ——————————————
+// ── Day strip: the next 24 hours as a scrubbable forecast dock ─────────
 
 /** WMO code → glyph, matching the library's weatherIcon buckets. */
 function iconForCode(code: number, isDay: boolean): string {
@@ -590,8 +490,7 @@ function renderStrip(): void {
 /** Mark the cell containing `hour` active (tour progress / scrub pin). */
 function highlightStripHour(hour: number | null): void {
 	const cells = stripCellsEl.querySelectorAll<HTMLElement>(".ds-cell");
-	const target =
-		hour === null ? null : String(((Math.floor(hour) % 24) + 24) % 24);
+	const target = hour === null ? null : String(((Math.floor(hour) % 24) + 24) % 24);
 	for (const cell of cells) {
 		const on = target !== null && cell.dataset.hour === target;
 		cell.classList.toggle("is-active", on);
@@ -602,10 +501,9 @@ function highlightStripHour(hour: number | null): void {
 function syncStripHighlight(): void {
 	if (tourRaf !== 0) highlightStripHour(tourHour);
 	else highlightStripHour(scrubHour);
-	stripLiveBtn.hidden = scrubHour === null;
 }
 
-/** Pin the sky to a forecast hour picked on the strip. */
+/** Pin the sky to a forecast hour picked on the strip or a moment button. */
 function setScrub(hour: number): void {
 	if (tourRaf !== 0) stopTour();
 	scrubHour = hour;
@@ -613,17 +511,16 @@ function setScrub(hour: number): void {
 	if (selectedWx() === null) sky.setForecastHour(hour);
 	syncStripHighlight();
 	updateClock();
-	updateTourWx();
+	updateWx();
 	updateStatus();
 }
 
-/** Return to live time/weather. `reapply` restores the selected time mode. */
-function clearScrub(reapply: boolean): void {
+/** Return to live time/weather. */
+function clearScrub(_reapply: boolean): void {
 	if (scrubHour === null) return;
 	scrubHour = null;
 	sky.setForecastHour(null);
-	if (reapply) applyTime();
-	wxEl.hidden = true;
+	sky.setTime();
 	syncStripHighlight();
 	updateClock();
 	updateStatus();
@@ -659,35 +556,42 @@ stripCellsEl.addEventListener("pointermove", (e) => {
 	}
 });
 
-stripLiveBtn.addEventListener("click", () => {
-	clearScrub(true);
-});
-
-window.addEventListener("keydown", (e) => {
-	if (e.key === "Escape" && scrubHour !== null) clearScrub(true);
-});
-
 stripToggle.addEventListener("change", () => {
 	if (!stripToggle.checked && scrubHour !== null) clearScrub(true);
 	renderStrip();
 	updateStatus();
 });
 
+// ── Moments: one click to the sky worth seeing ─────────────────────────
+
+momentGoldenBtn.addEventListener("click", () => {
+	const sunset = sky.conditions()?.sunsetH ?? 19;
+	setScrub(Math.max(0, sunset - 0.5));
+});
+
+momentNightBtn.addEventListener("click", () => {
+	// 1:00 local — reliably dark, and the forecast pin keeps it honest.
+	setScrub(1);
+});
+
 for (const radio of eclipseRadios) {
 	radio.addEventListener("change", () => {
-		applyClimate();
+		applyEclipse();
 		updateStatus();
-		syncUrl();
 	});
 }
 
+// ── Shareable URLs ─────────────────────────────────────────────────────
+
 function syncUrl(): void {
 	const p = new URLSearchParams();
+	if (!zaurToggle.checked) p.set("zaur", "0");
 	if (!terrainToggle.checked) p.set("terrain", "0");
-	if (!satellitesToggle.checked) p.set("iss", "0");
-	else if (!satDemoToggle.checked) p.set("pass", "0");
-	if (!weatherCardToggle.checked) p.set("card", "0");
-	if (!gridToggle.checked) p.set("grid", "0");
+	if (satellitesToggle.checked) {
+		p.set("iss", "1");
+		if (!satDemoToggle.checked) p.set("pass", "0");
+	}
+	if (gridToggle.checked) p.set("grid", "1");
 	if (!birdsToggle.checked) p.set("birds", "0");
 	if (!batsToggle.checked) p.set("bats", "0");
 	if (!firefliesToggle.checked) p.set("fly", "0");
@@ -696,28 +600,12 @@ function syncUrl(): void {
 	if (wx) p.set("wx", wx);
 	const q = selectedQuality();
 	if (q !== "auto") p.set("q", q);
-	const mode = timeMode();
-	if (mode === "golden") {
-		p.set("mode", "golden");
-		p.set("off", goldenOffsetSlider.value);
-	} else if (mode === "custom") {
-		p.set("mode", "custom");
-		p.set("t", customHourSlider.value);
-	}
 	const eclipseMode = selectedEclipse();
-	if (eclipseMode !== "none") {
-		p.set("eclipse", eclipseMode);
-	}
-	if (climateLocks.has("intensity")) p.set("int", intensitySlider.value);
-	if (climateLocks.has("temperatureC")) p.set("temp", tempSlider.value);
-	if (climateLocks.has("windSpeed")) p.set("wind", windSlider.value);
-	if (manualLocation) {
-		const geo = readManualGeo();
-		if (geo) {
-			p.set("lat", String(Math.round(geo.lat * 100) / 100));
-			p.set("lon", String(Math.round(geo.lon * 100) / 100));
-			if (geo.city) p.set("city", geo.city);
-		}
+	if (eclipseMode !== "none") p.set("eclipse", eclipseMode);
+	if (manualLocation && manualGeo) {
+		p.set("lat", String(Math.round(manualGeo.lat * 100) / 100));
+		p.set("lon", String(Math.round(manualGeo.lon * 100) / 100));
+		if (manualGeo.city) p.set("city", manualGeo.city);
 	}
 	const search = p.toString() ? `?${p.toString()}` : "";
 	if (location.search !== search) {
@@ -725,46 +613,57 @@ function syncUrl(): void {
 	}
 }
 
+// ── Location popover: the place name is the single entry point ─────────
+
+function locPopOpen(): boolean {
+	return !locPop.hidden;
+}
+
+function openLocPop(): void {
+	locPop.hidden = false;
+	placeBtn.setAttribute("aria-expanded", "true");
+	syncLocChrome();
+	cityInput.focus();
+}
+
+function closeLocPop(): void {
+	locPop.hidden = true;
+	placeBtn.setAttribute("aria-expanded", "false");
+}
+
+placeBtn.addEventListener("click", () => {
+	if (locPopOpen()) closeLocPop();
+	else openLocPop();
+});
+
+document.addEventListener("pointerdown", (e) => {
+	if (!locPopOpen()) return;
+	const t = e.target as Element;
+	if (!locPop.contains(t) && t !== placeBtn && !placeBtn.contains(t)) closeLocPop();
+});
+
 function syncLocateHint(): void {
 	const hint = sky.locationHint();
-	locateBtn.classList.toggle("btn--locate-hint", !!hint && !manualLocation);
-	locateBtn.title = hint
-		? hint
-		: "Use your device location — accurate sky even on a VPN";
+	placeBtn.classList.toggle("place--hint", !!hint && !manualLocation);
+	placeBtn.title = hint ?? "Change location";
 }
 
 function syncLocChrome(): void {
 	locClearBtn.hidden = !manualLocation;
 	const city = sky.city();
 	const src = sky.locationSource();
-	if (manualLocation && city) {
-		locHint.textContent = `Pinned · ${city}`;
-	} else if (src === "gps" && city) {
-		locHint.textContent = `GPS · ${city}`;
-	} else if (src === "ip" && city) {
-		locHint.textContent = `Network · ${city}`;
-	} else {
-		locHint.textContent = "GPS / network, or pin a place for the 24h tour.";
-	}
+	if (manualLocation && city) locHint.textContent = `Pinned · ${city}`;
+	else if (src === "gps" && city) locHint.textContent = `GPS · ${city}`;
+	else if (src === "ip" && city) locHint.textContent = `Network · ${city}`;
+	else locHint.textContent = "GPS / network location.";
 	for (const btn of locPresets) {
 		const active =
 			manualLocation &&
-			Math.abs(Number(btn.dataset.lat) - Number(latInput.value)) < 0.05 &&
-			Math.abs(Number(btn.dataset.lon) - Number(lonInput.value)) < 0.05;
+			manualGeo !== null &&
+			Math.abs(Number(btn.dataset.lat) - manualGeo.lat) < 0.05 &&
+			Math.abs(Number(btn.dataset.lon) - manualGeo.lon) < 0.05;
 		btn.classList.toggle("is-active", active);
 	}
-}
-
-/** Input values matching the currently applied location — lets Apply tell
- *  "city edited" apart from "coordinates edited". */
-let appliedLat = "";
-let appliedLon = "";
-let appliedCity = "";
-
-function rememberApplied(): void {
-	appliedLat = latInput.value;
-	appliedLon = lonInput.value;
-	appliedCity = cityInput.value.trim();
 }
 
 /** Forward-geocode a place name via Open-Meteo (keyless, same provider). */
@@ -792,57 +691,15 @@ async function geocodeCity(
 	}
 }
 
-function readManualGeo(): { lat: number; lon: number; city?: string } | null {
-	const lat = Number(latInput.value);
-	const lon = Number(lonInput.value);
-	if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-	if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-	const city = cityInput.value.trim();
-	return city ? { lat, lon, city } : { lat, lon };
-}
-
-async function applyManualLocation(): Promise<void> {
-	const typedCity = cityInput.value.trim();
-	const coordsEdited =
-		(latInput.value !== "" && latInput.value !== appliedLat) ||
-		(lonInput.value !== "" && lonInput.value !== appliedLon);
-	const cityEdited =
-		typedCity !== "" && typedCity.toLowerCase() !== appliedCity.toLowerCase();
-	// Typing a city without touching the coordinates means "take me there" —
-	// geocode the name; otherwise the stale coords silently win over it.
-	if (cityEdited && !coordsEdited) {
-		locApplyBtn.disabled = true;
-		statusEl.textContent = `Finding ${typedCity}…`;
-		const found = await geocodeCity(typedCity);
-		locApplyBtn.disabled = false;
-		if (found) {
-			latInput.value = found.lat.toFixed(2);
-			lonInput.value = found.lon.toFixed(2);
-			cityInput.value = found.city;
-		} else {
-			statusEl.textContent = `Couldn't find “${typedCity}” — check the name or enter coordinates`;
-			return;
-		}
-	}
-	const geo = readManualGeo();
-	if (!geo) {
-		statusEl.textContent = "Enter valid latitude (−90…90) and longitude (−180…180)";
-		return;
-	}
+async function pinLocation(geo: { lat: number; lon: number; city?: string }): Promise<void> {
 	locApplyBtn.disabled = true;
-	statusEl.textContent = "Updating location…";
+	locHint.textContent = "Updating location…";
 	try {
 		const g = await sky.setGeo(geo);
 		manualLocation = !!g;
-		if (g) {
-			const city = sky.city();
-			if (city && !cityInput.value.trim()) cityInput.value = city;
-			rememberApplied();
-			statusEl.textContent = city ? `Pinned · ${city}` : `Pinned · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;
-			updatePlace(sky.atmosphere());
-		} else {
-			statusEl.textContent = "Could not apply that location";
-		}
+		manualGeo = g ? { lat: g.lat, lon: g.lon, city: geo.city ?? sky.city() ?? undefined } : null;
+		if (!g) locHint.textContent = "Could not apply that location";
+		updatePlace(sky.atmosphere());
 		syncLocChrome();
 		syncLocateHint();
 		updateStatus();
@@ -851,55 +708,86 @@ async function applyManualLocation(): Promise<void> {
 	}
 }
 
+async function searchCity(): Promise<void> {
+	const name = cityInput.value.trim();
+	if (!name) return;
+	locApplyBtn.disabled = true;
+	locHint.textContent = `Finding ${name}…`;
+	const found = await geocodeCity(name);
+	locApplyBtn.disabled = false;
+	if (!found) {
+		locHint.textContent = `Couldn't find “${name}”`;
+		return;
+	}
+	cityInput.value = found.city;
+	await pinLocation(found);
+}
+
 async function clearManualLocation(): Promise<void> {
 	locClearBtn.hidden = true;
-	statusEl.textContent = "Returning to auto location…";
+	locHint.textContent = "Returning to auto location…";
 	manualLocation = false;
+	manualGeo = null;
 	await sky.setGeo(null);
-	const loc = sky.location();
-	if (loc) {
-		latInput.value = loc.lat.toFixed(2);
-		lonInput.value = loc.lon.toFixed(2);
-	}
-	const city = sky.city();
-	cityInput.value = city && city !== "your area" ? city : "";
-	rememberApplied();
+	cityInput.value = "";
 	updatePlace(sky.atmosphere());
 	syncLocChrome();
 	syncLocateHint();
 	updateStatus();
 }
 
-function fillLocFromSky(): void {
-	const loc = sky.location();
-	if (!loc || manualLocation) return;
-	let filled = false;
-	if (!latInput.value) {
-		latInput.value = loc.lat.toFixed(2);
-		filled = true;
-	}
-	if (!lonInput.value) {
-		lonInput.value = loc.lon.toFixed(2);
-		filled = true;
-	}
-	if (!cityInput.value) {
-		const city = sky.city();
-		if (city && city !== "your area") {
-			cityInput.value = city;
-			filled = true;
+locateBtn.addEventListener("click", async () => {
+	locateBtn.disabled = true;
+	const prev = locateBtn.textContent;
+	locateBtn.textContent = "Locating…";
+	try {
+		const g = await sky.relocate();
+		manualLocation = false;
+		manualGeo = null;
+		if (g) {
+			const city = sky.city();
+			locHint.textContent = city ? `Located · ${city}` : "Location updated";
+			updatePlace(sky.atmosphere());
+		} else {
+			locHint.textContent = "Location denied — sky follows the network estimate";
 		}
+		syncLocChrome();
+		syncLocateHint();
+		updateStatus();
+	} finally {
+		locateBtn.disabled = false;
+		locateBtn.textContent = prev;
 	}
-	if (filled) rememberApplied();
-	syncLocChrome();
+});
+
+locApplyBtn.addEventListener("click", () => void searchCity());
+locClearBtn.addEventListener("click", () => void clearManualLocation());
+cityInput.addEventListener("keydown", (e) => {
+	if (e.key === "Enter") {
+		e.preventDefault();
+		void searchCity();
+	}
+});
+
+for (const btn of locPresets) {
+	btn.addEventListener("click", () => {
+		cityInput.value = btn.dataset.city ?? "";
+		void pinLocation({
+			lat: Number(btn.dataset.lat),
+			lon: Number(btn.dataset.lon),
+			city: btn.dataset.city,
+		});
+	});
 }
+
+// ── Status line + control wiring ───────────────────────────────────────
 
 function updateStatus(): void {
 	updateClock();
-	mirrorClimateFromSky();
+	updateWx();
 	syncLocateHint();
-	syncLocChrome();
-	fillLocFromSky();
 	renderStrip();
+	syncLiveBtn();
 	if (tourRaf !== 0) return;
 
 	const parts: string[] = [];
@@ -922,34 +810,13 @@ function updateStatus(): void {
 	}
 
 	if (satellitesToggle.checked) {
-		if (satDemoToggle.checked) {
-			parts.push("ISS: sample pass ~12 s, then ~7 min");
-		} else {
-			parts.push("ISS: real passes only");
-		}
-	}
-
-	const mode = timeMode();
-	if (mode === "golden") {
-		const h = goldenHour(sky.conditions());
-		parts.push(`Time: ${formatHour(h)} (−${goldenOffsetSlider.value} min)`);
-	} else if (mode === "custom") {
-		parts.push(`Time: ${formatHour(Number(customHourSlider.value))}`);
+		if (satDemoToggle.checked) parts.push("ISS: sample pass ~12 s, then ~7 min");
+		else parts.push("ISS: real passes only");
 	}
 
 	const wxPreview = selectedWx();
 	if (wxPreview) parts.push(`Weather: ${wxPreview} preview`);
 
-	if (climateLocks.size) {
-		const bits: string[] = [];
-		if (climateLocks.has("intensity")) {
-			bits.push(`${Math.round(Number(intensitySlider.value) * 100)}% precip`);
-		}
-		if (climateLocks.has("temperatureC")) bits.push(`${tempSlider.value}°C`);
-		if (climateLocks.has("windSpeed")) bits.push(`wind ${windSlider.value}`);
-		if (bits.length) parts.push(`Climate: ${bits.join(", ")}`);
-	}
-	
 	const eclipse = selectedEclipse();
 	if (eclipse !== "none") parts.push(`Eclipse: ${eclipse}`);
 
@@ -957,6 +824,7 @@ function updateStatus(): void {
 	if (atm.moments.length) parts.push(atm.moments.join(", "));
 	else if (atm.mood === "golden") parts.push("Golden hour");
 
+	if (!zaurToggle.checked) parts.push("Zaur: away");
 	if (!birdsToggle.checked) parts.push("Birds: off");
 	if (!batsToggle.checked) parts.push("Bats: off");
 
@@ -965,16 +833,19 @@ function updateStatus(): void {
 	} else {
 		const h = effectiveHour();
 		const inWindow = h >= 19.5 || h < 3;
-		if (!inWindow) parts.push("Fireflies: appear after dusk — try Custom 22:00");
+		if (!inWindow) parts.push("Fireflies: appear after dusk — try Night on the strip");
 	}
 
 	if (selectedQuality() === "low") parts.push("Quality: low (grid off, ½ particles)");
 
-	statusEl.textContent = parts.length
-		? parts.join(" · ")
-		: "Live sky — no overrides";
+	statusEl.textContent = parts.length ? parts.join(" · ") : "Live sky — no overrides";
 	syncUrl();
 }
+
+zaurToggle.addEventListener("change", () => {
+	syncZaur();
+	updateStatus();
+});
 
 terrainToggle.addEventListener("change", () => {
 	sky.setTerrain(terrainToggle.checked);
@@ -993,106 +864,10 @@ satDemoToggle.addEventListener("change", () => {
 	updateStatus();
 });
 
-weatherCardToggle.addEventListener("change", () => {
-	sky.setWeatherCard(weatherCardToggle.checked);
-	updateStatus();
-});
-
 gridToggle.addEventListener("change", () => {
 	sky.setGrid(gridToggle.checked);
 	updateStatus();
 });
-
-for (const radio of timeModeRadios) {
-	radio.addEventListener("change", () => {
-		stopTour();
-		clearScrub(false);
-		syncTimeRows();
-		applyTime();
-		updateStatus();
-	});
-}
-
-goldenOffsetSlider.addEventListener("input", () => {
-	stopTour();
-	clearScrub(false);
-	updateTimeLabels();
-	applyTime();
-	updateStatus();
-});
-
-customHourSlider.addEventListener("input", () => {
-	stopTour();
-	clearScrub(false);
-	updateTimeLabels();
-	applyTime();
-	updateStatus();
-});
-
-tourBtn.addEventListener("click", () => {
-	if (tourRaf !== 0) {
-		stopTour();
-	} else {
-		startTour();
-	}
-});
-
-locateBtn.addEventListener("click", async () => {
-	locateBtn.disabled = true;
-	const prev = locateBtn.textContent;
-	locateBtn.textContent = "Locating…";
-	statusEl.textContent = "Asking for your location…";
-	try {
-		const g = await sky.relocate();
-		manualLocation = false;
-		if (g) {
-			latInput.value = g.lat.toFixed(2);
-			lonInput.value = g.lon.toFixed(2);
-			const city = sky.city();
-			cityInput.value = city && city !== "your area" ? city : "";
-			rememberApplied();
-			statusEl.textContent = city
-				? `Located · ${city}`
-				: `Location updated · ${g.lat.toFixed(2)}°, ${g.lon.toFixed(2)}°`;
-			updatePlace(sky.atmosphere());
-		} else {
-			statusEl.textContent =
-				"Location denied or unavailable — sky still follows IP estimate";
-		}
-		syncLocChrome();
-		syncLocateHint();
-		updateStatus();
-	} finally {
-		locateBtn.disabled = false;
-		locateBtn.textContent = prev;
-	}
-});
-
-locApplyBtn.addEventListener("click", () => {
-	void applyManualLocation();
-});
-
-locClearBtn.addEventListener("click", () => {
-	void clearManualLocation();
-});
-
-for (const btn of locPresets) {
-	btn.addEventListener("click", () => {
-		latInput.value = btn.dataset.lat ?? "";
-		lonInput.value = btn.dataset.lon ?? "";
-		cityInput.value = btn.dataset.city ?? "";
-		void applyManualLocation();
-	});
-}
-
-for (const input of [latInput, lonInput, cityInput]) {
-	input.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			void applyManualLocation();
-		}
-	});
-}
 
 captureBtn.addEventListener("click", () => {
 	const moment = sky.captureMoment();
@@ -1106,6 +881,25 @@ captureBtn.addEventListener("click", () => {
 	a.download = `zaur-world-${safe || "moment"}.png`;
 	a.click();
 	statusEl.textContent = moment.caption;
+});
+
+shareBtn.addEventListener("click", async () => {
+	syncUrl(); // make sure the address bar reflects the current scene
+	const url = location.href;
+	if (navigator.share) {
+		try {
+			await navigator.share({ title: document.title, url });
+			return;
+		} catch {
+			// cancelled or unsupported target — fall through to clipboard
+		}
+	}
+	try {
+		await navigator.clipboard.writeText(url);
+		statusEl.textContent = "Link copied — this exact scene, shareable";
+	} catch {
+		statusEl.textContent = url;
+	}
 });
 
 birdsToggle.addEventListener("change", () => {
@@ -1128,34 +922,10 @@ for (const radio of wxRadios) {
 		if (!radio.checked) return;
 		clearScrub(true);
 		sky.setWeatherPreview(selectedWx());
-		if (precipPreview()) bindPrecipIntensity();
-		else {
-			applyClimate();
-			mirrorClimateFromSky();
-		}
 		renderStrip();
 		updateStatus();
 	});
 }
-
-intensitySlider.addEventListener("input", () => {
-	syncClimateChrome();
-	lockClimate("intensity");
-});
-
-tempSlider.addEventListener("input", () => {
-	syncClimateChrome();
-	lockClimate("temperatureC");
-});
-
-windSlider.addEventListener("input", () => {
-	syncClimateChrome();
-	lockClimate("windSpeed");
-});
-
-climateResetBtn.addEventListener("click", () => {
-	resetClimate();
-});
 
 for (const radio of qualityRadios) {
 	radio.addEventListener("change", () => {
@@ -1166,24 +936,20 @@ for (const radio of qualityRadios) {
 	});
 }
 
+// ── Boot ───────────────────────────────────────────────────────────────
+
 syncSatDemoRow();
 syncGridRow();
-syncTimeRows();
-updateTimeLabels();
-sky.setWeatherCard(weatherCardToggle.checked);
 sky.setGrid(gridToggle.checked);
 sky.setWeatherPreview(selectedWx());
-if (precipPreview()) bindPrecipIntensity();
-else applyClimate();
-applyTime();
-mirrorClimateFromSky();
+applyEclipse();
+syncZaur();
 updateStatus();
 
 // Shareable ?lat=&lon=&city= — apply after mount so weather + terrain refresh.
-if (latParam && lonParam && readManualGeo()) {
-	void applyManualLocation();
-} else {
-	window.setTimeout(fillLocFromSky, 1500);
+if (Number.isFinite(latParam) && Number.isFinite(lonParam) && params.has("lat")) {
+	if (cityParam) cityInput.value = cityParam;
+	void pinLocation({ lat: latParam, lon: lonParam, city: cityParam ?? undefined });
 }
 
 window.setInterval(updateStatus, 2000);

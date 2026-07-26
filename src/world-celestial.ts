@@ -74,13 +74,15 @@ export function drawSun(
   const glowG = clampByte((220 - 100 * ease) * eclipseDim);
   const glowB = clampByte((180 - 150 * easeExp) * eclipseDim);
 
-  // Impressive, simple wide glow (wider at sunset)
+  // Wide glare at zenith; near the horizon atmospheric extinction kills it —
+  // a low sun is a crisp disc you can look at, not a bright-centered blob.
   const glowSteps = 4;
   for (let i = glowSteps; i >= 0; i--) {
-    const a = (0.04 + (glowSteps - i) * 0.02) * (1 + horizonness * 0.4);
+    const a = (0.04 + (glowSteps - i) * 0.02) * (1 - horizonness * 0.65);
+    if (a <= 0.004) continue;
     ctx.fillStyle = `rgba(${glowR}, ${glowG}, ${glowB}, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1 + i * (0.6 + horizonness * 0.4)), 0, Math.PI * 2);
+    ctx.arc(x, y, r * (1 + i * (0.6 - horizonness * 0.25)), 0, Math.PI * 2);
     ctx.fill();
   }
   
@@ -105,12 +107,15 @@ export function drawSun(
     }
   }
 
-  // Simpler, cleaner gradient for the sun disc: white hot center to colored edge
+  // Sun disc: white-hot center at zenith, but a rising/setting sun reads as
+  // a flat deep-orange disc — the hot core fades out with horizonness.
+  const coreR = clampByte((255 - (255 - discR) * ease) * eclipseDim);
+  const coreG = clampByte((255 - (255 - discG) * ease) * eclipseDim);
+  const coreB = clampByte((255 - (255 - discB) * ease) * eclipseDim);
   const discGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-  discGrad.addColorStop(0, `rgba(${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, 1)`);
-  discGrad.addColorStop(0.5, `rgba(${clampByte(255*eclipseDim)}, ${clampByte(255*eclipseDim)}, ${clampByte(255 - 50 * ease)*eclipseDim}, 1)`);
+  discGrad.addColorStop(0, `rgba(${coreR}, ${coreG}, ${coreB}, 1)`);
   discGrad.addColorStop(1, `rgba(${discR}, ${discG}, ${discB}, 1)`);
-  
+
   ctx.fillStyle = discGrad;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);

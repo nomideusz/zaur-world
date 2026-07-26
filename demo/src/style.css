@@ -48,6 +48,14 @@ body {
 	pointer-events: none;
 }
 
+/* Zaur walks above the sky, below the chrome. */
+#zaur-canvas {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+}
+
 .brand,
 .chrome {
 	position: fixed;
@@ -159,14 +167,62 @@ body {
 	animation: brand-dot-pulse calc(3.2s - var(--zw-glow, 0) * 1.4s) ease-in-out infinite;
 }
 
+/* The place name doubles as the one location control — click to change. */
 .place {
+	pointer-events: auto;
+	display: block;
 	margin: 0.45rem 0 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	text-align: left;
+	cursor: pointer;
+	font-family: inherit;
 	font-size: 0.72rem;
 	font-weight: 400;
 	letter-spacing: 0.01em;
 	color: var(--ink-muted);
 	max-width: 32ch;
+	text-shadow: var(--shadow);
+	border-bottom: 1px dashed rgba(230, 234, 240, 0.35);
 	transition: color 1s var(--ease), opacity 0.6s var(--ease);
+}
+
+.place:hover {
+	color: var(--ink);
+	border-bottom-color: var(--accent);
+}
+
+.place:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.place--hint {
+	color: var(--accent-warm);
+	border-bottom-color: rgba(244, 165, 116, 0.55);
+	animation: locate-hint-pulse 2.4s var(--ease) infinite;
+}
+
+.loc-pop {
+	position: absolute;
+	top: calc(100% + 0.5rem);
+	left: 0;
+	z-index: 3;
+	pointer-events: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+	width: min(17rem, 88vw);
+	padding: 0.7rem;
+	border-radius: 10px;
+	border: 1px solid var(--panel-edge);
+	background: var(--panel);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+	text-shadow: none;
+	animation: tweaks-in 0.18s var(--ease);
 }
 
 .clock {
@@ -551,17 +607,6 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	gap: 0.32rem;
 }
 
-.climate-hint {
-	margin: 0;
-	font-size: 0.62rem;
-	color: var(--ink-faint);
-	line-height: 1.4;
-}
-
-.climate-hint[hidden] {
-	display: none;
-}
-
 .loc-hint {
 	margin: 0;
 	font-size: 0.62rem;
@@ -606,29 +651,15 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	border-color: var(--chip-on-edge);
 }
 
-.loc-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 0.4rem;
+.loc-search {
+	display: flex;
+	gap: 0.35rem;
 }
 
-.loc-field {
-	display: grid;
-	gap: 0.2rem;
-	font-size: 0.58rem;
-	font-weight: 500;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--ink-faint);
-}
-
-.loc-field--wide {
-	grid-column: 1 / -1;
-}
-
-.loc-field input {
+.loc-search input {
 	pointer-events: auto;
-	width: 100%;
+	flex: 1;
+	min-width: 0;
 	box-sizing: border-box;
 	padding: 0.4rem 0.5rem;
 	border-radius: 6px;
@@ -637,34 +668,19 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	color: var(--ink);
 	font: 500 0.72rem var(--font-sans);
 	letter-spacing: 0.01em;
-	text-transform: none;
 }
 
-.loc-field input::placeholder {
+.loc-search input::placeholder {
 	color: var(--ink-faint);
 }
 
-.loc-field input:focus-visible {
+.loc-search input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
 }
 
-/* Hide number spinners — coords are typed, not nudged. */
-.loc-field input[type="number"]::-webkit-outer-spin-button,
-.loc-field input[type="number"]::-webkit-inner-spin-button {
-	-webkit-appearance: none;
-	margin: 0;
-}
-
-.loc-field input[type="number"] {
-	-moz-appearance: textfield;
-	appearance: textfield;
-}
-
 .btn--apply {
 	pointer-events: auto;
-	width: 100%;
-	margin-top: 0.15rem;
 	padding: 0.45rem 0.7rem;
 	font-size: 0.68rem;
 	color: var(--accent);
@@ -705,79 +721,6 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	outline-offset: 2px;
 }
 
-.chip-grid--climate {
-	margin-top: 0.15rem;
-}
-
-.slider-name {
-	font-size: 0.58rem;
-	font-weight: 500;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--ink-faint);
-}
-
-.field-extra {
-	min-height: 1.55rem;
-}
-
-.time-hint {
-	margin: 0;
-	font-size: 0.66rem;
-	color: var(--ink-faint);
-	line-height: 1.55rem;
-}
-
-.time-hint[hidden] {
-	display: none;
-}
-
-.slider {
-	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 0.45rem;
-	align-items: center;
-	min-height: 1.55rem;
-}
-
-.slider--named {
-	grid-template-columns: 3.6rem 1fr auto;
-}
-
-.slider[hidden] {
-	display: none;
-}
-
-.slider input[type="range"] {
-	width: 100%;
-	height: 0.22rem;
-	margin: 0;
-	appearance: none;
-	-webkit-appearance: none;
-	border-radius: 999px;
-	background: rgba(232, 228, 216, 0.16);
-	accent-color: var(--accent);
-}
-
-.slider input[type="range"]::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	width: 0.95rem;
-	height: 0.95rem;
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-	cursor: pointer;
-}
-
-.slider output {
-	font-size: 0.66rem;
-	font-weight: 600;
-	font-variant-numeric: tabular-nums;
-	color: var(--ink-muted);
-	min-width: 2.6rem;
-	text-align: right;
-}
-
 /* Segmented controls */
 .segmented {
 	display: grid;
@@ -792,9 +735,6 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	grid-template-columns: repeat(5, 1fr);
 }
 
-.segmented--four {
-	grid-template-columns: repeat(4, 1fr);
-}
 
 .segmented input {
 	position: absolute;
@@ -905,10 +845,38 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	cursor: wait;
 }
 
-.btn--locate-hint {
+.btn--live {
 	border-color: rgba(244, 165, 116, 0.55);
 	color: var(--accent-warm);
-	animation: locate-hint-pulse 2.4s var(--ease) infinite;
+}
+
+.btn--live:hover {
+	background: rgba(244, 165, 116, 0.16);
+}
+
+.chrome-actions--panel {
+	background: var(--panel);
+	padding: 0.6rem;
+	border-radius: 8px;
+	border: 1px solid var(--panel-edge);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	gap: 0.5rem;
+}
+
+.tour-row {
+	display: flex;
+	gap: 0.5rem;
+	width: 100%;
+}
+
+.tour-row .btn {
+	flex: 1;
+}
+
+.tour-row .tour-speed {
+	flex: 1;
+	text-align: center;
 }
 
 @keyframes locate-hint-pulse {
@@ -1051,8 +1019,17 @@ body:has(.daystrip:not([hidden])) .chrome {
 	color: var(--ink-faint);
 }
 
-.daystrip-live {
-	font-size: 0.6rem;
+.daystrip-moments {
+	display: flex;
+	gap: 0.7rem;
+}
+
+.daystrip-moments .btn-text {
+	font-size: 0.56rem;
+	color: var(--ink-faint);
+}
+
+.daystrip-moments .btn-text:hover {
 	color: var(--accent-warm);
 }
 
@@ -1265,14 +1242,6 @@ body:has(.daystrip:not([hidden])) .chrome {
 		max-height: max(13rem, calc(100dvh - 23rem));
 	}
 
-	/* Dock owns the bottom edge — raise the parked weather card above it. */
-	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-right"],
-	body:has(.daystrip:not([hidden])) .wx-card[data-position="top-left"],
-	body:has(.daystrip:not([hidden])) .wx-card[data-position="bottom-right"],
-	body:has(.daystrip:not([hidden])) .wx-card[data-position="bottom-left"] {
-		bottom: calc(14px + 5.1rem + env(safe-area-inset-bottom, 0px));
-	}
-
 	.ds-cell {
 		flex: 0 0 2.6rem;
 		min-width: 2.6rem;
@@ -1284,7 +1253,8 @@ body:has(.daystrip:not([hidden])) .chrome {
 	}
 
 	.btn--tour,
-	.btn--locate {
+	.btn--locate,
+	.btn--live {
 		flex: 1 1 auto;
 		min-height: 2.4rem;
 		padding: 0.5rem 0.7rem;
@@ -1338,7 +1308,7 @@ body:has(.daystrip:not([hidden])) .chrome {
 		-webkit-backdrop-filter: none;
 	}
 
-	.btn--locate-hint {
+	.place--hint {
 		animation: none;
 	}
 }
