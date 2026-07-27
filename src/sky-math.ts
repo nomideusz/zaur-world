@@ -4,12 +4,13 @@ import { SUN_RISE, SUN_SET } from "./solar.js";
 export function cloudAlphaFor(wx: WeatherConditions): number {
 	let a = 0;
 	if (wx.cloudiness === 1) a = 0.28;
-	else if (wx.cloudiness === 2) a = 0.48;
+	// A genuinely overcast sky is closed — no blue — even without precip.
+	else if (wx.cloudiness === 2) a = 0.72;
 	// Real cloud-cover % (when known) smooths the three buckets into a
 	// continuum — a 60% sky reads hazier than a lone puff, without ever
 	// thinning what the buckets already promise.
 	if (wx.cloudCover != null) {
-		a = Math.max(a, Math.min(1, Math.max(0, wx.cloudCover / 100)) * 0.52);
+		a = Math.max(a, Math.min(1, Math.max(0, wx.cloudCover / 100)) * 0.75);
 	}
 	if (wx.thunder) a = Math.max(a, 0.6);
 	if (wx.precipitation === "rain") a = Math.max(a, 0.38);

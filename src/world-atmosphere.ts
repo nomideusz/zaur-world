@@ -22,22 +22,29 @@ export function drawHorizonGlow(
 }
 
 export function drawFog(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  // Fog is milky air, not a gray sky: a light veil up high, and a dense
+  // ground bank that genuinely swallows the hills — that loss of the
+  // horizon is what separates fog from mere overcast.
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, "rgba(180, 184, 196, 0.04)");
-  grad.addColorStop(0.55, "rgba(190, 192, 202, 0.18)");
-  grad.addColorStop(1, "rgba(200, 200, 210, 0.32)");
+  grad.addColorStop(0, "rgba(196, 199, 208, 0.3)");
+  grad.addColorStop(0.45, "rgba(200, 202, 211, 0.48)");
+  grad.addColorStop(0.75, "rgba(206, 207, 215, 0.62)");
+  grad.addColorStop(1, "rgba(211, 212, 219, 0.75)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
+  // Two slow-breathing banks give the murk motion without particles.
   const t = performance.now() / 1000;
-  const bandY = height * (0.55 + Math.sin(t * 0.06) * 0.04);
-  const bandH = height * 0.18;
-  const band = ctx.createLinearGradient(0, bandY - bandH, 0, bandY + bandH);
-  band.addColorStop(0, "rgba(210, 212, 220, 0)");
-  band.addColorStop(0.5, "rgba(210, 212, 220, 0.10)");
-  band.addColorStop(1, "rgba(210, 212, 220, 0)");
-  ctx.fillStyle = band;
-  ctx.fillRect(0, bandY - bandH, width, bandH * 2);
+  for (let k = 0; k < 2; k++) {
+    const bandY = height * (0.58 + k * 0.16 + Math.sin(t * 0.05 + k * 2.4) * 0.05);
+    const bandH = height * (0.16 + k * 0.08);
+    const band = ctx.createLinearGradient(0, bandY - bandH, 0, bandY + bandH);
+    band.addColorStop(0, "rgba(214, 215, 222, 0)");
+    band.addColorStop(0.5, `rgba(214, 215, 222, ${(0.16 + k * 0.06).toFixed(2)})`);
+    band.addColorStop(1, "rgba(214, 215, 222, 0)");
+    ctx.fillStyle = band;
+    ctx.fillRect(0, bandY - bandH, width, bandH * 2);
+  }
 }
 
 export function drawWetSheen(

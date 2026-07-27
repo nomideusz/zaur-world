@@ -146,6 +146,77 @@ interface Cloud {
   seed: number;
   /** Depth band: 0 = far/back, 1 = mid, 2 = near/front. Drives parallax + opacity. */
   layer: 0 | 1 | 2;
+  /** Cached soft-cloud sprite — cheap to stamp, rebuilt when the key moves. */
+  sprite?: HTMLCanvasElement;
+  spriteKey?: string;
+}
+
+const CLOUD_SPRITE_RES = 0.5;
+
+/** Paint one soft cloud into an offscreen sprite (at reduced resolution). */
+function renderCloudSprite(
+  seed: number,
+  lobes: number,
+  w: number,
+  ch: number,
+  toward: number,
+  layer: 0 | 1 | 2,
+  colors: { top: RGB; bot: RGB; rim: RGB; shade: RGB; rimK: number }
+): HTMLCanvasElement | undefined {
+  if (typeof document === "undefined") return undefined;
+  const c = document.createElement("canvas");
+  c.width = Math.max(8, Math.ceil(w * 1.8 * CLOUD_SPRITE_RES));
+  c.height = Math.max(8, Math.ceil(ch * 2.4 * CLOUD_SPRITE_RES));
+  const sctx = c.getContext("2d");
+  if (!sctx) return undefined;
+  sctx.scale(CLOUD_SPRITE_RES, CLOUD_SPRITE_RES);
+  sctx.translate(w * 0.9, ch * 1.2);
+  // The blur is what turns hard ellipses into vapor — kept modest so the
+  // puffs still read as shapes, not smudges.
+  sctx.filter = `blur(${Math.max(1.5, Math.min(7, ch * 0.045)).toFixed(1)}px)`;
+
+  const lobe = (n: number): [number, number, number, number] => {
+    const offX = ((seed * (n + 1) * 31) % 100) / 100 - 0.5;
+    const offY = ((seed * (n + 2) * 17) % 60) / 100 - 0.3;
+    const rx = (w / 2) * (0.55 + ((seed * (n + 3) * 7) % 40) / 100);
+    const ry = (ch / 2) * (0.65 + ((seed * (n + 4) * 5) % 30) / 100);
+    return [offX * w * 0.6, offY * ch * 0.8, rx, ry];
+  };
+  // One combined path per pass — uniform alpha, no lobe-overlap blotches.
+  const lobePath = (dx: number, dy: number, scale: number): void => {
+    sctx.beginPath();
+    for (let n = 0; n < lobes; n++) {
+      const [lx, ly, rx, ry] = lobe(n);
+      sctx.ellipse(lx + dx, ly + dy, rx * scale, ry * scale, 0, 0, Math.PI * 2);
+    }
+    sctx.fill();
+  };
+
+  const { top, bot, rim, shade, rimK } = colors;
+  // Underpainting peeks out on one edge each: a shadowed underbelly away
+  // from the light, a lit rim toward it — the opposed offsets are what make
+  // the puffs read as round.
+  if (layer > 0) {
+    sctx.fillStyle = `rgba(${shade[0]}, ${shade[1]}, ${shade[2]}, 0.4)`;
+    lobePath(-toward * w * 0.03, ch * 0.1, 0.96);
+    if (rimK > 0.05) {
+      sctx.fillStyle = `rgba(${rim[0]}, ${rim[1]}, ${rim[2]}, ${(0.6 * rimK).toFixed(3)})`;
+      lobePath(toward * w * 0.045, -ch * 0.09, 0.95);
+    }
+  }
+  // Body: per-lobe gradient fills — overlaps thicken, then the blur melts
+  // them into internal structure instead of hard seams.
+  const grad = sctx.createLinearGradient(0, -ch * 0.6, 0, ch * 0.7);
+  grad.addColorStop(0, `rgba(${top[0]}, ${top[1]}, ${top[2]}, 0.8)`);
+  grad.addColorStop(1, `rgba(${bot[0]}, ${bot[1]}, ${bot[2]}, 0.68)`);
+  sctx.fillStyle = grad;
+  for (let n = 0; n < lobes; n++) {
+    const [lx, ly, rx, ry] = lobe(n);
+    sctx.beginPath();
+    sctx.ellipse(lx, ly, rx, ry, 0, 0, Math.PI * 2);
+    sctx.fill();
+  }
+  return c;
 }
 
 interface Drop {
@@ -450,7 +521,12 @@ export class World {
       topRGB = lerpRGB(topRGB, [255, 200, 140], warmth * 0.35);
     }
     if (cloudAlpha > 0) {
-      const desat = cloudAlpha * (0.45 + intensity * 0.2 + intensity * intensity * 0.25);
+      // Ramps hard past half cover: a truly overcast sky holds no blue.
+      const desat = Math.min(
+        1,
+        cloudAlpha * (0.55 + intensity * 0.2 + intensity * intensity * 0.25) +
+          Math.max(0, cloudAlpha - 0.5) * 1.2
+      );
       topRGB = desatRGB(topRGB, Math.min(0.85, desat));
       bottomRGB = desatRGB(bottomRGB, Math.min(0.85, desat));
     }
@@ -528,6 +604,9 @@ export class World {
           Math.max(0, 1 - cloudAlpha * 2.4)
         : 0;
     if (cirrusA > 0.03) drawCirrus(ctx, width, height, cirrusA, h);
+
+    // Heavy weather: a full-width deck closes the sky behind the puffs.
+    if (wx && cloudAlpha > 0.3) this.drawOvercastDeck(ctx, wx, h, cloudAlpha);
 
     // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
     if (this.clouds.length > 0 && cloudAlpha > 0) {
@@ -670,13 +749,11 @@ export class World {
 
 
 
-  private drawCloudLayer(
-    ctx: CanvasRenderingContext2D,
-    layer: 0 | 1 | 2,
-    alpha: number,
+  /** Shared cloud paint — drives both the puff layers and the overcast deck. */
+  private cloudPalette(
     wx: WeatherConditions | null,
-    h: number,
-  ): void {
+    h: number
+  ): { i: number; heaviness: number; glow: number; top: RGB; bot: RGB; cloudEclipseDark: number } {
     const i = Math.max(0, Math.min(1, wx?.intensity ?? 0));
     const stormBase = !!(wx && (wx.thunder || wx.cloudiness === 2));
     // Heaviness drives color: light scattered puffs → charcoal storm bank.
@@ -704,14 +781,73 @@ export class World {
       top = lerpRGB(top, [44, 46, 64], cloudEclipseDark);
       bot = lerpRGB(bot, [22, 22, 36], cloudEclipseDark);
     }
-    const [topR, topG, topB] = top;
-    const [botR, botG, botB] = bot;
+    return { i, heaviness, glow, top, bot, cloudEclipseDark };
+  }
+
+  /**
+   * Heavy weather closes the sky: a full-width deck behind the puffs, so
+   * rain falls out of cloud instead of out of open sky. Real storms are
+   * overcast — no blue gaps between cumulus.
+   */
+  private drawOvercastDeck(
+    ctx: CanvasRenderingContext2D,
+    wx: WeatherConditions,
+    h: number,
+    cloudAlpha: number
+  ): void {
+    const { i, heaviness, top, bot } = this.cloudPalette(wx, h);
+    const cover = Math.min(
+      1,
+      (wx.cloudiness === 2 ? 0.85 : 0) + i * 0.5 + (wx.thunder ? 0.15 : 0)
+    );
+    const a = cover * cloudAlpha;
+    if (a < 0.05) return;
+    const { width, height } = this.state;
+    const depth = height * (0.32 + heaviness * 0.16 + i * 0.1);
+    // Underside-first: from below you see the deck's dark base, brightening
+    // slightly toward the horizon where the layer thins out.
+    const grad = ctx.createLinearGradient(0, 0, 0, depth);
+    grad.addColorStop(0, `rgba(${bot[0]}, ${bot[1]}, ${bot[2]}, ${a.toFixed(3)})`);
+    grad.addColorStop(0.55, `rgba(${top[0]}, ${top[1]}, ${top[2]}, ${(a * 0.75).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${top[0]}, ${top[1]}, ${top[2]}, 0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, depth);
+  }
+
+  private drawCloudLayer(
+    ctx: CanvasRenderingContext2D,
+    layer: 0 | 1 | 2,
+    alpha: number,
+    wx: WeatherConditions | null,
+    h: number,
+  ): void {
+    const { i, heaviness, glow, top, bot, cloudEclipseDark } = this.cloudPalette(wx, h);
     // Distant clouds are dimmer (atmospheric perspective).
     const layerOpacity = layer === 0 ? 0.55 : layer === 1 ? 0.85 : 1.0;
     const baseAlpha =
       alpha * (0.38 + i * 0.28 + i * i * 0.28 + (wx?.thunder ? 0.12 : 0)) * layerOpacity;
     // Heavy weather swells the bank — same silhouettes, thicker coverage.
     const sizeMul = 1 + i * 0.8 + i * i * 1.8;
+
+    // Directional light: the sun by day, the moon by night. Clouds are lit
+    // from wherever the celestial body sits, so a morning bank glows on its
+    // east edge and an evening one on the west. Mirrors drawCelestial's arc.
+    const isDay = h >= SUN_RISE && h <= SUN_SET;
+    let lt: number;
+    if (isDay) {
+      lt = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+    } else {
+      let moonH = h - SUN_SET;
+      if (moonH < 0) moonH += 24;
+      lt = moonH / (24 - SUN_SET + SUN_RISE);
+    }
+    const lightX = this.state.width * (0.08 + lt * 0.84);
+    // Rim tint: white at midday, ember at golden hour, silver by moonlight.
+    const rim: RGB = isDay
+      ? lerpRGB([255, 255, 255], [255, 205, 150], Math.min(1, glow * 1.4))
+      : [205, 218, 245];
+    const rimK = (isDay ? 1 : 0.4) * (1 - heaviness * 0.65);
+    const shade = lerpRGB(bot, [10, 10, 20], 0.35);
 
     for (const cloud of this.clouds) {
       if (cloud.layer !== layer) continue;
@@ -720,39 +856,28 @@ export class World {
       const cy = cloud.y;
       const w = cloud.width * sizeMul;
       const ch = cloud.height * sizeMul;
-
-      // Vertical light/shadow gradient per cloud — top reads brighter.
-      const grad = ctx.createLinearGradient(0, cy - ch * 0.6, 0, cy + ch * 0.7);
-      grad.addColorStop(0, `rgba(${topR}, ${topG}, ${topB}, ${baseAlpha.toFixed(3)})`);
-      grad.addColorStop(1, `rgba(${botR}, ${botG}, ${botB}, ${(baseAlpha * 0.85).toFixed(3)})`);
-      
+      const toward = lightX >= cx ? 1 : -1;
       // A cloud is 4–5 overlapping ellipses; the seed deterministically
-      // varies the puff pattern so each one looks distinct. Intense weather adds more lobes.
+      // varies the puff pattern. Intense weather adds more lobes.
       const lobes = 4 + (cloud.seed & 1) + Math.floor(i * 4) + (wx?.thunder ? 2 : 0);
-      
-      // Draw a subtle rim light/highlight behind the cloud first for depth
-      if (layer === 2 && baseAlpha > 0.3) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${(baseAlpha * 0.15).toFixed(3)})`;
-        for (let n = 0; n < lobes; n++) {
-          const offX = ((cloud.seed * (n + 1) * 31) % 100) / 100 - 0.5;
-          const offY = ((cloud.seed * (n + 2) * 17) % 60) / 100 - 0.3;
-          const rx = (w / 2) * (0.55 + ((cloud.seed * (n + 3) * 7) % 40) / 100);
-          const ry = (ch / 2) * (0.65 + ((cloud.seed * (n + 4) * 5) % 30) / 100);
-          ctx.beginPath();
-          ctx.ellipse(cx + offX * w * 0.6, cy + offY * ch * 0.8 - ry * 0.15, rx * 1.05, ry * 1.05, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
+
+      // Rebuild the sprite only when a lighting/size bucket moves — per
+      // frame a cloud costs one drawImage.
+      const key = `${layer}|${lobes}|${toward}|${Math.round(w / 8)}|${Math.round(
+        heaviness * 8
+      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${isDay ? 1 : 0}`;
+      if (cloud.spriteKey !== key) {
+        cloud.spriteKey = key;
+        cloud.sprite = renderCloudSprite(cloud.seed, lobes, w, ch, toward, layer, {
+          top, bot, rim, shade, rimK,
+        });
       }
-      
-      ctx.fillStyle = grad;
-      for (let n = 0; n < lobes; n++) {
-        const offX = ((cloud.seed * (n + 1) * 31) % 100) / 100 - 0.5;
-        const offY = ((cloud.seed * (n + 2) * 17) % 60) / 100 - 0.3;
-        const rx = (w / 2) * (0.55 + ((cloud.seed * (n + 3) * 7) % 40) / 100);
-        const ry = (ch / 2) * (0.65 + ((cloud.seed * (n + 4) * 5) % 30) / 100);
-        ctx.beginPath();
-        ctx.ellipse(cx + offX * w * 0.6, cy + offY * ch * 0.8, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
+      if (cloud.sprite) {
+        const dw = cloud.sprite.width / CLOUD_SPRITE_RES;
+        const dh = cloud.sprite.height / CLOUD_SPRITE_RES;
+        ctx.globalAlpha = baseAlpha;
+        ctx.drawImage(cloud.sprite, cx - dw / 2, cy - dh / 2, dw, dh);
+        ctx.globalAlpha = 1;
       }
     }
   }

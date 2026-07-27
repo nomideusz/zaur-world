@@ -18,10 +18,72 @@ interface RenderedFrame {
 	left: HTMLCanvasElement;
 }
 
-function buildFrames(scale: number, color: string): Record<FrameId, RenderedFrame> {
+const SWEATER = "#c25b3f";
+const WET_INK = "#b6c3cb";
+const WET_SWEATER = "#8f4430";
+
+/**
+ * Sweater band rows per frame, hand-picked — a width heuristic put the
+ * band on his neck/head in the look-up and read poses.
+ */
+const TORSO_BAND: Record<FrameId, [number, number]> = {
+	idle: [8, 10],
+	walk_a: [8, 10],
+	walk_b: [8, 10],
+	look_up: [8, 10],
+	happy: [8, 10],
+	angry: [8, 10],
+	sad: [9, 11],
+	blink: [8, 10],
+	sleep: [13, 15],
+	read: [9, 10],
+	sit: [14, 15],
+	surprise: [8, 10],
+	cheer: [7, 9],
+};
+
+/** Topmost body cell per column, per frame — where snow settles and drips spawn. */
+const TOP_CELLS: Record<FrameId, Array<[number, number]>> = (() => {
+	const out = {} as Record<FrameId, Array<[number, number]>>;
+	for (const id of Object.keys(SPRITE_FRAMES) as FrameId[]) {
+		const rows = SPRITE_FRAMES[id];
+		const cells: Array<[number, number]> = [];
+		for (let x = 0; x < SPRITE_GRID_W; x++) {
+			for (let y = 0; y < SPRITE_GRID_H; y++) {
+				if ((rows[y] ?? "")[x] === "X") {
+					cells.push([x, y]);
+					break;
+				}
+			}
+		}
+		out[id] = cells;
+	}
+	return out;
+})();
+
+function mirrored(right: HTMLCanvasElement): HTMLCanvasElement {
+	const left = document.createElement("canvas");
+	left.width = right.width;
+	left.height = right.height;
+	const lctx = left.getContext("2d")!;
+	lctx.imageSmoothingEnabled = false;
+	lctx.translate(right.width, 0);
+	lctx.scale(-1, 1);
+	lctx.drawImage(right, 0, 0);
+	return left;
+}
+
+function buildFrames(
+	scale: number,
+	color: string,
+	opts: { sweater?: boolean; wet?: boolean } = {}
+): Record<FrameId, RenderedFrame> {
+	const ink = opts.wet ? WET_INK : color;
+	const wool = opts.wet ? WET_SWEATER : SWEATER;
 	const out = {} as Record<FrameId, RenderedFrame>;
 	for (const id of Object.keys(SPRITE_FRAMES) as FrameId[]) {
 		const rows = SPRITE_FRAMES[id];
+		const [bandLo, bandHi] = opts.sweater ? TORSO_BAND[id] : [-10, -10];
 		const w = SPRITE_GRID_W * scale;
 		const h = SPRITE_GRID_H * scale;
 		const right = document.createElement("canvas");
@@ -29,24 +91,45 @@ function buildFrames(scale: number, color: string): Record<FrameId, RenderedFram
 		right.height = h;
 		const ctx = right.getContext("2d")!;
 		ctx.imageSmoothingEnabled = false;
-		ctx.fillStyle = color;
 		for (let y = 0; y < SPRITE_GRID_H; y++) {
 			const row = rows[y] ?? "";
+			ctx.fillStyle = y >= bandLo && y <= bandHi ? wool : ink;
 			for (let x = 0; x < SPRITE_GRID_W; x++) {
 				if (row[x] === "X") ctx.fillRect(x * scale, y * scale, scale, scale);
 			}
 		}
-		const left = document.createElement("canvas");
-		left.width = w;
-		left.height = h;
-		const lctx = left.getContext("2d")!;
-		lctx.imageSmoothingEnabled = false;
-		lctx.translate(w, 0);
-		lctx.scale(-1, 1);
-		lctx.drawImage(right, 0, 0);
-		out[id] = { right, left };
+		out[id] = { right, left: mirrored(right) };
 	}
 	return out;
+}
+
+/**
+ * Snow crest along each frame's top outline — one cell settled ON the body
+ * plus one raised above it, so the accumulation visibly changes his
+ * silhouette instead of vanishing white-on-cream.
+ */
+function buildCaps(scale: number): Record<FrameId, RenderedFrame> {
+	const out = {} as Record<FrameId, RenderedFrame>;
+	for (const id of Object.keys(SPRITE_FRAMES) as FrameId[]) {
+		const right = document.createElement("canvas");
+		right.width = SPRITE_GRID_W * scale;
+		right.height = SPRITE_GRID_H * scale;
+		const ctx = right.getContext("2d")!;
+		for (const [x, y] of TOP_CELLS[id]) {
+			ctx.fillStyle = "#ffffff";
+			ctx.fillRect(x * scale, (y - 1) * scale, scale, scale);
+			ctx.fillStyle = "#e2ecf8";
+			ctx.fillRect(x * scale, y * scale, scale, scale);
+		}
+		out[id] = { right, left: mirrored(right) };
+	}
+	return out;
+}
+
+interface Drip {
+	x: number;
+	y: number;
+	vy: number;
 }
 
 type Mood = "happy" | "sad" | "surprised" | "curious";
@@ -67,9 +150,18 @@ class Body {
 	private wantsBlinkAt = 0;
 	private animTick = 0;
 	private frames: Record<FrameId, RenderedFrame>;
+	private caps: Record<FrameId, RenderedFrame>;
 	private vy = 0;
 	private onGround = false;
 	mood: Mood = "curious";
+	/** 0..1 — soaked from rain; dries slowly once it stops. */
+	private wet = 0;
+	/** 0..1 — snow settled on his back while it snows; melts above freezing. */
+	private snowCap = 0;
+	private sweater = false;
+	private frameStyle = "";
+	private drips: Drip[] = [];
+	private nextDripAt = 0;
 
 	constructor(
 		private scale: number,
@@ -77,6 +169,7 @@ class Body {
 		private floorY: number
 	) {
 		this.frames = buildFrames(scale, ZAUR_INK);
+		this.caps = buildCaps(scale);
 		this.x = worldW * 0.5;
 		this.y = floorY - this.heightPx;
 		this.targetX = this.x;
@@ -101,7 +194,8 @@ class Body {
 		const newScale = Math.max(2, Math.min(4, Math.round(Math.min(worldW, floorY) / 240)));
 		if (newScale !== this.scale) {
 			this.scale = newScale;
-			this.frames = buildFrames(newScale, ZAUR_INK);
+			this.frames = buildFrames(newScale, ZAUR_INK, { sweater: this.sweater, wet: this.wet > 0.5 });
+			this.caps = buildCaps(newScale);
 		}
 		// Floor moved (day strip toggled, window resized) — keep his feet on it.
 		if (this.onGround) this.y = floorY - this.heightPx;
@@ -152,6 +246,34 @@ class Body {
 		return Math.abs(this.targetX - this.x) <= eps;
 	}
 
+	/** Fold the sky's weather into wetness, snow cap, and wardrobe. */
+	tickWeather(
+		wx: { precipitation: "none" | "rain" | "snow"; temperatureC: number } | null,
+		dtMs: number
+	): void {
+		const dt = dtMs / 1000;
+		const raining = wx?.precipitation === "rain";
+		const snowing = wx?.precipitation === "snow";
+		this.wet = clamp(this.wet + (raining ? dt / 8 : -dt / 25), 0, 1);
+		const t = wx?.temperatureC;
+		const melting = t != null && t > 0;
+		this.snowCap = clamp(this.snowCap + (snowing ? dt / 10 : melting ? -dt / 12 : 0), 0, 1);
+		// Hysteresis so a temperature hovering at the threshold doesn't
+		// have him yanking the sweater on and off.
+		if (t != null) {
+			if (t <= 5) this.sweater = true;
+			else if (t > 8) this.sweater = false;
+		}
+		const style = `${this.sweater ? "s" : ""}${this.wet > 0.3 ? "w" : ""}`;
+		if (style !== this.frameStyle) {
+			this.frameStyle = style;
+			this.frames = buildFrames(this.scale, ZAUR_INK, {
+				sweater: this.sweater,
+				wet: this.wet > 0.3,
+			});
+		}
+	}
+
 	update(now: number, dtMs: number): void {
 		const dtSec = dtMs / 1000;
 
@@ -191,6 +313,26 @@ class Body {
 
 		if (now >= this.nextDecisionAt) this.pickNextActivity(now);
 		this.animTick += dtMs;
+
+		// Soaked: beads roll off his back and fall to the ground.
+		if (this.wet > 0.3 && now >= this.nextDripAt) {
+			this.nextDripAt = now + 150 + Math.random() * 500 * (1.3 - this.wet);
+			const cells = TOP_CELLS[this.currentFrameId()];
+			if (cells.length > 0) {
+				const [gx, gy] = cells[Math.floor(Math.random() * cells.length)];
+				const col = this.facing === 1 ? gx : SPRITE_GRID_W - 1 - gx;
+				this.drips.push({
+					x: this.x - this.widthPx / 2 + (col + 0.5) * this.scale,
+					y: this.y + gy * this.scale,
+					vy: 20,
+				});
+			}
+		}
+		for (const d of this.drips) {
+			d.vy = Math.min(MAX_FALL, d.vy + GRAVITY * dtSec);
+			d.y += d.vy * dtSec;
+		}
+		this.drips = this.drips.filter((d) => d.y < this.floorY);
 	}
 
 	draw(ctx: CanvasRenderingContext2D): void {
@@ -220,6 +362,27 @@ class Body {
 		}
 
 		ctx.drawImage(img, Math.round(this.x - this.widthPx / 2), Math.round(this.y + bob));
+
+		if (this.snowCap > 0.05) {
+			const cap = this.caps[this.currentFrameId()];
+			ctx.save();
+			ctx.globalAlpha = Math.min(1, this.snowCap * 1.2);
+			ctx.drawImage(
+				this.facing === 1 ? cap.right : cap.left,
+				Math.round(this.x - this.widthPx / 2),
+				Math.round(this.y + bob)
+			);
+			ctx.restore();
+		}
+
+		if (this.drips.length > 0) {
+			ctx.fillStyle = "rgba(170, 195, 225, 0.9)";
+			const s = Math.max(2, Math.round(this.scale * 0.75));
+			for (const d of this.drips) {
+				ctx.fillRect(Math.round(d.x), Math.round(d.y), s, Math.round(s * 1.6));
+			}
+		}
+
 		if (this.activity === "sleep") this.drawZzz(ctx);
 	}
 
@@ -241,23 +404,27 @@ class Body {
 		ctx.restore();
 	}
 
-	private currentFrame(): RenderedFrame {
-		if (this.activity === "sleep") return this.frames.sleep;
-		if (this.activity === "sit") return this.frames.sit;
-		if (this.activity === "stare") return this.frames.look_up;
-		if (!this.onGround) return this.vy < 0 ? this.frames.cheer : this.frames.surprise;
-		if (performance.now() < this.blinkUntil) return this.frames.blink;
+	private currentFrameId(): FrameId {
+		if (this.activity === "sleep") return "sleep";
+		if (this.activity === "sit") return "sit";
+		if (this.activity === "stare") return "look_up";
+		if (!this.onGround) return this.vy < 0 ? "cheer" : "surprise";
+		if (performance.now() < this.blinkUntil) return "blink";
 		if (this.activity === "react") {
-			if (this.mood === "happy") return this.frames.happy;
-			if (this.mood === "sad") return this.frames.sad;
-			if (this.mood === "surprised") return this.frames.surprise;
-			return this.frames.look_up;
+			if (this.mood === "happy") return "happy";
+			if (this.mood === "sad") return "sad";
+			if (this.mood === "surprised") return "surprise";
+			return "look_up";
 		}
-		if (this.activity === "look") return this.frames.look_up;
+		if (this.activity === "look") return "look_up";
 		if (this.activity === "walk") {
-			return Math.floor(this.animTick / 180) % 2 === 0 ? this.frames.walk_a : this.frames.walk_b;
+			return Math.floor(this.animTick / 180) % 2 === 0 ? "walk_a" : "walk_b";
 		}
-		return this.frames.idle;
+		return "idle";
+	}
+
+	private currentFrame(): RenderedFrame {
+		return this.frames[this.currentFrameId()];
 	}
 
 	private pickNextActivity(now: number): void {
@@ -321,7 +488,8 @@ class Mind {
 		private readonly body: Body,
 		private readonly viewW: () => number,
 		/** The SKY's local hour — scrubbed / toured hours included. */
-		private readonly skyHour: () => number
+		private readonly skyHour: () => number,
+		private readonly precip: () => "none" | "rain" | "snow" = () => "none"
 	) {}
 
 	deferFor(ms: number): void {
@@ -416,6 +584,15 @@ class Mind {
 		else if (hour < 17) weights = { patrol: 3.5, home: 1.5, nap: 1, stargaze: 0.4 };
 		else weights = { patrol: 2, home: 3, nap: 1, stargaze: 2 };
 
+		// Weather trumps the clock: no stargazing under a precipitating sky,
+		// and rain sends him toward home; snow is worth wandering in.
+		const precip = this.precip();
+		if (precip !== "none") weights.stargaze = 0;
+		if (precip === "rain") {
+			weights.home += 2.5;
+			weights.patrol *= 0.4;
+		}
+
 		const total = Object.values(weights).reduce((a, b) => a + b, 0);
 		let r = Math.random() * total;
 		let routine: Routine = "patrol";
@@ -477,7 +654,16 @@ export interface ZaurHandle {
  * line in CSS px (so he stands on top of the day strip when it's open);
  * `skyHour` feeds the mind so his routines follow the sky being shown.
  */
-export function mountZaur(opts: { floorY: () => number; skyHour: () => number }): ZaurHandle {
+export function mountZaur(opts: {
+	floorY: () => number;
+	skyHour: () => number;
+	/** Polled each frame — drives wetness, sweater, snow cap, and reactions. */
+	weather?: () => {
+		precipitation: "none" | "rain" | "snow";
+		temperatureC: number;
+		thunder?: boolean;
+	} | null;
+}): ZaurHandle {
 	const canvas = document.createElement("canvas");
 	canvas.id = "zaur-canvas";
 	canvas.setAttribute("aria-hidden", "true");
@@ -494,7 +680,8 @@ export function mountZaur(opts: { floorY: () => number; skyHour: () => number })
 	const mind = new Mind(
 		body,
 		() => cssW,
-		opts.skyHour
+		opts.skyHour,
+		() => opts.weather?.()?.precipitation ?? "none"
 	);
 
 	function applySize(): void {
@@ -522,6 +709,8 @@ export function mountZaur(opts: { floorY: () => number; skyHour: () => number })
 	let raf = 0;
 	let last = performance.now();
 	let floorCheck = 0;
+	let lastPrecip: "none" | "rain" | "snow" = "none";
+	let lastThunder = false;
 	const step = (now: number): void => {
 		const dtMs = Math.min(100, now - last);
 		last = now;
@@ -534,6 +723,24 @@ export function mountZaur(opts: { floorY: () => number; skyHour: () => number })
 				body.resize(cssW, floor);
 			}
 		}
+		// Weather: soak/dry/dress, and a one-shot reaction when it turns.
+		const wx = opts.weather?.() ?? null;
+		body.tickWeather(wx, dtMs);
+		const precip = wx?.precipitation ?? "none";
+		if (precip !== lastPrecip) {
+			if (body.isAvailable) {
+				if (precip === "rain") body.react("sad", 2400);
+				else if (precip === "snow") body.react("happy", 2400);
+				if (precip !== "none") mind.deferFor(4_000);
+			}
+			lastPrecip = precip;
+		}
+		const thunder = !!wx?.thunder;
+		if (thunder && !lastThunder && body.isAvailable) {
+			body.react("surprised", 1800);
+			mind.deferFor(3_000);
+		}
+		lastThunder = thunder;
 		mind.tick(now);
 		body.update(now, dtMs);
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

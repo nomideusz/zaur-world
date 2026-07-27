@@ -136,6 +136,7 @@ function syncZaur(): void {
 		zaur = mountZaur({
 			floorY: zaurFloorY,
 			skyHour: () => (tourRaf !== 0 ? tourHour : effectiveHour()),
+			weather: () => sky.conditions(),
 		});
 	} else if (!zaurToggle.checked && zaur) {
 		zaur.destroy();
