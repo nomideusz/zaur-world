@@ -93,7 +93,9 @@ if (wxParam && ["clear", "rain", "storm", "snow", "fog", "overcast"].includes(wx
 	(document.getElementById(`wx-${wxParam}`) as HTMLInputElement).checked = true;
 }
 // ?h=13.5 pins the sky to an hour — reproducible scenes for sharing/tests.
-const hParam = Number(params.get("h"));
+// Number(null) is 0, so a missing param must stay NaN or every plain load
+// would pin to midnight.
+const hParam = params.has("h") ? Number(params.get("h")) : NaN;
 const qParam = params.get("q");
 if (qParam === "high" || qParam === "low") {
 	(document.getElementById(`qual-${qParam}`) as HTMLInputElement).checked = true;
