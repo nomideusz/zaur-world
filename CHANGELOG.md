@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-07-27
+## [1.0.1] - 2026-07-27
+
+### Fixed
+
+- A manually pinned location now survives reloads. Pins were saved to the
+  geo cache but the next visit's IP detection overwrote them, so visitors
+  had to re-enter their place each time — and IP geolocation can sit a few
+  km from the real spot, far enough for genuinely different weather (the
+  "auto shows storm, my pin shows drizzle" report). Pins are now stored
+  with a marker and restored as pins; "back to auto location" clears the
+  marker so detection takes over again
+- Demo: the location popover shows the restored pin state on load
+
+
 
 The API is frozen from this release: `createWorld` options, `WorldHandle`,
 and the `/weather`, `/solar`, `/react`, `/auto`, and `/zaur` entry points

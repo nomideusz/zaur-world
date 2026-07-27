@@ -952,6 +952,21 @@ syncZaur();
 if (Number.isFinite(hParam) && hParam >= 0 && hParam < 24) setScrub(hParam);
 updateStatus();
 
+// A pinned location persists across visits — restore the popover state once
+// the client settles on a source (URL params above override via pinLocation).
+const restorePin = window.setInterval(() => {
+	const src = sky.locationSource();
+	if (!src) return;
+	window.clearInterval(restorePin);
+	if (src === "fixed" && !manualLocation) {
+		manualLocation = true;
+		const loc = sky.location();
+		if (loc) manualGeo = { lat: loc.lat, lon: loc.lon, city: sky.city() ?? undefined };
+		syncLocChrome();
+		syncLocateHint();
+	}
+}, 300);
+
 // Shareable ?lat=&lon=&city= — apply after mount so weather + terrain refresh.
 if (Number.isFinite(latParam) && Number.isFinite(lonParam) && params.has("lat")) {
 	if (cityParam) cityInput.value = cityParam;

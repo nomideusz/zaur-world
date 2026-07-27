@@ -177,6 +177,27 @@ export class WeatherClient {
       this.resolveLocated({ lat: this.seedGeo.lat, lon: this.seedGeo.lon });
     } else {
       this.seedGeo = null;
+      // Restore a pinned location from the previous visit — a visitor who
+      // corrected their place expects it to stick across reloads. Plain
+      // (auto-detected) cache entries still only serve as offline fallback.
+      if (this.cache) {
+        try {
+          const saved = localStorage.getItem(GEO_CACHE_KEY);
+          if (saved) {
+            const g = JSON.parse(saved) as Partial<Geo> & { src?: string };
+            if (
+              g.src === "fixed" &&
+              Number.isFinite(g.lat) &&
+              Number.isFinite(g.lon) &&
+              typeof g.city === "string"
+            ) {
+              this.manualGeo = { lat: g.lat as number, lon: g.lon as number, city: g.city };
+            }
+          }
+        } catch {
+          /* corrupt entry — ignore */
+        }
+      }
     }
     void this.refresh();
     this.timers.push(window.setInterval(() => void this.refresh(), REFRESH_MS));
@@ -351,6 +372,14 @@ export class WeatherClient {
       this.geoSource = null;
       this.utcOffsetSec = null;
       this.timezoneName = null;
+      // Drop the stored pin too, or the next visit would restore it.
+      if (this.cache) {
+        try {
+          localStorage.removeItem(GEO_CACHE_KEY);
+        } catch {
+          /* private mode */
+        }
+      }
       await this.fetchWeather();
       const cleared = this.location();
       return cleared;
@@ -573,7 +602,12 @@ export class WeatherClient {
     this.geoSource = source;
     if (this.cache) {
       try {
-        localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geo));
+        // A manual pin is marked so the next visit restores it as a pin
+        // instead of letting IP detection overwrite the visitor's choice.
+        localStorage.setItem(
+          GEO_CACHE_KEY,
+          JSON.stringify(source === "fixed" ? { ...geo, src: "fixed" } : geo)
+        );
       } catch {
         /* private mode */
       }
