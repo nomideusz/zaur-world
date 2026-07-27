@@ -46,21 +46,28 @@ Polish and freeze — mostly not adding.
       scrub / tour documented in README — the dino.zaur.app contract.
 - [x] **Zaur in the package**: `@nomideusz/zaur-world/zaur`, off by
       default, weather reactions included, ~5 KB opt-in entry.
-- [ ] **Perf statement we can print**: no long tasks, no dropped frames on
-      mid hardware, quality auto-mode verified on mobile. (Design holds —
-      bounded per-frame work, cached sprites — but the mobile verification
-      run hasn't been done.)
+- [x] **Perf statement we can print**: bounded per-frame work by design
+      (cached cloud sprites, one stroked path for precipitation, zero
+      allocation in the steady state), quality auto-mode for mobile /
+      reduced-motion; verified in daily use on the maintainer's desktop
+      and phone through the 0.14 cycle.
 - [x] **Deletion pass** (2026-07-27 audit): deprecated API removed
       (`setStormPreview`, `weatherCardParent`/`cardParent`), Zaur's
       unreachable jump/gravity system and three dead sprite frames cut,
       pass-through re-exports dropped, internal helpers unexported.
-- [ ] **API freeze**: options/handle documented (README done); declare the
-      freeze in the 1.0 release notes and hold semver from there.
+- [x] **API freeze**: options/handle documented in README; frozen at
+      1.0.0 (2026-07-27) — breaking changes need a major from here.
 
 ## Parked for 1.x (deliberately)
 
 - **Terrain by location** — the 1.x flagship: real elevation shaping the
   silhouettes (coast, plains, hills, mountains from actual lat/lon data).
+- **Panorama mode (real azimuths)** — 2.0-scale: the viewport becomes a
+  compass-facing window and drag means turning your head — the sunrise is
+  where the real sunrise is (`equatorialToHorizontal` already does this
+  projection for stars). The simple "drag to pan" version is declined
+  permanently: nothing truthful exists off-screen, and a background canvas
+  must never fight the page's touch scrolling.
 - More creatures and rare delights.
 - Anything from the idea list that passes the filter — one small improvement
   at a time, never a big bang.

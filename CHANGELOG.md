@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-27
+
+The API is frozen from this release: `createWorld` options, `WorldHandle`,
+and the `/weather`, `/solar`, `/react`, `/auto`, and `/zaur` entry points
+follow semver — breaking changes require a major version.
+
 ### Added
 
 - Zaur is part of the package: `import { mountZaur } from "@nomideusz/zaur-world/zaur"` — opt-in, off by default, on his own overlay canvas. With `weather` wired he soaks in rain (dripping dry afterward), pulls on a sweater below 5 °C, collects a crest of snow, startles at the first thunderclap, and heads home when it pours
@@ -16,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clouds render as cached soft sprites (blur baked in, directional sun/moon rim light, shadowed bellies) — cheaper per frame than the previous per-frame path fills
 - Demo: `?h=13.5` pins the sky to an hour for reproducible shareable scenes; Clear and Rain preset chips
 - VISION.md: product identity, the four-part feature filter, and the v1.0 checklist
+
+### Fixed
+
+- Demo: controls no longer float mid-screen on phones — removed padding
+  reserved for a weather card the demo never mounts
 
 ### Removed
 
