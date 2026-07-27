@@ -57,7 +57,7 @@ export interface AtmosphereSnapshot {
   skyHour: number;
 }
 
-export function lunarIllumination(date: Date): number {
+function lunarIllumination(date: Date): number {
   const phase = lunarPhase(date);
   return (1 - Math.cos(phase * Math.PI * 2)) / 2;
 }
@@ -66,7 +66,7 @@ export function isFullMoon(date: Date): boolean {
   return lunarIllumination(date) > 0.92;
 }
 
-export function isMeteorShowerNight(date: Date): boolean {
+function isMeteorShowerNight(date: Date): boolean {
   return meteorRate(date) >= 4;
 }
 
@@ -98,7 +98,7 @@ export function resolveMood(
   return "day";
 }
 
-export function collectMoments(
+function collectMoments(
   date: Date,
   wx: WeatherConditions | null,
   h: number,

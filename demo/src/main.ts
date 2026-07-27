@@ -11,7 +11,7 @@ import {
 	type WeatherPreview,
 	type WorldHandle,
 } from "@nomideusz/zaur-world";
-import { mountZaur, type ZaurHandle } from "./zaur.js";
+import { mountZaur, type ZaurHandle } from "@nomideusz/zaur-world/zaur";
 
 const canvas = document.getElementById("sky") as HTMLCanvasElement;
 const zaurToggle = document.getElementById("opt-zaur") as HTMLInputElement;
@@ -89,9 +89,11 @@ if (params.get("zaur") === "0") zaurToggle.checked = false;
 else if (params.get("zaur") === "1") zaurToggle.checked = true;
 else if (localStorage.getItem("zw-zaur") === "0") zaurToggle.checked = false;
 const wxParam = params.get("wx") ?? (params.get("storm") === "1" ? "storm" : null);
-if (wxParam && ["storm", "snow", "fog", "overcast"].includes(wxParam)) {
+if (wxParam && ["clear", "rain", "storm", "snow", "fog", "overcast"].includes(wxParam)) {
 	(document.getElementById(`wx-${wxParam}`) as HTMLInputElement).checked = true;
 }
+// ?h=13.5 pins the sky to an hour — reproducible scenes for sharing/tests.
+const hParam = Number(params.get("h"));
 const qParam = params.get("q");
 if (qParam === "high" || qParam === "low") {
 	(document.getElementById(`qual-${qParam}`) as HTMLInputElement).checked = true;
@@ -945,6 +947,7 @@ sky.setGrid(gridToggle.checked);
 sky.setWeatherPreview(selectedWx());
 applyEclipse();
 syncZaur();
+if (Number.isFinite(hParam) && hParam >= 0 && hParam < 24) setScrub(hParam);
 updateStatus();
 
 // Shareable ?lat=&lon=&city= — apply after mount so weather + terrain refresh.

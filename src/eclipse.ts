@@ -1,4 +1,4 @@
-export interface EclipseEvent {
+interface EclipseEvent {
 	type: "solar" | "lunar";
 	peakMs: number;
 	durationMs: number;
@@ -11,7 +11,7 @@ export interface EclipseEvent {
 
 // A curated list of major upcoming eclipses (2026 - 2040)
 // Extracted from NASA eclipse predictions. Excludes penumbral/minor partials.
-export const KNOWN_ECLIPSES: EclipseEvent[] = [
+const KNOWN_ECLIPSES: EclipseEvent[] = [
 	// --- Lunar Eclipses ---
 	{
 		type: "lunar",

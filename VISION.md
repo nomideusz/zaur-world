@@ -30,25 +30,32 @@ deletion is a feature.
    when it is. No per-frame allocation; bake to sprites/patterns and stamp.
    (Canvas self-sampling refraction failed here.)
 4. **No new tech.** One 2d canvas. Zero dependencies. Bundle ceiling:
-   **~33 KB gzipped** across all dist entry points — hold this line.
+   **~33 KB gzipped** for the sky (all entry points except `/zaur`); Zaur's
+   opt-in entry adds ~5 KB that only hosts who import him ever download.
+   Hold both lines.
 
 ## v1.0 checklist
 
 Polish and freeze — mostly not adding.
 
-- [ ] **Screenshot test per state**: a stranger names the weather correctly
-      from a still. Passing today: storm, gray/overcast, fog. Still need the
-      critical eye: rain, snow, clear day, clear night, golden hour.
-- [ ] **Forecast mode first-class**: `conditionsAtHour` / scrub / tour
-      documented and stable — the dino.zaur.app contract.
-- [ ] **Zaur in the package**: move him from the demo into an opt-in entry
-      (`@nomideusz/zaur-world/zaur` or option flag), off by default, weather
-      reactions included, within the bundle ceiling.
+- [x] **Screenshot test per state**: a stranger names the weather correctly
+      from a still. All states pass: clear day, clear night, golden hour,
+      rain, storm, snow, gray/overcast, fog (`?wx=` + `?h=` demo params
+      make each reproducible).
+- [x] **Forecast mode first-class**: `setForecastHour` / `forecast()` /
+      scrub / tour documented in README — the dino.zaur.app contract.
+- [x] **Zaur in the package**: `@nomideusz/zaur-world/zaur`, off by
+      default, weather reactions included, ~5 KB opt-in entry.
 - [ ] **Perf statement we can print**: no long tasks, no dropped frames on
-      mid hardware, quality auto-mode verified on mobile.
-- [ ] **Deletion pass**: anything failing the filter goes before 1.0.
-- [ ] **API freeze**: `createWorld` options, `WorldHandle`, weather/solar
-      entry points documented; CHANGELOG; semver promise.
+      mid hardware, quality auto-mode verified on mobile. (Design holds —
+      bounded per-frame work, cached sprites — but the mobile verification
+      run hasn't been done.)
+- [x] **Deletion pass** (2026-07-27 audit): deprecated API removed
+      (`setStormPreview`, `weatherCardParent`/`cardParent`), Zaur's
+      unreachable jump/gravity system and three dead sprite frames cut,
+      pass-through re-exports dropped, internal helpers unexported.
+- [ ] **API freeze**: options/handle documented (README done); declare the
+      freeze in the 1.0 release notes and hold semver from there.
 
 ## Parked for 1.x (deliberately)
 

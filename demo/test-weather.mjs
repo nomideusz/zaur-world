@@ -1,21 +1,9 @@
 // Smoke check for Zaur's weather states — run with: node demo/test-weather.mjs
-// Bundles zaur.ts, mounts it against a stub DOM, drives the rAF loop through
-// 12s of rain then 40s of freezing snow, and asserts the observable outputs:
-// wet-ink rebuild, drip particles, sweater rebuild, snow-cap overlay draw.
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { tmpdir } from "node:os";
+// (build first: pnpm run build:types). Mounts dist/zaur.js against a stub
+// DOM, drives the rAF loop through 12s of rain then 40s of freezing snow,
+// and asserts the observable outputs: wet-ink rebuild, drip particles,
+// sweater rebuild, snow-cap overlay draw.
 import assert from "node:assert";
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const bundle = join(tmpdir(), "zaur-weather-check.mjs");
-execFileSync(join(root, "node_modules/.bin/esbuild"), [
-	join(root, "demo/src/zaur.ts"),
-	"--bundle",
-	"--format=esm",
-	`--outfile=${bundle}`,
-]);
 
 const rec = { fills: new Set(), drawImages: 0, alphas: [] };
 const mkCtx = () =>
@@ -58,7 +46,7 @@ globalThis.window = {
 let rafCb = null;
 globalThis.requestAnimationFrame = (cb) => ((rafCb = cb), 1);
 
-const { mountZaur } = await import(`file://${bundle}`);
+const { mountZaur } = await import(new URL("../dist/zaur.js", import.meta.url));
 let wx = { precipitation: "rain", temperatureC: 20, thunder: false };
 mountZaur({ floorY: () => 500, skyHour: () => 12, weather: () => wx });
 let t = performance.now();

@@ -111,28 +111,6 @@ const HAPPY = [
   "....................",
 ];
 
-// angry — lower brow, squared snout, and a braced stance
-const ANGRY = [
-  "....................",
-  "....................",
-  "............XXXXXX..",
-  "............XXWXXXX.",
-  "............XXXXXXXX",
-  "...........XXXXXX...",
-  "..........XXXXX.....",
-  ".....XXXXXXXXXX.....",
-  "...XXXXXXXXXXXX.....",
-  "..XXXXXXXXXXXX......",
-  "...XXXXXXXXX........",
-  ".....XXX.X.XX.......",
-  "....XXX....XX.......",
-  "....XX....XXX.......",
-  "...XXX.....XX.......",
-  "...XX.......XXX.....",
-  "..XXXX.....XXXX.....",
-  "....................",
-];
-
 // sad — drooped head and tail, with the body sitting lower in the frame
 const SAD = [
   "....................",
@@ -200,29 +178,6 @@ const SLEEP = [
   "....................",
 ];
 
-// reading — head lowered in front of the chest, eye down: studying
-// whatever he's standing on.
-const READ = [
-  "....................",
-  "....................",
-  "....................",
-  "....................",
-  "..............XXXX..",
-  ".............XXXXXX.",
-  ".............XWXXXX.",
-  "......XXXXXXXXXXXX..",
-  "....XXXXXXXXXXX.....",
-  "...XXXXXXXXXXX......",
-  "....XXXXXXXX........",
-  "......XX.X.XX.......",
-  "....XX.....XX.......",
-  "....XX....XXX.......",
-  "...XXX.....XX.......",
-  "...XX........XX.....",
-  "..XXXX.....XXXX.....",
-  "....................",
-];
-
 // sitting — upright on his haunches, tail resting on the ground, legs
 // folded. His "at home" pose.
 const SIT = [
@@ -269,29 +224,6 @@ const SURPRISE = [
   "....................",
 ];
 
-// cheer — a small post-delivery hop. Body and head shifted up one row, legs
-// pulled wide apart, and two transparent pixels in the snout suggest a
-// big open grin. The gap below his feet reads as "off the ground".
-const CHEER = [
-  "....................",
-  ".............XXXXX..",
-  "............XWXXWXX.",
-  "............XXXXXXX.",
-  "............XXXXX...",
-  "...........XXXX.....",
-  "......XXXXXXXXX.....",
-  "....XXXXXXXXXXX.....",
-  "...XXXXXXXXXXX......",
-  "....XXXXXXXX........",
-  "......XX.X.XX.......",
-  ".....XX.....XX......",
-  "....XX.......XX.....",
-  "...XXX........XX....",
-  "..XXX..........XXX..",
-  "....................",
-  "....................",
-  "....................",
-];
 
 
 export type FrameId =
@@ -300,14 +232,11 @@ export type FrameId =
   | "walk_b"
   | "look_up"
   | "happy"
-  | "angry"
   | "sad"
   | "blink"
   | "sleep"
-  | "read"
   | "sit"
-  | "surprise"
-  | "cheer";
+  | "surprise";
 
 export const SPRITE_FRAMES: Record<FrameId, string[]> = {
   idle: IDLE,
@@ -315,14 +244,11 @@ export const SPRITE_FRAMES: Record<FrameId, string[]> = {
   walk_b: WALK_B,
   look_up: LOOK_UP,
   happy: HAPPY,
-  angry: ANGRY,
   sad: SAD,
   blink: BLINK,
   sleep: SLEEP,
-  read: READ,
   sit: SIT,
   surprise: SURPRISE,
-  cheer: CHEER,
 };
 
 

@@ -20,6 +20,10 @@
 			"types": "./dist/react.d.ts",
 			"default": "./dist/react.js"
 		},
+		"./zaur": {
+			"types": "./dist/zaur.d.ts",
+			"default": "./dist/zaur.js"
+		},
 		"./auto": {
 			"types": "./dist/auto.d.ts",
 			"default": "./dist/auto.js"
@@ -36,7 +40,7 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.json && node scripts/minify.mjs",
 		"build:types": "tsc -p tsconfig.json",
-		"test": "pnpm run build:types && node --test test/*.test.mjs",
+		"test": "pnpm run build:types && node --test test/*.test.mjs && node demo/test-weather.mjs",
 		"demo:dev": "pnpm run build:types && pnpm --filter zaur-world-demo dev",
 		"demo:build": "pnpm run build && pnpm --filter zaur-world-demo build",
 		"prepublishOnly": "pnpm test && pnpm run build"

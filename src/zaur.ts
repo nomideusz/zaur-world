@@ -1,9 +1,9 @@
-// Zaur — the pixel dinosaur, ported from the retired dino news app.
+// Zaur — the pixel dinosaur the package is named for. Opt-in: the sky
+// ships alone unless the host calls mountZaur().
 // Body: walking (horizontal only, gravity owns the vertical), napping,
-// sitting, stargazing, blinking. Mind: a small routine picker weighted by
-// the SKY's hour — scrub the day strip to night and he gets sleepy.
-// ponytail: no platforms — he walks the viewport floor only; hop/read
-// verbs from the original stayed behind with the text terrain.
+// sitting, stargazing, blinking, reacting to live weather. Mind: a small
+// routine picker weighted by the sky's hour and the current precipitation.
+// ponytail: no platforms — he walks the viewport floor only.
 
 import {
 	SPRITE_FRAMES,
@@ -11,7 +11,7 @@ import {
 	SPRITE_GRID_W,
 	ZAUR_INK,
 	type FrameId,
-} from "./spriteFrames.js";
+} from "./sprite-frames.js";
 
 interface RenderedFrame {
 	right: HTMLCanvasElement;
@@ -32,14 +32,11 @@ const TORSO_BAND: Record<FrameId, [number, number]> = {
 	walk_b: [8, 10],
 	look_up: [8, 10],
 	happy: [8, 10],
-	angry: [8, 10],
 	sad: [9, 11],
 	blink: [8, 10],
 	sleep: [13, 15],
-	read: [9, 10],
 	sit: [14, 15],
 	surprise: [8, 10],
-	cheer: [7, 9],
 };
 
 /** Topmost body cell per column, per frame — where snow settles and drips spawn. */
@@ -151,8 +148,6 @@ class Body {
 	private animTick = 0;
 	private frames: Record<FrameId, RenderedFrame>;
 	private caps: Record<FrameId, RenderedFrame>;
-	private vy = 0;
-	private onGround = false;
 	mood: Mood = "curious";
 	/** 0..1 — soaked from rain; dries slowly once it stops. */
 	private wet = 0;
@@ -173,7 +168,6 @@ class Body {
 		this.x = worldW * 0.5;
 		this.y = floorY - this.heightPx;
 		this.targetX = this.x;
-		this.onGround = true;
 		this.scheduleNextDecision(performance.now() + 1500);
 		this.scheduleNextBlink(performance.now());
 	}
@@ -198,7 +192,7 @@ class Body {
 			this.caps = buildCaps(newScale);
 		}
 		// Floor moved (day strip toggled, window resized) — keep his feet on it.
-		if (this.onGround) this.y = floorY - this.heightPx;
+		this.y = floorY - this.heightPx;
 		this.floorY = floorY;
 		this.x = clamp(this.x, this.minX, this.maxX);
 		this.targetX = clamp(this.targetX, this.minX, this.maxX);
@@ -287,16 +281,6 @@ class Body {
 			this.scheduleNextBlink(now);
 		}
 
-		if (!this.onGround) {
-			this.vy = Math.min(this.vy + GRAVITY * dtSec, MAX_FALL);
-			this.y += this.vy * dtSec;
-			if (this.vy >= 0 && this.y + this.heightPx >= this.floorY) {
-				this.y = this.floorY - this.heightPx;
-				this.vy = 0;
-				this.onGround = true;
-			}
-		}
-
 		if (this.activity === "walk") {
 			const dx = this.targetX - this.x;
 			const dist = Math.abs(dx);
@@ -338,12 +322,13 @@ class Body {
 	draw(ctx: CanvasRenderingContext2D): void {
 		const frame = this.currentFrame();
 		const img = this.facing === 1 ? frame.right : frame.left;
-		const moving = this.activity === "walk" && this.onGround;
+		const moving = this.activity === "walk";
 		let bob = 0;
 		if (moving) bob = Math.round(Math.sin(this.animTick / 110));
 		else if (this.activity === "idle") bob = Math.sin(this.animTick / 800) * 0.6;
 
-		if (this.onGround) {
+		{
+			// Soft contact shadow under his feet.
 			ctx.save();
 			ctx.globalAlpha = 0.15;
 			ctx.fillStyle = "#000";
@@ -408,7 +393,6 @@ class Body {
 		if (this.activity === "sleep") return "sleep";
 		if (this.activity === "sit") return "sit";
 		if (this.activity === "stare") return "look_up";
-		if (!this.onGround) return this.vy < 0 ? "cheer" : "surprise";
 		if (performance.now() < this.blinkUntil) return "blink";
 		if (this.activity === "react") {
 			if (this.mood === "happy") return "happy";
@@ -667,6 +651,11 @@ export function mountZaur(opts: {
 	const canvas = document.createElement("canvas");
 	canvas.id = "zaur-canvas";
 	canvas.setAttribute("aria-hidden", "true");
+	// Self-contained overlay — hosts can still override via #zaur-canvas.
+	canvas.style.position = "fixed";
+	canvas.style.inset = "0";
+	canvas.style.zIndex = "0";
+	canvas.style.pointerEvents = "none";
 	document.body.appendChild(canvas);
 	const ctx = canvas.getContext("2d")!;
 

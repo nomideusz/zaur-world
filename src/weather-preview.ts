@@ -1,7 +1,7 @@
 import type { WeatherConditions, Cloudiness } from "./weather.js";
 
 /** Weather look layered over live conditions by `setWeatherPreview` / `preview`. */
-export type WeatherPreview = "storm" | "snow" | "fog" | "overcast";
+export type WeatherPreview = "clear" | "rain" | "storm" | "snow" | "fog" | "overcast";
 
 /** Field-level overrides layered after live weather / named previews. */
 export type WeatherOverride = Partial<
@@ -20,6 +20,8 @@ export type WeatherOverride = Partial<
 };
 
 export const WEATHER_PREVIEWS: readonly WeatherPreview[] = [
+  "clear",
+  "rain",
   "storm",
   "snow",
   "fog",
@@ -46,6 +48,26 @@ export function applyWeatherPreview(
 ): WeatherConditions {
   const base = live ?? FALLBACK_BASE;
   switch (preview) {
+    case "clear":
+      return normalizeWeather({
+        ...base,
+        cloudiness: 0,
+        cloudCover: 0,
+        precipitation: "none",
+        intensity: 0,
+        thunder: false,
+        fog: false,
+      });
+    case "rain":
+      return normalizeWeather({
+        ...base,
+        cloudiness: 2,
+        precipitation: "rain",
+        intensity: Math.max(0.45, base.intensity),
+        thunder: false,
+        fog: false,
+        temperatureC: Math.max(2, base.temperatureC),
+      });
     case "storm":
       return normalizeWeather({
         ...base,

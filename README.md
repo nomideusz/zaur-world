@@ -76,6 +76,31 @@ createWorld(canvas, {
   when the ISS is genuinely within ~1200 km, plays a bright dot arcing
   across the night sky — the same pass you could walk outside and watch.
 
+## Zaur
+
+The pixel dinosaur the package is named for — opt-in, off by default:
+
+```ts
+import { mountZaur } from "@nomideusz/zaur-world/zaur";
+
+const sky = createWorld(canvas);
+const zaur = mountZaur({
+  // The ground line he walks on, in CSS px from the viewport top.
+  floorY: () => window.innerHeight - 8,
+  // The sky's hour drives his routines — he naps at night, patrols by day.
+  skyHour: () => new Date().getHours() + new Date().getMinutes() / 60,
+  // Optional: give him the sky's weather and he lives in it.
+  weather: () => sky.conditions(),
+});
+// zaur.destroy() to unmount
+```
+
+He walks a fixed full-viewport overlay canvas of his own (`#zaur-canvas`,
+`pointer-events: none` — clicks pass through, though poking his pixels gets
+a reaction). With `weather` wired he gets soaked in rain and drips dry,
+pulls on a sweater below 5 °C, collects a crest of snow while it flakes,
+startles at the first thunderclap, and heads home when it pours.
+
 ## Usage
 
 ```ts
@@ -185,7 +210,8 @@ sun times, so "golden" is their golden hour:
 
 ```ts
 sky.preview("golden"); // "dawn" | "noon" | "golden" | "dusk" | "night"
-sky.preview("storm");  // or a weather look: "storm" | "snow" | "fog" | "overcast"
+sky.preview("storm");  // or a weather look:
+                       // "clear" | "rain" | "storm" | "snow" | "fog" | "overcast"
 sky.preview(null);     // back to the live clock and live weather
 ```
 

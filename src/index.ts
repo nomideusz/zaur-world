@@ -119,11 +119,6 @@ export {
 export type { CaptureMomentResult } from "./capture.js";
 
 export interface CreateWorldOptions {
-  /**
-   * @deprecated Use `weatherCard: { parent }` instead.
-   * Host element for the small ambient weather card. Omit for no card.
-   */
-  weatherCardParent?: HTMLElement;
   /** Weather card host and corner placement. */
   weatherCard?: WeatherCardOptions;
   /** Foreground dot-grid color. Pass null to disable the grid. */
@@ -241,11 +236,6 @@ export interface WorldHandle {
   /** Switch performance preset without remounting. */
   setQuality(quality: Quality): void;
   /**
-   * @deprecated Use `setWeatherPreview("storm" | null)` instead.
-   * Preview storm clouds, rain, and lightning using live weather as a base.
-   */
-  setStormPreview(enabled: boolean): void;
-  /**
    * Layer a weather look over live conditions — storm, snow, fog, or
    * overcast. Pass `null` to return to live weather. Independent of the
    * clock, so it combines with `setTime` (e.g. snow at night).
@@ -304,7 +294,6 @@ export function createWorld(
   const client = opts.weather
     ? null
     : new WeatherClient({
-        cardParent: opts.weatherCardParent ?? null,
         weatherCard: opts.weatherCard,
         geo: opts.geo,
         cache: opts.cache,
@@ -633,10 +622,6 @@ export function createWorld(
     setQuality(quality: Quality): void {
       qualityMode = quality;
       applyQualityPreset(quality);
-    },
-    setStormPreview(enabled: boolean): void {
-      weatherPreview = enabled ? "storm" : null;
-      publishAtmosphere(true);
     },
     setWeatherPreview(preview: WeatherPreview | null): void {
       weatherPreview = preview;

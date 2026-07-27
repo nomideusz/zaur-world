@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Zaur is part of the package: `import { mountZaur } from "@nomideusz/zaur-world/zaur"` — opt-in, off by default, on his own overlay canvas. With `weather` wired he soaks in rain (dripping dry afterward), pulls on a sweater below 5 °C, collects a crest of snow, startles at the first thunderclap, and heads home when it pours
+- Weather previews `"clear"` and `"rain"` join storm/snow/fog/overcast — the full six-state vocabulary the sky can render, all reachable from the demo (`?wx=` param) and `setWeatherPreview` / `preview`
+- Storms and gray skies now close overhead: a full-width overcast deck behind the cloud puffs, so precipitation falls out of cloud instead of out of blue air. Genuinely overcast conditions drain the blue from the sky entirely
+- Fog rewritten as milky air: a dense ground bank that swallows the hills with slow-drifting banks above — clearly distinct from overcast
+- Clouds render as cached soft sprites (blur baked in, directional sun/moon rim light, shadowed bellies) — cheaper per frame than the previous per-frame path fills
+- Demo: `?h=13.5` pins the sky to an hour for reproducible shareable scenes; Clear and Rain preset chips
+- VISION.md: product identity, the four-part feature filter, and the v1.0 checklist
+
+### Removed
+
+- **Breaking:** deprecated `WorldHandle.setStormPreview()` — use `setWeatherPreview("storm" | null)`
+- **Breaking:** deprecated `weatherCardParent` / `cardParent` options — use `weatherCard: { parent }`
+- Dead code found by the pre-1.0 audit: Zaur's unreachable jump/gravity system and `cheer`/`read`/`angry` sprite frames, a pass-through re-export block in capture, and seven internal helpers no longer exported
+
 ## [0.14.1] - 2026-07-28
 
 ### Changed

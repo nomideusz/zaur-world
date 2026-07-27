@@ -49,13 +49,6 @@ body {
 }
 
 /* Zaur walks above the sky, below the chrome. */
-#zaur-canvas {
-	position: fixed;
-	inset: 0;
-	z-index: 0;
-	pointer-events: none;
-}
-
 .brand,
 .chrome {
 	position: fixed;

@@ -48,7 +48,7 @@ export function drawStars(
   }
 }
 
-export function drawSun(
+function drawSun(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -172,7 +172,7 @@ function drawCraters(
   ctx.fill();
 }
 
-export function drawMoon(
+function drawMoon(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,

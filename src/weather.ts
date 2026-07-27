@@ -105,8 +105,6 @@ export type GeolocationMode = boolean | "prefer" | "fallback";
 export type LocationSource = "gps" | "ip" | "fixed" | "cache" | "fallback";
 
 export interface WeatherClientOptions {
-  /** @deprecated Use `weatherCard.parent` instead. */
-  cardParent?: HTMLElement | null;
   /** Small ambient weather card host and placement. */
   weatherCard?: WeatherCardOptions;
   /** Skip IP geolocation — use this fixed location instead. */
@@ -162,7 +160,7 @@ export class WeatherClient {
     this.cache = opts.cache !== false;
     this.onChange = opts.onConditionsChange ?? null;
     this.geoMode = resolveGeoMode(opts.geolocation);
-    const cardOpts = opts.weatherCard ?? (opts.cardParent ? { parent: opts.cardParent } : null);
+    const cardOpts = opts.weatherCard ?? null;
     this.card = cardOpts ? new WeatherCard(cardOpts) : null;
     this.located = new Promise((resolve) => {
       this.resolveLocated = resolve;
