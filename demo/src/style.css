@@ -1218,21 +1218,13 @@ body:has(.daystrip:not([hidden])) .chrome {
 
 	.chrome {
 		max-width: min(20rem, 94vw);
-		/* Leave room for the weather card parked bottom-right on phones. */
-		padding-bottom: 2.75rem;
-	}
-
-	/* With the dock visible the card rides above it — clear its full height
-	   so the Install / links rows stay readable and tappable. */
-	body:has(.daystrip:not([hidden])) .chrome {
-		padding-bottom: 5.9rem;
 	}
 
 	/* Keep the open panel inside the viewport: budget for the action
-	   buttons, trigger, install/links rows, dock lift, and card padding. */
+	   buttons, trigger, install/links rows, and dock lift. */
 	.tweaks-panel {
-		max-height: max(13rem, calc(100vh - 23rem));
-		max-height: max(13rem, calc(100dvh - 23rem));
+		max-height: max(13rem, calc(100vh - 20rem));
+		max-height: max(13rem, calc(100dvh - 20rem));
 	}
 
 	.ds-cell {
