@@ -121,8 +121,14 @@ function drawSun(
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // The eclipsing Moon (drawn as a dark circle moving across the sun)
+  // The eclipsing Moon (drawn as a dark circle moving across the sun).
+  // Clipped to the sun disc: the real moon is invisible against the sky,
+  // so only the overlapping bite should show.
   if (eclipseProgress > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.clip();
     ctx.fillStyle = "#0a0a0c";
     ctx.beginPath();
     // Progress 0 -> 1 means moon moves from edge to center
@@ -130,6 +136,7 @@ function drawSun(
     const offset = r * 2.2 * (1 - eclipseProgress);
     ctx.arc(x + offset, y - offset, r * 1.01, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 }
 
