@@ -8,11 +8,12 @@ Born as a page backdrop; now a small weather product of its own at
 [dino.zaur.app](https://dino.zaur.app), where a pixel dinosaur named Zaur
 walks beneath it.
 
-**[Live demo](https://dino.zaur.app)** — hit **▶ Play 24 hours** for a
-30-second tour through dawn, golden hour, dusk, and the night sky, with the
-hourly forecast riding along beside the clock — or scrub the **day strip**
-along the bottom edge to jump the sky to any of the next 24 hours. On a VPN,
-tap **Use my location** so the tour matches your real sky.
+**[Live demo](https://dino.zaur.app)** — opens on a clear, unobstructed sky
+with a small toggle in the corner to reveal the controls. Hit **▶ Play 24
+hours** for a 30-second tour through dawn, golden hour, dusk, and the night
+sky, with the hourly forecast riding along beside the clock — or scrub the
+**day strip** along the bottom edge to jump the sky to any of the next 24
+hours. On a VPN, tap **Use my location** so the tour matches your real sky.
 
 | Golden hour | Night |
 | --- | --- |
@@ -31,8 +32,9 @@ tap **Use my location** so the tour matches your real sky.
 - **Live weather** — per-visitor location (IP by default, or browser GPS with
   `geolocation: "prefer"` / `sky.relocate()` — accurate even on a VPN) drives
   clouds (three parallax layers), rain with splashes, snow, fog, thunderstorms
-  with procedural lightning, and wind that slants rain, drives flakes
-  sideways, and hurries the clouds. Intensity scales the whole scene: light
+  with lightning timed to the real 15-minute nowcast, and wind that slants
+  rain, drives flakes sideways, and hurries the clouds. Intensity scales the
+  whole scene: light
   drizzle is a veil; 100% is a sealed overcast with no sun visible. Overcast
   desaturates the sky; clear days are genuinely blue, and lightly veiled ones
   (~10–40% real cover) show high thin cirrus filaments. Conditions stay
@@ -43,14 +45,17 @@ tap **Use my location** so the tour matches your real sky.
   at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
   winter), fireflies on summer nights, aurora veils in deep night, shooting
-  stars a few minutes apart, heat haze above 27 °C, ground that stays
-  visibly wet after rain, and snow that settles and lingers while the air
-  stays cold. Seasons flip with the visitor's hemisphere.
+  stars a few minutes apart, heat haze above 27 °C, visibility-driven mist
+  and haze that closes in on humid days, frost that forms as the air nears
+  its dew point, ground that stays visibly wet after rain, and snow that
+  accumulates from the real snowfall amount and lingers while the air stays
+  cold. Seasons flip with the visitor's hemisphere.
 - **A believable traffic of sky objects** — airplanes with dissolving
   contrails by day and blinking navigation lights by night, migrating
   V-formations in spring and autumn, a stylized satellite train gliding
   over rarely at night, a rainbow when the sun meets a clearing shower,
-  and shooting-star rates that spike on real meteor-shower peaks
+  crepuscular rays (god rays) fanning down through broken cloud, and
+  shooting-star rates that spike on real meteor-shower peaks
   (Perseids, Geminids, Quadrantids, Lyrids, Eta Aquariids, Orionids).
 - **The real Venus** — an evening or morning star tracking its actual
   584-day cycle (computed from orbital elements, accurate to ~1°): bright

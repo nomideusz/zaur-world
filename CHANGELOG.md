@@ -5,7 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-08-20
+
+### Added
+
+- Lightning now strikes on the real 15-minute nowcast: Open-Meteo's
+  `lightning_potential` sets the flash rhythm, so an active cell flashes every
+  couple of seconds while a distant storm only rumbles and glows — no more
+  random timer behind the thunder. Without nowcast data (previews, hand-rolled
+  weather) the old cadence is kept
+- Visibility now shapes the air: `visibility` (metres) drives a soft milky
+  veil and a low ground mist that closes in as the air turns murky, dimming at
+  night
+- Frost follows the dew point: hoar frost forms as the air temperature closes
+  on the dew point, so a dry sub-zero night stays frost-free instead of
+  sparking on any cold, clear evening
+- Crepuscular rays — soft god-ray shafts fanning down from the sun through
+  broken cloud, longest and most golden near sunrise and sunset
+- Snow accumulates from the real snowfall amount (cm/h) instead of a canned
+  intensity curve — a heavy dump blankets the ground in seconds, a dusting
+  takes minutes
+- Demo: opens with a minimal UI — the full-screen sky is unobstructed and a
+  corner toggle reveals the controls (`?ui=1` to open with them)
+
+### Fixed
+
+- Solar eclipse: the moon's disc is clipped to the sun, so the darkened sun
+  no longer reads as a free-floating black ball
 
 ## [1.0.1] - 2026-07-27
 
