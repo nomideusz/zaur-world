@@ -55,6 +55,58 @@ body {
 	z-index: 1;
 	pointer-events: none;
 	text-shadow: var(--shadow);
+	transition:
+		opacity 0.35s var(--ease),
+		transform 0.35s var(--ease),
+		visibility 0.35s;
+}
+
+/* Minimal UI toggle — the one control that stays when the chrome is hidden. */
+.ui-toggle {
+	position: fixed;
+	top: clamp(0.85rem, 2.2vw, 1.25rem);
+	right: clamp(0.85rem, 2.2vw, 1.25rem);
+	z-index: 3;
+	pointer-events: auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 999px;
+	border: 1px solid rgba(230, 234, 240, 0.16);
+	background: var(--panel);
+	color: var(--ink-muted);
+	cursor: pointer;
+	box-shadow: var(--shadow);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	transition:
+		color 0.15s ease,
+		background 0.15s ease;
+}
+
+.ui-toggle:hover {
+	color: var(--ink);
+	background: rgba(230, 234, 240, 0.12);
+}
+
+.ui-toggle:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* Minimal state: the header + controls recede, leaving the canvas unobstructed. */
+body[data-ui="min"] .brand {
+	opacity: 0;
+	transform: translateY(-8px);
+	visibility: hidden;
+}
+
+body[data-ui="min"] .chrome {
+	opacity: 0;
+	transform: translateY(8px);
+	visibility: hidden;
 }
 
 .brand {

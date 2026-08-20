@@ -53,6 +53,7 @@ const stripEl = document.getElementById("daystrip") as HTMLDivElement;
 const stripCellsEl = document.getElementById("daystrip-cells") as HTMLDivElement;
 const momentGoldenBtn = document.getElementById("btn-moment-golden") as HTMLButtonElement;
 const momentNightBtn = document.getElementById("btn-moment-night") as HTMLButtonElement;
+const uiToggle = document.getElementById("ui-toggle") as HTMLButtonElement;
 
 const mainActionsEl = document.getElementById("main-actions") as HTMLDivElement;
 const tourActionsEl = document.getElementById("tour-actions") as HTMLDivElement;
@@ -104,6 +105,10 @@ const eclipseParam = params.get("eclipse");
 if (eclipseParam && ["solar", "lunar"].includes(eclipseParam)) {
 	(document.getElementById(`eclipse-${eclipseParam}`) as HTMLInputElement).checked = true;
 }
+// UI: URL wins, then the visitor's saved choice; default is the minimal view.
+if (params.get("ui") === "1") document.body.dataset.ui = "full";
+else if (params.get("ui") === "0") document.body.dataset.ui = "min";
+else if (localStorage.getItem("zw-ui") === "full") document.body.dataset.ui = "full";
 const latParam = Number(params.get("lat"));
 const lonParam = Number(params.get("lon"));
 const cityParam = params.get("city");
@@ -633,6 +638,7 @@ function syncUrl(): void {
 	if (q !== "auto") p.set("q", q);
 	const eclipseMode = selectedEclipse();
 	if (eclipseMode !== "none") p.set("eclipse", eclipseMode);
+	if (document.body.dataset.ui === "full") p.set("ui", "1");
 	if (manualLocation && manualGeo) {
 		p.set("lat", String(Math.round(manualGeo.lat * 100) / 100));
 		p.set("lon", String(Math.round(manualGeo.lon * 100) / 100));
@@ -914,6 +920,23 @@ captureBtn.addEventListener("click", () => {
 	statusEl.textContent = moment.caption;
 });
 
+// ── Minimal UI toggle ──────────────────────────────────────────────────
+
+function syncUiToggle(): void {
+	const full = document.body.dataset.ui === "full";
+	uiToggle.setAttribute("aria-expanded", String(full));
+	uiToggle.setAttribute("aria-label", full ? "Hide controls" : "Show controls");
+	uiToggle.title = full ? "Hide controls" : "Show controls";
+}
+
+uiToggle.addEventListener("click", () => {
+	const full = document.body.dataset.ui !== "full";
+	document.body.dataset.ui = full ? "full" : "min";
+	localStorage.setItem("zw-ui", full ? "full" : "min");
+	syncUiToggle();
+	syncUrl();
+});
+
 shareBtn.addEventListener("click", async () => {
 	syncUrl(); // make sure the address bar reflects the current scene
 	const url = location.href;
@@ -975,6 +998,7 @@ sky.setGrid(gridToggle.checked);
 sky.setWeatherPreview(selectedWx());
 applyEclipse();
 syncZaur();
+syncUiToggle();
 if (Number.isFinite(hParam) && hParam >= 0 && hParam < 24) setScrub(hParam);
 updateStatus();
 
