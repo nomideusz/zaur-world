@@ -41,6 +41,38 @@ export function heatFactor(tempC: number, cloudAlpha: number, h: number): number
 	return Math.min(1, t) * daylight(h) * (1 - cloudAlpha);
 }
 
+/**
+ * 0..1 haze strength from horizontal visibility (metres). Clear air (~10 km+)
+ * reads crisp; mist closes in below ~6 km and is thick under ~0.6 km. Overcast
+ * already reads gray, so visibility haze adds less on top of it. Unknown
+ * visibility = no haze (keeps hand-rolled weather sources unchanged).
+ */
+export function hazeFactor(
+	visibilityM: number | null | undefined,
+	cloudAlpha: number
+): number {
+	if (visibilityM == null || !Number.isFinite(visibilityM)) return 0;
+	const visKm = visibilityM / 1000;
+	const raw = visKm >= 10 ? 0 : visKm <= 0.6 ? 1 : 1 - (visKm - 0.6) / (10 - 0.6);
+	return Math.max(0, Math.min(1, raw)) * (1 - cloudAlpha * 0.3);
+}
+
+/**
+ * 0..1 crepuscular-ray (god ray) strength. Rays need the sun up and gaps in
+ * the deck: they peak around broken cloud and vanish when it's clear (nothing
+ * to cast shafts) or sealed (the sun is hidden). A low sun throws longer, more
+ * dramatic shafts; noon stays subtle.
+ */
+export function godRayFactor(cloudAlpha: number, h: number): number {
+	if (h <= SUN_RISE || h >= SUN_SET) return 0;
+	const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+	const gaps = Math.max(0, 1 - Math.abs(cloudAlpha - 0.42) / 0.42);
+	if (gaps <= 0) return 0;
+	// 0 at noon, 1 at sunrise/sunset — low sun throws the longest shafts.
+	const low = Math.abs(t - 0.5) * 2;
+	return gaps * (0.35 + 0.65 * low);
+}
+
 export function daylight(h: number): number {
 	if (h <= SUN_RISE - 1 || h >= SUN_SET + 1) return 0;
 	if (h < SUN_RISE + 1) return (h - (SUN_RISE - 1)) / 2;

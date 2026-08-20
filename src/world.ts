@@ -20,6 +20,8 @@ import {
   starAlpha,
   auroraAlpha,
   heatFactor,
+  hazeFactor,
+  godRayFactor,
   daylight,
   dayCreatureAlpha,
   duskAlpha,
@@ -35,12 +37,15 @@ import {
   solsticeWarmth,
   lunarPhase,
 } from "./solar.js";
+import { frostFactor } from "./atmosphere.js";
 import {
   drawAurora,
   drawCirrus,
   drawCityGlow,
   drawFog,
   drawFrost,
+  drawGodRays,
+  drawHaze,
   drawRainCurtain,
   drawHeatHaze,
   drawHorizonGlow,
@@ -530,6 +535,12 @@ export class World {
       topRGB = desatRGB(topRGB, Math.min(0.85, desat));
       bottomRGB = desatRGB(bottomRGB, Math.min(0.85, desat));
     }
+    // Reduced visibility veils the sky — hazy days read soft and milky.
+    const haze = wx ? hazeFactor(wx.visibilityM, cloudAlpha) : 0;
+    if (haze > 0.02) {
+      topRGB = desatRGB(topRGB, Math.min(0.6, haze * 0.55));
+      bottomRGB = desatRGB(bottomRGB, Math.min(0.6, haze * 0.55));
+    }
     // Full moon nights lift the whole sky a touch — you can feel the silver.
     // A lunar eclipse takes that silver away as the moon goes blood-red.
     const lunarEclipse = wx?.eclipse?.type === "lunar" ? wx.eclipse.progress : 0;
@@ -613,6 +624,10 @@ export class World {
       this.drawCloudLayer(ctx, 0, cloudAlpha, wx, h);
     }
 
+    // Crepuscular rays fanning down from the sun through broken cloud.
+    const godRays = godRayFactor(cloudAlpha, h);
+    if (godRays > 0.02) drawGodRays(ctx, width, height, h, godRays);
+
     // Sun / moon: full intensity overcast blacks them out completely.
     const celestialDim = Math.max(
       0,
@@ -635,13 +650,8 @@ export class World {
     // Settled snow — builds while it flakes, stays while the air stays cold.
     if (this.snowCover > 0.02) drawSnowCover(ctx, width, height, this.snowCover);
 
-    // Hard frost sparkle on cold clear nights and early mornings.
-    const frost =
-      wx && wx.temperatureC <= 0
-        ? Math.min(1, -wx.temperatureC / 8) *
-          (1 - cloudAlpha * 0.7) *
-          (h >= 20 || h < 9 ? 1 : h < 11 ? 1 - (h - 9) / 2 : 0)
-        : 0;
+    // Hard frost sparkle on cold, humid, clear nights — the dew point decides.
+    const frost = frostFactor(wx, h);
     if (frost > 0.05) drawFrost(ctx, width, height, frost);
 
     // Hot, clear afternoons get a faint shimmer hovering over the horizon.
@@ -694,6 +704,9 @@ export class World {
 
     // Fog haze — gradient overlay denser near the ground.
     if (wx?.fog) drawFog(ctx, width, height);
+
+    // Visibility-driven haze / morning mist, distinct from the thick fog above.
+    if (haze > 0.02) drawHaze(ctx, width, height, haze, h);
 
     // Rain / snow particles in front of the clouds.
     if (this.drops.length > 0) this.drawDrops(ctx);
@@ -1072,14 +1085,13 @@ export class World {
       this.lightningIntensity = 0;
       this.bolt = null;
       // Reset the timer so the first strike after thunder returns isn't immediate.
-      this.lightningTimer = 4 + Math.random() * 6;
+      this.lightningTimer = this.nextLightningDelay(wx);
       return;
     }
     this.lightningTimer -= dt;
     if (this.lightningTimer <= 0) {
       this.lightningIntensity = 0.6 + Math.random() * 0.4;
-      // Rarely double-strike — the eye reads it as a louder storm.
-      this.lightningTimer = (Math.random() < 0.18 ? 0.18 : 0) + 4 + Math.random() * 9;
+      this.lightningTimer = this.nextLightningDelay(wx);
       this.bolt = generateBolt(this.state.width, this.state.height);
       this.boltAge = 0;
     }
@@ -1092,6 +1104,24 @@ export class World {
       this.boltAge += dt;
       if (this.boltAge > 0.25) this.bolt = null;
     }
+  }
+
+  /**
+   * Seconds until the next flash. The 15-min nowcast's lightning probability
+   * sets the rhythm: an active cell flashes every couple of seconds, a distant
+   * one only now and then. Without nowcast data (previews, hand-rolled
+   * weather) it keeps the old 4–10 s cadence.
+   */
+  private nextLightningDelay(wx: WeatherConditions | null): number {
+    const p = wx?.lightningPotential ?? null;
+    if (p == null) return 4 + Math.random() * 6;
+    if (p >= 0.5) {
+      // Active storm — frequent, with the occasional immediate double-strike.
+      return (Math.random() < 0.22 ? 0.15 : 0) + 1.5 + Math.random() * 3.5;
+    }
+    if (p >= 0.15) return 5 + Math.random() * 7;
+    // Low potential — a distant rumble with only sparse flashes.
+    return 15 + Math.random() * 15;
   }
 
   private regenClouds(): void {
@@ -1421,7 +1451,14 @@ export class World {
     const snowing = wx?.precipitation === "snow";
     if (snowing && temp <= 1) {
       const i = wx?.intensity ?? 0.5;
-      const rate = 0.3 + i * i * 2.8; // 100% blankets in ~15s
+      // Real snowfall amount (cm/h) drives the blanket rate: a heavy dump
+      // buries the ground in seconds, a dusting takes a couple of minutes.
+      // Missing snowfall data falls back to the intensity curve.
+      const cm = wx?.snowfallCm;
+      const rate =
+        cm != null && Number.isFinite(cm)
+          ? 0.5 + Math.min(3, Math.max(0, cm))
+          : 0.3 + i * i * 2.8;
       this.snowCover = Math.min(1, this.snowCover + (dt / 40) * rate);
       // Fresh snow covers wet ground.
       this.wetness = Math.max(0, this.wetness - dt / 8);

@@ -75,10 +75,24 @@ export function frostFactor(wx: WeatherConditions | null, h: number): number {
   if (wx.precipitation === "rain") return 0;
   const cold = Math.min(1, -wx.temperatureC / 8);
   const clear = 1 - cloudAlphaFor(wx) * 0.7;
+  // Frost needs moisture: it forms as the air closes on its dew point, so a
+  // dry sub-zero night (wide temperature–dew gap) stays frost-free.
+  const moist = dewProximity(wx);
   // Frost reads at night and early morning — melts visually by mid-morning.
   const window =
     h >= 20 || h < 9 ? 1 : h < 11 ? 1 - (h - 9) / 2 : 0;
-  return cold * clear * window;
+  return cold * clear * moist * window;
+}
+
+/**
+ * 0..1 how close the air is to saturation (dew point). Returns 1 when the dew
+ * point is unknown so behaviour is unchanged without that data.
+ */
+function dewProximity(wx: WeatherConditions): number {
+  const dew = wx.dewPointC;
+  if (dew == null || !Number.isFinite(dew)) return 1;
+  const gap = wx.temperatureC - dew;
+  return Math.max(0, Math.min(1, 1 - gap / 5));
 }
 
 export function resolveMood(

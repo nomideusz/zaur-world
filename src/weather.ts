@@ -61,6 +61,14 @@ export interface WeatherConditions {
   precipProbability?: number | null;
   /** Eclipse state, if any is active right now. */
   eclipse?: { type: "solar" | "lunar"; progress: number } | null;
+  /** Horizontal visibility, metres — drives haze and morning mist. */
+  visibilityM?: number | null;
+  /** Dew point °C — frost forms as air temperature closes on it. */
+  dewPointC?: number | null;
+  /** Snowfall amount of the preceding hour, cm — drives accumulation. */
+  snowfallCm?: number | null;
+  /** 0..1 chance of lightning in the active 15-min nowcast slot. */
+  lightningPotential?: number | null;
 }
 
 export interface GeoLocation {
@@ -463,17 +471,18 @@ export class WeatherClient {
         "current",
         "temperature_2m,apparent_temperature,weather_code,is_day,precipitation," +
           "wind_speed_10m,wind_direction_10m,wind_gusts_10m," +
-          "relative_humidity_2m,cloud_cover,pressure_msl"
+          "relative_humidity_2m,cloud_cover,pressure_msl,visibility,dew_point_2m,snowfall"
       );
       url.searchParams.set("daily", "sunrise,sunset,temperature_2m_max,temperature_2m_min");
       url.searchParams.set(
         "hourly",
         "temperature_2m,weather_code,precipitation,precipitation_probability," +
-          "cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day"
+          "cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day," +
+          "visibility,dew_point_2m,snowfall"
       );
       // Near-term 15-minute series (natively modelled in Europe/North
       // America, interpolated elsewhere) — 8 slots ≈ the next 2 hours.
-      url.searchParams.set("minutely_15", "precipitation,weather_code");
+      url.searchParams.set("minutely_15", "precipitation,weather_code,lightning_potential");
       url.searchParams.set("forecast_minutely_15", "8");
       url.searchParams.set("forecast_days", "2");
       url.searchParams.set("timezone", "auto");
@@ -675,7 +684,11 @@ function conditionsEqual(a: WeatherConditions, b: WeatherConditions): boolean {
     a.cloudCover === b.cloudCover &&
     a.pressureMsl === b.pressureMsl &&
     a.windDirection === b.windDirection &&
-    a.windGusts === b.windGusts
+    a.windGusts === b.windGusts &&
+    a.visibilityM === b.visibilityM &&
+    a.dewPointC === b.dewPointC &&
+    a.snowfallCm === b.snowfallCm &&
+    a.lightningPotential === b.lightningPotential
   );
 }
 

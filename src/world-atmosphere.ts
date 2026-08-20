@@ -47,6 +47,42 @@ export function drawFog(ctx: CanvasRenderingContext2D, width: number, height: nu
   }
 }
 
+/**
+ * Visibility-driven haze and ground mist. Unlike `drawFog` (the hard WMO fog
+ * overlay), this is the soft continuum: a thin milky veil on hazy days and a
+ * low mist that hugs the horizon as visibility closes in. Dims at night so the
+ * mist doesn't read as a bright band against a dark sky.
+ */
+export function drawHaze(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  k: number,
+  h: number
+): void {
+  if (k < 0.02) return;
+  const day = 0.35 + daylight(h) * 0.65;
+  const t = performance.now() / 1000;
+
+  // Horizon mist band — rises and thickens as visibility drops.
+  const bandBase = height * (0.34 - k * 0.14);
+  const bandH = height * (0.18 + k * 0.26);
+  const y = bandBase + Math.sin(t * 0.05) * height * 0.012;
+  const band = ctx.createLinearGradient(0, y, 0, y + bandH);
+  band.addColorStop(0, "rgba(198, 203, 216, 0)");
+  band.addColorStop(0.5, `rgba(206, 210, 222, ${(0.17 * k * day).toFixed(3)})`);
+  band.addColorStop(1, "rgba(214, 217, 228, 0)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, y, width, bandH);
+
+  // A lower, denser veil hugging the ground — ground fog / morning mist.
+  const ground = ctx.createLinearGradient(0, height * 0.7, 0, height);
+  ground.addColorStop(0, "rgba(212, 215, 226, 0)");
+  ground.addColorStop(1, `rgba(220, 223, 233, ${(0.26 * k * day).toFixed(3)})`);
+  ctx.fillStyle = ground;
+  ctx.fillRect(0, height * 0.7, width, height * 0.3);
+}
+
 export function drawWetSheen(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -271,6 +307,57 @@ export function drawRainbow(
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/**
+ * Crepuscular rays — soft shafts of sunlight fanning down from the sun through
+ * gaps in broken cloud. Each shaft drifts slowly; a low sun widens the fan and
+ * warms the tint toward gold.
+ */
+export function drawGodRays(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  h: number,
+  alpha: number
+): void {
+  if (alpha < 0.02) return;
+  const p = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+  const sunX = width * (0.08 + p * 0.84);
+  const riseY = height * 0.68;
+  const topY = height * 0.09;
+  const sunY = riseY - Math.sin(p * Math.PI) * (riseY - topY);
+  const now = performance.now() / 1000;
+
+  const warmth = 1 - Math.abs(p - 0.5) * 2;
+  const r = Math.round(248 + warmth * 7);
+  const g = Math.round(225 + warmth * 25);
+  const b = Math.round(180 + warmth * 40);
+
+  const rays = 9;
+  const fan = 1.25; // radians of spread around straight down
+  for (let i = 0; i < rays; i++) {
+    const home = Math.PI / 2 - fan / 2 + (i / (rays - 1)) * fan;
+    const angle = home + Math.sin(now * 0.08 + i * 1.9) * 0.045;
+    const halfWidth = (16 + (i % 3) * 9) * (0.7 + warmth * 0.6);
+    const reach = height - sunY + height * 0.12;
+    const bx = sunX + Math.cos(angle) * reach;
+    const by = sunY + Math.sin(angle) * reach;
+    const ux = -Math.sin(angle) * halfWidth;
+    const uy = Math.cos(angle) * halfWidth;
+
+    const a = alpha * 0.17 * (0.6 + 0.4 * Math.sin(now * 0.25 + i * 0.9));
+    const grad = ctx.createLinearGradient(sunX, sunY, bx, by);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(sunX, sunY);
+    ctx.lineTo(bx - ux, by - uy);
+    ctx.lineTo(bx + ux, by + uy);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 /**

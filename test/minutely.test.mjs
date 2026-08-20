@@ -20,12 +20,14 @@ const clearDay = {
 	pressureMsl: 1015,
 	windDirection: 270,
 	windGusts: null,
+	lightningPotential: null,
 };
 
 const series = (entries) => ({
 	time: entries.map((e) => e[0]),
 	precipitation: entries.map((e) => e[1]),
 	weather_code: entries.map((e) => e[2]),
+	lightning_potential: entries.map((e) => e[3]),
 });
 
 describe("buildMinutely15", () => {
@@ -41,7 +43,19 @@ describe("buildMinutely15", () => {
 			timeISO: "2026-07-19T06:15",
 			precipMm: 0.4,
 			weatherCode: 61,
+			lightningPotential: null,
 		});
+	});
+
+	it("normalizes lightning potential from percent", () => {
+		const slots = buildMinutely15(
+			series([
+				["2026-07-19T06:00", 0, 0, undefined],
+				["2026-07-19T06:15", 0.4, 61, 80],
+			])
+		);
+		assert.equal(slots[0].lightningPotential, null);
+		assert.equal(slots[1].lightningPotential, 0.8);
 	});
 
 	it("returns empty for missing block", () => {
@@ -117,5 +131,11 @@ describe("refineWithMinutely", () => {
 			"2026-07-19T06:40"
 		);
 		assert.ok(heavy.intensity >= 0.82, `intensity ${heavy.intensity}`);
+	});
+
+	it("carries the slot's lightning potential", () => {
+		const stormy = buildMinutely15(series([["2026-07-19T06:15", 0.6, 95, 70]]));
+		const out = refineWithMinutely(clearDay, stormy, "2026-07-19T06:20");
+		assert.equal(out.lightningPotential, 0.7);
 	});
 });

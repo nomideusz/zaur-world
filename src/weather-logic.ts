@@ -12,6 +12,10 @@ export interface OpenMeteoCurrent {
 	relative_humidity_2m?: number;
 	cloud_cover?: number;
 	pressure_msl?: number;
+	visibility?: number;
+	dew_point_2m?: number;
+	/** Snowfall amount of the preceding hour, centimetres. */
+	snowfall?: number;
 }
 
 export interface OpenMeteoDaily {
@@ -31,6 +35,9 @@ export interface OpenMeteoHourly {
 	wind_speed_10m?: number[];
 	wind_direction_10m?: number[];
 	relative_humidity_2m?: number[];
+	visibility?: number[];
+	dew_point_2m?: number[];
+	snowfall?: number[];
 	is_day?: number[];
 }
 
@@ -49,6 +56,9 @@ export interface ForecastHour {
 	/** Direction the wind blows *from*, degrees (0 = north). */
 	windDirection: number | null;
 	humidity: number | null;
+	visibilityM: number | null;
+	dewPointC: number | null;
+	snowfallCm: number | null;
 	isDay: boolean;
 }
 
@@ -223,6 +233,12 @@ export function deriveConditions(
 		pressureMsl: c.pressure_msl ?? null,
 		windDirection: c.wind_direction_10m ?? null,
 		windGusts: c.wind_gusts_10m ?? null,
+		visibilityM: c.visibility ?? null,
+		dewPointC: c.dew_point_2m ?? null,
+		snowfallCm: c.snowfall ?? null,
+		// Lightning potential comes only from the 15-min nowcast; the coarse
+		// "current" block has no equivalent, so it starts unset.
+		lightningPotential: null,
 	};
 }
 
@@ -231,6 +247,7 @@ export interface OpenMeteoMinutely15 {
 	time?: string[];
 	precipitation?: number[];
 	weather_code?: number[];
+	lightning_potential?: number[];
 }
 
 /** One 15-minute slot of near-term precipitation. */
@@ -240,6 +257,17 @@ export interface MinutelySlot {
 	/** Precipitation in this 15-minute slot, mm. */
 	precipMm: number;
 	weatherCode: number | null;
+	/** 0..1 chance of lightning in this slot (normalized from %). */
+	lightningPotential: number | null;
+}
+
+/**
+ * Open-Meteo reports `lightning_potential` as a 0–100 percentage. Normalize it
+ * to a 0..1 likelihood the renderer can consume directly.
+ */
+export function normalizeLightningPotential(v: number | null | undefined): number | null {
+	if (v == null || !Number.isFinite(v)) return null;
+	return Math.max(0, Math.min(1, v / 100));
 }
 
 /** Flatten Open-Meteo's parallel minutely_15 arrays into slot records. */
@@ -254,6 +282,7 @@ export function buildMinutely15(m: OpenMeteoMinutely15 | undefined): MinutelySlo
 			timeISO: t,
 			precipMm: m.precipitation?.[i] ?? 0,
 			weatherCode: m.weather_code?.[i] ?? null,
+			lightningPotential: normalizeLightningPotential(m.lightning_potential?.[i]),
 		});
 	}
 	return out;
@@ -296,6 +325,9 @@ export function refineWithMinutely(
 		...sky,
 		cloudiness: refineCloudiness(sky.cloudiness, base.cloudCover),
 		weatherCode: code,
+		// The active slot carries the real near-term lightning likelihood;
+		// fall back to the previous value so a missing series doesn't jitter.
+		lightningPotential: active.lightningPotential ?? base.lightningPotential,
 	};
 	// Dry sky: keep the cloud-cover intensity lift from deriveConditions so a
 	// sealed overcast doesn't flatten to zero when the slot has no precip.
@@ -308,7 +340,8 @@ export function refineWithMinutely(
 		next.intensity === base.intensity &&
 		next.thunder === base.thunder &&
 		next.fog === base.fog &&
-		next.weatherCode === base.weatherCode
+		next.weatherCode === base.weatherCode &&
+		next.lightningPotential === base.lightningPotential
 	) {
 		return base;
 	}
@@ -336,6 +369,9 @@ export function buildHourlyForecast(hourly: OpenMeteoHourly | undefined): Foreca
 			windSpeed: hourly.wind_speed_10m?.[i] ?? null,
 			windDirection: hourly.wind_direction_10m?.[i] ?? null,
 			humidity: hourly.relative_humidity_2m?.[i] ?? null,
+			visibilityM: hourly.visibility?.[i] ?? null,
+			dewPointC: hourly.dew_point_2m?.[i] ?? null,
+			snowfallCm: hourly.snowfall?.[i] ?? null,
 			isDay: (hourly.is_day?.[i] ?? 1) !== 0,
 		});
 	}
@@ -398,6 +434,18 @@ export function forecastConditionsAt(
 		next && slot.humidity != null && next.humidity != null && frac > 0
 			? lerp(slot.humidity, next.humidity, frac)
 			: slot.humidity;
+	const visibilityM =
+		next && slot.visibilityM != null && next.visibilityM != null && frac > 0
+			? lerp(slot.visibilityM, next.visibilityM, frac)
+			: slot.visibilityM;
+	const dewPointC =
+		next && slot.dewPointC != null && next.dewPointC != null && frac > 0
+			? lerp(slot.dewPointC, next.dewPointC, frac)
+			: slot.dewPointC;
+	const snowfallCm =
+		next && slot.snowfallCm != null && next.snowfallCm != null && frac > 0
+			? lerp(slot.snowfallCm, next.snowfallCm, frac)
+			: slot.snowfallCm;
 	const precipProbability =
 		next &&
 		slot.precipProbability != null &&
@@ -418,9 +466,15 @@ export function forecastConditionsAt(
 		weatherCode: slot.weatherCode,
 		humidity,
 		cloudCover,
+		visibilityM,
+		dewPointC,
+		snowfallCm,
 		pressureMsl: base?.pressureMsl ?? null,
 		windDirection: slot.windDirection ?? base?.windDirection ?? null,
 		windGusts: null,
 		precipProbability,
+		// Forecast hours have no 15-min lightning data; thunder still gates the
+		// legacy random cadence in the renderer.
+		lightningPotential: null,
 	};
 }

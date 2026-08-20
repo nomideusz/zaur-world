@@ -536,21 +536,47 @@ stripCellsEl.addEventListener("click", (e) => {
 	if (!cell) return;
 	const h = Number(cell.dataset.hour);
 	if (!Number.isFinite(h)) return;
+	// A drag that just ended already pinned the hour under the finger; its
+	// trailing click is part of the scrub, not a second tap that would unpin it.
+	if (stripScrubbed) {
+		stripScrubbed = false;
+		return;
+	}
 	if (scrubHour !== null && Math.floor(scrubHour) === h) clearScrub(true);
 	else setScrub(h);
 });
 
-// Drag across the strip to sweep the day — mobile-friendly scrubbing.
+// Drag across the strip to sweep the day — mobile-friendly scrubbing. A tap and
+// a drag both start with a pointerdown, so only scrub once the finger actually
+// travels a few pixels; otherwise a tap's natural jitter (Android fires tiny
+// pointermoves even for a still finger) would select the hour and the trailing
+// click would immediately unpin it.
+const SCRUB_THRESHOLD_PX = 6;
 let stripDragging = false;
+let stripScrubbed = false;
+let stripDragStart: { x: number; y: number } | null = null;
 stripCellsEl.addEventListener("pointerdown", (e) => {
 	if (e.pointerType === "mouse" && e.buttons !== 1) return;
 	stripDragging = true;
+	stripScrubbed = false;
+	stripDragStart = { x: e.clientX, y: e.clientY };
 });
 window.addEventListener("pointerup", () => {
 	stripDragging = false;
+	stripDragStart = null;
+});
+window.addEventListener("pointercancel", () => {
+	stripDragging = false;
+	stripDragStart = null;
 });
 stripCellsEl.addEventListener("pointermove", (e) => {
 	if (!stripDragging) return;
+	if (!stripScrubbed && stripDragStart) {
+		const dx = e.clientX - stripDragStart.x;
+		const dy = e.clientY - stripDragStart.y;
+		if (Math.hypot(dx, dy) < SCRUB_THRESHOLD_PX) return;
+		stripScrubbed = true;
+	}
 	const cell = document
 		.elementFromPoint(e.clientX, e.clientY)
 		?.closest<HTMLElement>(".ds-cell");

@@ -53,6 +53,17 @@ describe("buildHourlyForecast", () => {
 		assert.equal(f[3].isDay, false);
 	});
 
+	it("maps snowfall cm through", () => {
+		const f = buildHourlyForecast({
+			time: ["2026-07-14T10:00", "2026-07-14T11:00"],
+			temperature_2m: [0, -1],
+			weather_code: [71, 73],
+			snowfall: [1.5, 3],
+		});
+		assert.equal(f[0].snowfallCm, 1.5);
+		assert.equal(f[1].snowfallCm, 3);
+	});
+
 	it("returns empty for missing data", () => {
 		assert.deepEqual(buildHourlyForecast(undefined), []);
 		assert.deepEqual(buildHourlyForecast({}), []);
