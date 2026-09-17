@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+	describeWeather,
 	formatForecastDetails,
 	formatForecastLine,
 	weatherIcon,
@@ -72,5 +73,15 @@ describe("weatherIcon", () => {
 	it("falls back to sun or moon on clear skies", () => {
 		assert.equal(weatherIcon(wx()), "☀");
 		assert.equal(weatherIcon(wx({ isDay: false })), "☾");
+	});
+});
+
+describe("describeWeather", () => {
+	it("never calls a night sky sunny", () => {
+		for (const code of [1, 2]) {
+			assert.equal(describeWeather(code, true), "mostly sunny");
+			assert.equal(describeWeather(code, false), "mostly clear");
+		}
+		assert.equal(describeWeather(0, false), "clear night");
 	});
 });

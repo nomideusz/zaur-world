@@ -799,7 +799,7 @@ export function describeWeather(code: number, isDay: boolean): string {
       return isDay ? "clear skies" : "clear night";
     case 1:
     case 2:
-      return "mostly sunny";
+      return isDay ? "mostly sunny" : "mostly clear";
     case 3:
       return "overcast";
     case 45:
