@@ -12,3 +12,10 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# The service worker must never be served from a stale edge/browser copy, or a
+# deploy can leave visitors pinned to the previous shell.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

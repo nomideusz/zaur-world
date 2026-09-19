@@ -19,6 +19,35 @@
 	--chip-on: rgba(142, 197, 255, 0.18);
 	--chip-on-edge: rgba(142, 197, 255, 0.45);
 	--ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+	/* Distance every fixed control keeps from its edge of the canvas. */
+	--gutter: clamp(0.85rem, 2.2vw, 1.25rem);
+
+	/* index.html ships viewport-fit=cover, so these resolve to the real notch /
+	   home-indicator insets once installed, and to 0 in a normal browser tab
+	   where the browser's own chrome already does the job. */
+	--safe-top: env(safe-area-inset-top, 0px);
+	--safe-right: env(safe-area-inset-right, 0px);
+	--safe-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* On a phone the masthead should never hug the very top edge, even in a browser
+   tab where the inset is 0 and the URL bar is doing the reserving. */
+@media (max-width: 480px) {
+	:root {
+		--safe-top: max(env(safe-area-inset-top, 0px), 0.75rem);
+	}
+}
+
+/* Installed to a home screen the status bar sits *over* the canvas. iOS reports
+   it through safe-area-inset-top; Android commonly reports 0 while still
+   overlaying ~24px, so keep a floor rather than trusting the inset alone.
+   Declared after the phone rule above so it wins on an installed phone. */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+	:root {
+		--safe-top: max(env(safe-area-inset-top, 0px), 1.75rem);
+	}
 }
 
 html,
@@ -64,8 +93,8 @@ body {
 /* Minimal UI toggle — the one control that stays when the chrome is hidden. */
 .ui-toggle {
 	position: fixed;
-	top: clamp(0.85rem, 2.2vw, 1.25rem);
-	right: clamp(0.85rem, 2.2vw, 1.25rem);
+	top: calc(var(--safe-top) + var(--gutter));
+	right: calc(var(--safe-right) + var(--gutter));
 	z-index: 3;
 	pointer-events: auto;
 	display: inline-flex;
@@ -110,20 +139,50 @@ body[data-ui="min"] .chrome {
 }
 
 .brand {
-	top: clamp(0.85rem, 2.2vw, 1.25rem);
-	left: clamp(0.85rem, 2.2vw, 1.25rem);
-	max-width: min(20rem, 70vw);
+	top: calc(var(--safe-top) + var(--gutter));
+	left: calc(var(--safe-left) + var(--gutter));
+	/* Clear of the ui-toggle, which is pinned to the opposite corner. */
+	max-width: min(20rem, calc(100vw - var(--safe-left) - var(--safe-right) - 2 * var(--gutter) - 3.25rem));
 }
 
+/* One wrapping bar rather than a stack: the actions and the Tweaks trigger sit
+   on a single row, and the heavier reference rows fall in underneath. */
 .chrome {
-	left: clamp(0.85rem, 2.2vw, 1.25rem);
-	bottom: clamp(0.85rem, 2.2vw, 1.25rem);
+	left: calc(var(--safe-left) + var(--gutter));
+	bottom: calc(var(--safe-bottom) + var(--gutter));
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 0.45rem;
-	max-width: min(20rem, 94vw);
+	flex-flow: row wrap;
+	align-items: center;
+	gap: 0.4rem;
+	max-width: min(34rem, calc(100vw - var(--safe-left) - var(--safe-right) - 2 * var(--gutter)));
 	max-height: calc(100vh - 2rem);
+}
+
+#main-actions {
+	order: 1;
+}
+
+.tweaks {
+	order: 2;
+}
+
+/* Full-width rows, below the bar. */
+#tour-actions,
+.install,
+.links {
+	width: 100%;
+}
+
+#tour-actions {
+	order: 3;
+}
+
+.install {
+	order: 4;
+}
+
+.links {
+	order: 5;
 }
 
 .brand-mark {
@@ -464,9 +523,12 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 /* —— Tweaks panel —— */
 .tweaks {
 	pointer-events: auto;
-	width: min(20rem, 94vw);
+	/* Only as wide as its trigger — the panel floats out of flow (see below).
+	   Deliberately not a positioned ancestor: the panel anchors to .chrome so it
+	   lines up with the bar's left edge instead of the trigger's, which sits
+	   mid-row and would push a 20rem panel off a phone screen. */
+	width: auto;
 	text-shadow: none;
-	position: relative;
 	min-width: 0;
 }
 
@@ -508,12 +570,13 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	transform: rotate(-135deg) translateY(-1px);
 }
 
-.tweaks[open] .tweaks-trigger {
-	margin-bottom: 0.4rem;
-}
-
+/* Floated above the trigger instead of pushing it: opening Tweaks must not move
+   the bar, or every control jumps under the thumb that just tapped one. */
 .tweaks-panel {
-	position: relative;
+	position: absolute;
+	bottom: calc(100% + 0.4rem);
+	left: 0;
+	width: min(20rem, calc(100vw - var(--safe-left) - var(--safe-right) - 2 * var(--gutter)));
 	display: grid;
 	gap: 0.65rem;
 	padding: 0.7rem 0.7rem 0.75rem;
@@ -1020,7 +1083,8 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 	bottom: 0;
 	z-index: 2;
 	pointer-events: auto;
-	padding: 0.3rem clamp(0.5rem, 2vw, 1rem) calc(0.4rem + env(safe-area-inset-bottom, 0px));
+	padding: 0.3rem calc(var(--safe-right) + clamp(0.5rem, 2vw, 1rem)) calc(0.4rem + var(--safe-bottom))
+		calc(var(--safe-left) + clamp(0.5rem, 2vw, 1rem));
 	background: linear-gradient(rgba(8, 10, 16, 0.55), rgba(8, 10, 16, 0.82));
 	border-top: 1px solid var(--panel-edge);
 	backdrop-filter: blur(10px);
@@ -1045,7 +1109,7 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 /* Lift the rest of the chrome above the dock while it is visible. */
 body:has(.daystrip:not([hidden])) .chrome {
-	bottom: calc(clamp(0.85rem, 2.2vw, 1.25rem) + 4.9rem + env(safe-area-inset-bottom, 0px));
+	bottom: calc(var(--safe-bottom) + var(--gutter) + 4.9rem);
 }
 
 .daystrip-head {
@@ -1265,18 +1329,55 @@ body:has(.daystrip:not([hidden])) .chrome {
 
 @media (max-width: 480px) {
 	.brand {
-		max-width: min(18rem, 88vw);
+		max-width: min(18rem, 78vw);
 	}
 
-	.chrome {
-		max-width: min(20rem, 94vw);
+	/* The sky is the point — on a phone the chrome earns its pixels or goes.
+	   The mark keeps its own line; place, clock and weather collapse onto one
+	   below it, reading as where · when · what. They wrap to a second line by
+	   themselves if a long city name needs the room. */
+	.brand {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 0.55rem;
+		row-gap: 0.1rem;
 	}
 
-	/* Keep the open panel inside the viewport: budget for the action
-	   buttons, trigger, install/links rows, and dock lift. */
+	.brand-mark {
+		flex: 0 0 100%;
+		margin-bottom: 0.3rem;
+	}
+
+	.brand-glyph {
+		width: 26px;
+		height: 26px;
+	}
+
+	.brand-word {
+		font-size: 1.1rem;
+	}
+
+	.place,
+	.clock,
+	.wx {
+		margin: 0;
+	}
+
+	.place {
+		font-size: 0.72rem;
+	}
+
+	.wx {
+		font-size: 0.68rem;
+		/* Whatever is left of the row; wraps under rather than overflowing. */
+		max-width: 100%;
+	}
+
+	/* The floating panel gets the room between the bar and the masthead. */
 	.tweaks-panel {
-		max-height: max(13rem, calc(100vh - 20rem));
-		max-height: max(13rem, calc(100dvh - 20rem));
+		max-height: max(13rem, calc(100vh - 16rem));
+		max-height: max(13rem, calc(100dvh - 16rem));
 	}
 
 	.ds-cell {
@@ -1285,34 +1386,25 @@ body:has(.daystrip:not([hidden])) .chrome {
 		min-height: 3.4rem;
 	}
 
-	.chrome-actions {
-		width: 100%;
-	}
-
+	/* Pills sized to their label, not stretched across the viewport. */
 	.btn--tour,
 	.btn--locate,
 	.btn--live {
-		flex: 1 1 auto;
-		min-height: 2.4rem;
-		padding: 0.5rem 0.7rem;
-		font-size: 0.74rem;
+		flex: 0 0 auto;
+		min-height: 2.2rem;
+		padding: 0.42rem 0.7rem;
+		font-size: 0.72rem;
 	}
 
-	.tweaks {
-		width: min(20rem, 94vw);
-	}
-
-	.brand-word {
-		font-size: 1.25rem;
+	/* Reference material, not controls. The npm and repo links stay reachable
+	   through the brand mark, which is a link to the package. */
+	.install,
+	.links {
+		display: none;
 	}
 
 	.code {
 		font-size: 0.62rem;
-	}
-
-	.wx {
-		font-size: 0.68rem;
-		max-width: 88vw;
 	}
 }
 

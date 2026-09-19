@@ -14,6 +14,8 @@ hours** for a 30-second tour through dawn, golden hour, dusk, and the night
 sky, with the hourly forecast riding along beside the clock — or scrub the
 **day strip** along the bottom edge to jump the sky to any of the next 24
 hours. On a VPN, tap **Use my location** so the tour matches your real sky.
+It installs as a PWA — add it to a home screen and it opens full-screen,
+with the last sky still drawing when there is no network.
 
 | Golden hour | Night |
 | --- | --- |

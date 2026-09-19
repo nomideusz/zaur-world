@@ -1025,3 +1025,12 @@ if (Number.isFinite(latParam) && Number.isFinite(lonParam) && params.has("lat"))
 
 window.setInterval(updateStatus, 2000);
 window.setInterval(updateClock, 1000);
+
+// Offline shell. Dev is left alone so Vite's HMR is never served from cache.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		void navigator.serviceWorker.register("/sw.js").catch(() => {
+			/* unsupported or blocked (private mode, no HTTPS) — the sky still works */
+		});
+	});
+}
