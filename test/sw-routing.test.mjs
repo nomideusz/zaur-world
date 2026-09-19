@@ -48,6 +48,21 @@ describe("service worker routing", () => {
 		assert.equal(route("https://fonts.gstatic.com/s/syne/v22/font.woff2"), "cache-first");
 	});
 
+	// Regression: v1 treated every same-origin GET as a static asset, which
+	// swallowed the analytics that Netlify proxies through this origin. The
+	// beacon carries a fresh id per pageview, so the cache grew one entry per
+	// visit, and the unhashed scripts could never update.
+	it("never caches same-origin analytics, proxied or otherwise", () => {
+		for (const path of [
+			"/proxy.js",
+			"/auto-events.js",
+			"/simple/simple.gif?page_id=8c7f34a9&session_id=8b0209a9&time=1789792437683",
+			"/api/anything",
+		]) {
+			assert.equal(route(`${origin}${path}`), "pass", path);
+		}
+	});
+
 	// The library keeps its own localStorage fallback with freshness rules. A
 	// second cache in front of these would serve stale skies it cannot invalidate.
 	it("never caches the live data APIs", () => {

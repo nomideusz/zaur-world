@@ -6,7 +6,9 @@
 // library keeps its own localStorage fallback with freshness rules, and a
 // second cache in front of it would serve stale skies it cannot invalidate.
 
-const CACHE = "zw-v1";
+// Bumped to v2 to drop caches polluted by the too-broad same-origin rule that
+// v1 shipped with — it swallowed the proxied analytics beacon.
+const CACHE = "zw-v2";
 
 // Cached so the typography survives offline; both are immutable-by-URL.
 const FONT_HOSTS = new Set(["fonts.googleapis.com", "fonts.gstatic.com"]);
@@ -22,21 +24,36 @@ const SHELL = [
 ];
 
 /**
+ * The only same-origin paths worth keeping. Deliberately an allow-list: this
+ * site proxies its analytics through its own origin (/proxy.js, /auto-events.js
+ * and a /simple/simple.gif beacon carrying a unique id per pageview), so
+ * "same-origin means static" would cache a new entry on every single visit and
+ * pin the unhashed analytics scripts forever.
+ */
+function isShellAsset(pathname) {
+	return (
+		pathname.startsWith("/assets/") ||
+		pathname.startsWith("/icons/") ||
+		pathname === "/manifest.webmanifest"
+	);
+}
+
+/**
  * Which strategy a request gets. Pure, so test/sw-routing.test.mjs can drive it
  * without a browser.
  *
  * - "network-first"  navigations: a deploy changes index.html at a stable URL
  * - "cache-first"    hashed assets, icons, fonts: URL changes when bytes change
- * - "pass"           everything else, notably the live weather APIs
+ * - "pass"           everything else — the live weather APIs and analytics
  *
  * @returns {"network-first" | "cache-first" | "pass"}
  */
 function strategyFor(request, url) {
 	if (request.method !== "GET") return "pass";
 	if (request.mode === "navigate") return "network-first";
-	if (url.origin === self.location.origin) return "cache-first";
 	if (FONT_HOSTS.has(url.host)) return "cache-first";
-	return "pass";
+	if (url.origin !== self.location.origin) return "pass";
+	return isShellAsset(url.pathname) ? "cache-first" : "pass";
 }
 
 self.addEventListener("install", (event) => {
