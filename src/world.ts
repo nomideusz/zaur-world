@@ -186,9 +186,9 @@ const GLIDE_FIELDS = [
 ] as const;
 
 /**
- * A relighting cloud: the new bake laid over the old one inside the old
- * silhouette (source-atop), so only the light moves — the outline never
- * thickens mid-fade the way two stacked translucent stamps would.
+ * A relighting cloud: old bake at 1−f plus new at f, summed ("lighter") —
+ * an exact per-pixel lerp, so the outline morphs without thickening, and a
+ * resized or reshaped cloud is never clipped to its old silhouette.
  */
 function blendSprites(
   from: HTMLCanvasElement,
@@ -197,19 +197,21 @@ function blendSprites(
   out: HTMLCanvasElement | undefined
 ): HTMLCanvasElement | undefined {
   const c = out ?? document.createElement("canvas");
-  if (c.width !== to.width || c.height !== to.height) {
-    c.width = to.width;
-    c.height = to.height;
+  const w = Math.max(from.width, to.width);
+  const h = Math.max(from.height, to.height);
+  if (c.width !== w || c.height !== h) {
+    c.width = w;
+    c.height = h;
   }
   const g = c.getContext("2d");
   if (!g) return undefined;
   g.globalCompositeOperation = "source-over";
-  g.globalAlpha = 1;
-  g.clearRect(0, 0, c.width, c.height);
-  g.drawImage(from, (to.width - from.width) / 2, (to.height - from.height) / 2);
-  g.globalCompositeOperation = "source-atop";
+  g.clearRect(0, 0, w, h);
+  g.globalAlpha = 1 - f;
+  g.drawImage(from, (w - from.width) / 2, (h - from.height) / 2);
+  g.globalCompositeOperation = "lighter";
   g.globalAlpha = f;
-  g.drawImage(to, 0, 0);
+  g.drawImage(to, (w - to.width) / 2, (h - to.height) / 2);
   return c;
 }
 

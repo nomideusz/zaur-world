@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Clouds no longer show flat, clipped tops for half a second when they
+  change size or shape (e.g. as live weather arrives after load): the
+  relight crossfade now blends old and new bakes instead of clipping the
+  new one to the old silhouette
+
 ## [1.4.0] - 2026-09-24
 
 ### Changed
