@@ -19,13 +19,15 @@ with the last sky still drawing when there is no network.
 
 | Golden hour | Night |
 | --- | --- |
-| ![Golden hour — warm horizon, sun halo, parallax clouds](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/golden.png) | ![Night — phase-accurate moon, stars, city glow beyond the ridge](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/night.png) |
+| ![Golden hour — the sun sinking behind layered ridges, cloud bases lit rose from below](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/golden.png) | ![Night — phase-accurate moon with its real maria, stars, a faint aurora over the ranges](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/night.png) |
 
 ## What it renders
 
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
   (Open-Meteo), so summer evenings stay light late and winter days end early.
-  Sun arcs by day; a phase-accurate moon with craters and earthshine by night.
+  Sun arcs by day; a phase-accurate moon showing its real near-side maria,
+  with earthshine, by night. Fractal ridgelines fade range by range into
+  the sky behind them.
 - **The real night sky** — once location is known, the stars are the ~330
   brightest (Yale catalog, to magnitude 3.6) at their true positions for that
   place and moment: Orion in winter, the Summer Triangle in July, wheeling
@@ -37,14 +39,16 @@ with the last sky still drawing when there is no network.
   with lightning timed to the real 15-minute nowcast, and wind that slants
   rain, drives flakes sideways, and hurries the clouds. Intensity scales the
   whole scene: light
-  drizzle is a veil; 100% is a sealed overcast with no sun visible. Overcast
+  drizzle is a veil; 100% is a sealed, slowly drifting stratus deck with no
+  sun visible. Overcast
   desaturates the sky; clear days are genuinely blue, and lightly veiled ones
   (~10–40% real cover) show high thin cirrus filaments. Conditions stay
   physically coherent (warm snow melts to rain; sub-zero rain falls as snow),
   a 15-minute nowcast lands precipitation within a minute of its slot, and
   the sky catches up instantly when a backgrounded tab wakes again.
-- **Golden hour** — horizon glow, and cloud undersides that catch fire
-  at sunrise and sunset.
+- **Golden hour** — horizon glow, a broad warm aureole round the low sun,
+  backlit slopes falling into warm shadow, and cloud bases lit rose from
+  beneath at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
   winter), fireflies on summer nights, aurora veils in deep night, shooting
   stars a few minutes apart, heat haze above 27 °C, visibility-driven mist
@@ -56,7 +60,7 @@ with the last sky still drawing when there is no network.
   contrails by day and blinking navigation lights by night, migrating
   V-formations in spring and autumn, a stylized satellite train gliding
   over rarely at night, a rainbow when the sun meets a clearing shower,
-  crepuscular rays (god rays) fanning down through broken cloud, and
+  crepuscular rays (god rays) fanning down while a cloud edge crosses the sun, and
   shooting-star rates that spike on real meteor-shower peaks
   (Perseids, Geminids, Quadrantids, Lyrids, Eta Aquariids, Orionids).
 - **The real Venus** — an evening or morning star tracking its actual
@@ -267,14 +271,14 @@ The sky clock and forecast slots use the **location's** timezone (from
 Open-Meteo), not the browser TZ — so a 24h tour stays coherent under VPN.
 Use `sky.localHour()` when starting your own sweep.
 
-![24-hour tour at golden hour — the forecast rides beside the clock while the weather card tracks the swept hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/tour.png)
+![24-hour tour paused near sunset — the forecast rides beside the clock, the tour controls sit under Tweaks](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/tour.png)
 
 The demo turns this API into a **day strip** — one cell per coming hour with
 icon, temperature, and precip-probability meter, a temperature curve across
 the day, sunrise/sunset marks, and shaded night hours. Click or drag to pin
 the sky to that hour:
 
-![Day strip — the coming 24 hours as scrubbable cells with a temperature curve; the sky pinned to 20:00, golden hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/daystrip.png)
+![Day strip — the coming 24 hours as scrubbable cells with a temperature curve; the sky pinned to 18:00, golden hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/daystrip.png)
 
 Current conditions carry detail too: `humidity`, `cloudCover`,
 `pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to

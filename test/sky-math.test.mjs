@@ -33,6 +33,7 @@ describe("godRayFactor", () => {
 	it("vanishes when clear (nothing to cast shafts) or sealed (sun hidden)", () => {
 		assert.equal(godRayFactor(0, 12), 0);
 		assert.equal(godRayFactor(1, 12), 0);
+		assert.equal(godRayFactor(0.72, 12), 0); // overcast deck: no gaps
 	});
 
 	it("peaks around broken cloud at low sun", () => {

@@ -151,6 +151,8 @@ interface Cloud {
   seed: number;
   /** Depth band: 0 = far/back, 1 = mid, 2 = near/front. Drives parallax + opacity. */
   layer: 0 | 1 | 2;
+  /** 0..1 — cover needed before this cloud forms; sparse skies show only the low ranks. */
+  rank: number;
   /** Cached soft-cloud sprite — cheap to stamp, rebuilt when the key moves. */
   sprite?: HTMLCanvasElement;
   spriteKey?: string;
@@ -166,7 +168,7 @@ function renderCloudSprite(
   ch: number,
   toward: number,
   layer: 0 | 1 | 2,
-  colors: { top: RGB; bot: RGB; rim: RGB; shade: RGB; rimK: number }
+  colors: { top: RGB; bot: RGB; rim: RGB; shade: RGB; rimK: number; under: number }
 ): HTMLCanvasElement | undefined {
   if (typeof document === "undefined") return undefined;
   const c = document.createElement("canvas");
@@ -176,50 +178,136 @@ function renderCloudSprite(
   if (!sctx) return undefined;
   sctx.scale(CLOUD_SPRITE_RES, CLOUD_SPRITE_RES);
   sctx.translate(w * 0.9, ch * 1.2);
-  // The blur is what turns hard ellipses into vapor — kept modest so the
-  // puffs still read as shapes, not smudges.
-  sctx.filter = `blur(${Math.max(1.5, Math.min(7, ch * 0.045)).toFixed(1)}px)`;
 
-  const lobe = (n: number): [number, number, number, number] => {
-    const offX = ((seed * (n + 1) * 31) % 100) / 100 - 0.5;
-    const offY = ((seed * (n + 2) * 17) % 60) / 100 - 0.3;
-    const rx = (w / 2) * (0.55 + ((seed * (n + 3) * 7) % 40) / 100);
-    const ry = (ch / 2) * (0.65 + ((seed * (n + 4) * 5) % 30) / 100);
-    return [offX * w * 0.6, offY * ch * 0.8, rx, ry];
-  };
-  // One combined path per pass — uniform alpha, no lobe-overlap blotches.
-  const lobePath = (dx: number, dy: number, scale: number): void => {
-    sctx.beginPath();
-    for (let n = 0; n < lobes; n++) {
-      const [lx, ly, rx, ry] = lobe(n);
-      sctx.ellipse(lx + dx, ly + dy, rx * scale, ry * scale, 0, 0, Math.PI * 2);
-    }
-    sctx.fill();
-  };
-
-  const { top, bot, rim, shade, rimK } = colors;
-  // Underpainting peeks out on one edge each: a shadowed underbelly away
-  // from the light, a lit rim toward it — the opposed offsets are what make
-  // the puffs read as round.
-  if (layer > 0) {
-    sctx.fillStyle = `rgba(${shade[0]}, ${shade[1]}, ${shade[2]}, 0.4)`;
-    lobePath(-toward * w * 0.03, ch * 0.1, 0.96);
-    if (rimK > 0.05) {
-      sctx.fillStyle = `rgba(${rim[0]}, ${rim[1]}, ${rim[2]}, ${(0.6 * rimK).toFixed(3)})`;
-      lobePath(toward * w * 0.045, -ch * 0.09, 0.95);
+  // A cumulus: a row of domes, tallest mid-cloud, sitting on one flat base
+  // (the condensation level), each big dome sprouting a smaller turret.
+  let s = seed;
+  const r = (): number => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const base = ch * 0.3;
+  const domes: Array<[number, number, number]> = [];
+  for (let n = 0; n < lobes; n++) {
+    // Domes stop short of the ends, where the flat skirt tapers out alone.
+    const t = 0.12 + (0.76 * n) / (lobes - 1);
+    const crown = Math.sin(t * Math.PI);
+    const lr = ch * (0.18 + crown * 0.34 + r() * 0.1) * (layer ? 1 : 0.8);
+    const lx = (t - 0.5) * w * 0.68 + (r() - 0.5) * w * 0.06;
+    const ly = base - lr * (0.95 + r() * 0.25) - crown * ch * 0.14;
+    domes.push([lx, ly, lr]);
+    if (layer && lr > ch * 0.4) {
+      const a = -Math.PI / 2 + (r() - 0.5) * 1.6;
+      domes.push([lx + Math.cos(a) * lr * 0.62, ly + Math.sin(a) * lr * 0.62, lr * (0.4 + r() * 0.15)]);
     }
   }
-  // Body: per-lobe gradient fills — overlaps thicken, then the blur melts
-  // them into internal structure instead of hard seams.
-  const grad = sctx.createLinearGradient(0, -ch * 0.6, 0, ch * 0.7);
-  grad.addColorStop(0, `rgba(${top[0]}, ${top[1]}, ${top[2]}, 0.8)`);
-  grad.addColorStop(1, `rgba(${bot[0]}, ${bot[1]}, ${bot[2]}, 0.68)`);
-  sctx.fillStyle = grad;
-  for (let n = 0; n < lobes; n++) {
-    const [lx, ly, rx, ry] = lobe(n);
-    sctx.beginPath();
-    sctx.ellipse(lx, ly, rx, ry, 0, 0, Math.PI * 2);
-    sctx.fill();
+  // Cauliflower: small bumps along each dome's upper rim break the smooth
+  // arcs into the knobbly outline of real convection.
+  if (layer) {
+    for (const [lx, ly, lr] of domes.slice()) {
+      for (let k = 0, n = 3 + Math.floor(r() * 3); k < n; k++) {
+        const a = -Math.PI * (0.1 + (0.8 * (k + r() * 0.6)) / n);
+        domes.push([lx + Math.cos(a) * lr * 0.82, ly + Math.sin(a) * lr * 0.82, lr * (0.2 + r() * 0.14)]);
+      }
+    }
+  }
+
+  const { top, bot, rim, shade, rimK, under } = colors;
+  const css = (c: RGB, a: number): string => `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${a.toFixed(3)})`;
+  // 1. Opaque silhouette in the shadow color. The blur is what turns hard
+  //    circles into vapor; the host fades the whole stamp, so the body never
+  //    shows the seams that translucent overlapping lobes do.
+  sctx.filter = `blur(${Math.max(1.5, Math.min(4, ch * 0.03)).toFixed(1)}px)`;
+  sctx.fillStyle = css(bot, 1);
+  sctx.beginPath();
+  for (const [lx, ly, lr] of domes) {
+    sctx.moveTo(lx + lr, ly);
+    sctx.arc(lx, ly, lr, 0, Math.PI * 2);
+  }
+  sctx.ellipse(0, base - ch * 0.12, w * 0.46, ch * 0.2, 0, 0, Math.PI * 2);
+  sctx.fill();
+  sctx.filter = "none";
+  // Everything below paints only where the silhouette already is.
+  sctx.globalCompositeOperation = "source-atop";
+  // 2. Sky light fills the crevices between domes, so the cloud reads as one
+  //    body and not a pile of balls; only the base keeps the shadow color.
+  const body = sctx.createLinearGradient(0, -ch * 0.9, 0, base);
+  body.addColorStop(0, css(top, 0.6));
+  body.addColorStop(1, css(top, 0));
+  sctx.fillStyle = body;
+  sctx.fillRect(-w, -ch * 1.2, w * 2, ch * 2.4);
+  // 3. Each dome catches light on its upper, sun-facing shoulder.
+  //    Higher domes catch more of it, so low lobes don't pop out as balls.
+  for (const [lx, ly, lr] of domes) {
+    const g = sctx.createRadialGradient(
+      lx + toward * lr * 0.3, ly - lr * 0.4, 0, lx, ly, lr * 1.08
+    );
+    const hk = 0.35 + 0.6 * Math.min(1, Math.max(0, (base - ly) / (ch * 0.8)));
+    g.addColorStop(0, css(top, hk));
+    g.addColorStop(0.6, css(top, hk * 0.55));
+    g.addColorStop(1, css(top, 0));
+    sctx.fillStyle = g;
+    sctx.fillRect(lx - lr * 1.1, ly - lr * 1.1, lr * 2.2, lr * 2.2);
+  }
+  // 4. The side facing the light glows (white by day, ember at dusk,
+  //    silver under the moon).
+  if (rimK > 0.05) {
+    const g = sctx.createLinearGradient(toward * w * 0.5, 0, 0, 0);
+    g.addColorStop(0, css(rim, 0.55 * rimK));
+    g.addColorStop(1, css(rim, 0));
+    sctx.fillStyle = g;
+    sctx.fillRect(-w, -ch * 1.2, w * 2, ch * 2.4);
+  }
+  // 5. The flat base sits in its own shadow.
+  const g = sctx.createLinearGradient(0, base - ch * 0.45, 0, base + ch * 0.12);
+  g.addColorStop(0, css(shade, 0));
+  g.addColorStop(1, css(shade, layer ? 0.5 : 0.3));
+  sctx.fillStyle = g;
+  sctx.fillRect(-w, base - ch * 0.45, w * 2, ch);
+  // 6. A sun at or below cloud level lights the base from underneath: the
+  //    rose-gold undersides of a sunset and its afterglow.
+  if (under > 0.05) {
+    const u = sctx.createLinearGradient(0, base - ch * 0.35, 0, base + ch * 0.1);
+    u.addColorStop(0, "rgba(255, 150, 100, 0)");
+    u.addColorStop(1, `rgba(255, 150, 100, ${(0.65 * under).toFixed(3)})`);
+    sctx.fillStyle = u;
+    sctx.fillRect(-w, base - ch * 0.35, w * 2, ch);
+  }
+  return c;
+}
+
+/**
+ * The underside of a stratus deck: soft darker cells and paler seams,
+ * flattened and shrunk toward the horizon by perspective, tiling seamlessly
+ * across the width. Black and white only, so one bake serves every hour and
+ * palette; baked at quarter scale and stretched, which is the blur.
+ */
+function renderDeckSprite(w: number, h: number): HTMLCanvasElement | undefined {
+  if (typeof document === "undefined") return undefined;
+  const c = document.createElement("canvas");
+  const W = (c.width = Math.max(8, Math.ceil(w / 4)));
+  const H = (c.height = Math.max(8, Math.ceil(h / 4)));
+  const d = c.getContext("2d");
+  if (!d) return undefined;
+  let s = 1234;
+  const r = (): number => (s = (s * 9301 + 49297) % 233280) / 233280;
+  for (let n = 0; n < 170; n++) {
+    const y = r() * H;
+    const near = 1 - y / H; // 1 overhead, 0 at the horizon
+    const rx = W * (0.05 + r() * 0.1) * (0.3 + near * 0.7);
+    const ry = rx * (0.25 + near * 0.35);
+    const x = r() * W;
+    const rgb = r() < 0.55 ? "0, 0, 0" : "255, 255, 255";
+    const a = (rgb[0] === "0" ? 0.2 : 0.14) * (0.3 + near * 0.7);
+    for (const ox of [x - W, x, x + W]) {
+      if (ox + rx < 0 || ox - rx > W) continue;
+      d.save();
+      d.translate(ox, y);
+      d.scale(rx, ry);
+      const g = d.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, `rgba(${rgb}, ${a.toFixed(3)})`);
+      g.addColorStop(1, `rgba(${rgb}, 0)`);
+      d.fillStyle = g;
+      d.fillRect(-1, -1, 2, 2);
+      d.restore();
+    }
   }
   return c;
 }
@@ -316,8 +404,12 @@ export class World {
   private dropsWind = 0;
   /** Terrain profile currently baked into the hill paths. */
   private appliedTerrain: TerrainProfile | null = null;
-  /** Third distant peak line — only in properly mountainous places. */
+  /** Farthest ridgeline — tall peaks in mountain country, a low hazy range elsewhere. */
   private hillsPeaks: Array<[number, number]> = [];
+  /** Overcast deck texture, its drift (fraction of width), and bake size. */
+  private deck: HTMLCanvasElement | undefined;
+  private deckX = 0;
+  private deckKey = "";
   private coastal = false;
   /** Migrating V-formation (spring/autumn) — one flock at a time. */
   private flock: { x: number; y: number } | null = null;
@@ -574,8 +666,9 @@ export class World {
 
     // Deep solar eclipse: the famous 360° sunset ring low on the horizon.
     if (eclipseDark > 0.45 && cloudAlpha < 0.92) {
-      const ringA = (eclipseDark - 0.45) * 0.5;
-      const ring = ctx.createLinearGradient(0, height * 0.55, 0, height);
+      const ringA = (eclipseDark - 0.45) * 0.8;
+      // Peaks at the ridge line, where the hills would otherwise hide it.
+      const ring = ctx.createLinearGradient(0, height * 0.28, 0, height * 0.6);
       ring.addColorStop(0, "rgba(255, 150, 80, 0)");
       ring.addColorStop(1, `rgba(255, 150, 80, ${ringA.toFixed(3)})`);
       ctx.fillStyle = ring;
@@ -594,7 +687,7 @@ export class World {
       Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
     if (sa > 0.01) {
       this.updateRealStars(date);
-      drawStars(ctx, this.stars, sa);
+      drawStars(ctx, this.stars, sa, height);
     }
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
@@ -625,7 +718,7 @@ export class World {
     }
 
     // Crepuscular rays fanning down from the sun through broken cloud.
-    const godRays = godRayFactor(cloudAlpha, h);
+    const godRays = godRayFactor(cloudAlpha, h) * this.sunOccluded(h, cloudAlpha);
     if (godRays > 0.02) drawGodRays(ctx, width, height, h, godRays);
 
     // Sun / moon: full intensity overcast blacks them out completely.
@@ -642,7 +735,7 @@ export class World {
 
     // Distant horizon silhouettes — derived from the bottom sky color so they
     // always sit *between* the sky and the foreground cloud band.
-    this.drawHills(ctx, h, bottomRGB);
+    this.drawHills(ctx, h, topRGB, bottomRGB, cloudAlpha, wx);
 
     // Rain-slicked ground: a low reflective sheen that lingers after a shower.
     if (this.wetness > 0.02) drawWetSheen(ctx, width, height, this.wetness);
@@ -688,11 +781,13 @@ export class World {
     if (this.flock && dayA > 0.05) this.drawFlock(ctx, dayA);
     if (this.plane) this.drawPlane(ctx, h);
 
-    // Fireflies near the lower sky band on clear nights — May to September;
-    // fireflies in a January frost would break the spell.
+    // Fireflies near the lower sky band on clear nights — May to September,
+    // and only on warm ones: below ~12 °C they stop flashing, so a cold
+    // September night stays dark.
     const flySeason = month >= 4 && month <= 8 ? 1 : 0;
+    const flyWarm = Math.min(1, Math.max(0, ((wx?.temperatureC ?? 18) - 11) / 3));
     const flyA = this.firefliesEnabled
-      ? fireflyAlpha(h) * flySeason * (1 - cloudAlpha * 0.85)
+      ? fireflyAlpha(h) * flySeason * flyWarm * (1 - cloudAlpha * 0.85)
       : 0;
     if (flyA > 0.05) this.drawFireflies(ctx, flyA);
 
@@ -777,8 +872,15 @@ export class World {
         i * i * 0.55 +
         (wx?.thunder ? 0.15 : 0)
     );
-    let top = lerpRGB([220, 222, 232], [72, 74, 90], heaviness);
-    let bot = lerpRGB([130, 132, 152], [26, 26, 38], heaviness);
+    let top = lerpRGB([236, 238, 244], [72, 74, 90], heaviness);
+    let bot = lerpRGB([150, 156, 176], [26, 26, 38], heaviness);
+    // Clouds have no light of their own: after dark they are slate shapes
+    // against the stars, faintly lifted by moon and town light.
+    const night = 1 - daylight(h);
+    if (night > 0) {
+      top = lerpRGB(top, [66, 70, 94], night * 0.88);
+      bot = lerpRGB(bot, [30, 30, 44], night * 0.88);
+    }
     // Golden hour: the low sun lights clouds from below, so the shadowed
     // underside catches fire first and the top edge only blushes. Heavy
     // decks still glow, just ember-dim.
@@ -802,6 +904,23 @@ export class World {
    * rain falls out of cloud instead of out of open sky. Real storms are
    * overcast — no blue gaps between cumulus.
    */
+  /** How squarely a formed cloud sits across the sun (0–1): shafts need one. */
+  private sunOccluded(h: number, cloudAlpha: number): number {
+    const { width, height } = this.state;
+    const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+    const sx = width * (0.08 + t * 0.84);
+    const sy = height * (0.68 - Math.sin(t * Math.PI) * 0.59);
+    const cover = 0.12 + cloudAlpha * 1.5;
+    let best = 0;
+    for (const c of this.clouds) {
+      if (c.layer === 0 || c.rank >= cover) continue;
+      const dx = Math.abs(c.x * width - sx) / (c.width * 0.8);
+      const dy = Math.abs(c.y - sy) / (c.height * 1.6);
+      best = Math.max(best, 1 - Math.max(dx, dy));
+    }
+    return Math.min(1, best * 2);
+  }
+
   private drawOvercastDeck(
     ctx: CanvasRenderingContext2D,
     wx: WeatherConditions,
@@ -821,10 +940,23 @@ export class World {
     // slightly toward the horizon where the layer thins out.
     const grad = ctx.createLinearGradient(0, 0, 0, depth);
     grad.addColorStop(0, `rgba(${bot[0]}, ${bot[1]}, ${bot[2]}, ${a.toFixed(3)})`);
-    grad.addColorStop(0.55, `rgba(${top[0]}, ${top[1]}, ${top[2]}, ${(a * 0.75).toFixed(3)})`);
-    grad.addColorStop(1, `rgba(${top[0]}, ${top[1]}, ${top[2]}, 0)`);
+    const mid = lerpRGB(bot, top, 0.6);
+    grad.addColorStop(0.55, `rgba(${mid[0] | 0}, ${mid[1] | 0}, ${mid[2] | 0}, ${(a * 0.8).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${mid[0] | 0}, ${mid[1] | 0}, ${mid[2] | 0}, 0)`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, depth);
+    // The deck's cells, drifting with the wind; subtler by night.
+    const key = `${width}x${height}`;
+    if (this.deckKey !== key) {
+      this.deckKey = key;
+      this.deck = renderDeckSprite(width, height * 0.6);
+    }
+    if (!this.deck) return;
+    const x0 = (((this.deckX % 1) + 1) % 1) * width;
+    ctx.globalAlpha = a * (0.45 + daylight(h) * 0.55);
+    ctx.drawImage(this.deck, x0, 0, width, depth);
+    ctx.drawImage(this.deck, x0 - width, 0, width, depth);
+    ctx.globalAlpha = 1;
   }
 
   private drawCloudLayer(
@@ -835,12 +967,17 @@ export class World {
     h: number,
   ): void {
     const { i, heaviness, glow, top, bot, cloudEclipseDark } = this.cloudPalette(wx, h);
-    // Distant clouds are dimmer (atmospheric perspective).
-    const layerOpacity = layer === 0 ? 0.55 : layer === 1 ? 0.85 : 1.0;
-    const baseAlpha =
-      alpha * (0.38 + i * 0.28 + i * i * 0.28 + (wx?.thunder ? 0.12 : 0)) * layerOpacity;
+    // Distant clouds sink into the haze (atmospheric perspective).
+    const layerOpacity = layer === 0 ? 0.6 : layer === 1 ? 0.85 : 1.0;
+    const baseAlpha = Math.min(1, 0.82 + alpha * 0.3 + i * 0.2) * layerOpacity;
+    // Cover decides how many clouds exist, not how ghostly each one is: a
+    // 20% sky has a few solid puffs, an overcast one all of them.
+    const cover = 0.12 + alpha * 1.5;
     // Heavy weather swells the bank — same silhouettes, thicker coverage.
     const sizeMul = 1 + i * 0.8 + i * i * 1.8;
+    // Rain and snow fall from a flat nimbostratus deck, so the clouds under it
+    // are low ragged banks, not towers. Thunderstorms keep their towers.
+    const flat = wx && wx.precipitation !== "none" && !wx.thunder ? 1 - i * 0.5 : 1;
 
     // Directional light: the sun by day, the moon by night. Clouds are lit
     // from wherever the celestial body sits, so a morning bank glows on its
@@ -864,11 +1001,13 @@ export class World {
 
     for (const cloud of this.clouds) {
       if (cloud.layer !== layer) continue;
+      const formed = Math.min(1, (cover - cloud.rank) / 0.15);
+      if (formed <= 0) continue;
 
       const cx = cloud.x * this.state.width;
       const cy = cloud.y;
       const w = cloud.width * sizeMul;
-      const ch = cloud.height * sizeMul;
+      const ch = cloud.height * sizeMul * flat;
       const toward = lightX >= cx ? 1 : -1;
       // A cloud is 4–5 overlapping ellipses; the seed deterministically
       // varies the puff pattern. Intense weather adds more lobes.
@@ -876,19 +1015,19 @@ export class World {
 
       // Rebuild the sprite only when a lighting/size bucket moves — per
       // frame a cloud costs one drawImage.
-      const key = `${layer}|${lobes}|${toward}|${Math.round(w / 8)}|${Math.round(
+      const key = `${layer}|${lobes}|${toward}|${Math.round(w / 8)}|${Math.round(ch / 8)}|${Math.round(
         heaviness * 8
-      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${isDay ? 1 : 0}`;
+      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}`;
       if (cloud.spriteKey !== key) {
         cloud.spriteKey = key;
         cloud.sprite = renderCloudSprite(cloud.seed, lobes, w, ch, toward, layer, {
-          top, bot, rim, shade, rimK,
+          top, bot, rim, shade, rimK, under: glow * glow * (1 - heaviness * 0.6),
         });
       }
       if (cloud.sprite) {
         const dw = cloud.sprite.width / CLOUD_SPRITE_RES;
         const dh = cloud.sprite.height / CLOUD_SPRITE_RES;
-        ctx.globalAlpha = baseAlpha;
+        ctx.globalAlpha = baseAlpha * formed;
         ctx.drawImage(cloud.sprite, cx - dw / 2, cy - dh / 2, dw, dh);
         ctx.globalAlpha = 1;
       }
@@ -907,15 +1046,23 @@ export class World {
       const drizzle = i < 0.38;
       const len = drizzle ? 3.5 + i * 8 : 6 + i * 16 + windK * 4;
       const alpha = drizzle ? 0.28 + i * 0.35 : 0.38 + i * 0.5;
-      ctx.strokeStyle = `rgba(170, 190, 220, ${alpha.toFixed(3)})`;
-      ctx.lineWidth = i > 0.75 ? 1.35 : drizzle ? 0.85 : 1;
-      
-      ctx.beginPath();
-      for (const d of this.drops) {
-        ctx.moveTo(d.x, d.y);
-        ctx.lineTo(d.x + tilt * 0.85, d.y + len);
+      // Two depths from one field: the faster half is rain close to the eye —
+      // longer, brighter, thicker — the rest falls further off, fine and dim.
+      // Median of the vy spread in regenDrops.
+      const nearVy = (drizzle ? 240 : 320) + i * (drizzle ? 360 : 480);
+      for (let pass = 0; pass < 2; pass++) {
+        const k = pass ? 1 : 0.55;
+        ctx.strokeStyle = `rgba(170, 190, 220, ${(alpha * k).toFixed(3)})`;
+        ctx.lineWidth = (i > 0.75 ? 1.35 : drizzle ? 0.85 : 1) * (pass ? 1.15 : 0.75);
+        ctx.beginPath();
+        for (const d of this.drops) {
+          if (d.vy > nearVy !== !!pass) continue;
+          const l = len * (pass ? 1.2 : 0.65);
+          ctx.moveTo(d.x, d.y);
+          ctx.lineTo(d.x + (tilt * 0.85 * l) / len, d.y + l);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
     } else if (this.dropsKind === "snow") {
       const alpha = 0.75 + i * 0.2;
       for (const d of this.drops) {
@@ -971,20 +1118,31 @@ export class World {
     ctx.fillRect(0, 0, width, height);
 
     if (this.bolt && this.bolt.length > 1) {
-      // Bolt fades faster than the flash — visible only in the first ~120ms.
-      const boltAlpha = Math.max(0, 1 - this.boltAge * 8) * 0.85;
+      // Bolt fades faster than the flash — visible only in the first ~120ms,
+      // with a return-stroke flicker partway through.
+      const boltAlpha =
+        Math.max(0, 1 - this.boltAge * 8) * (this.boltAge > 0.04 && this.boltAge < 0.07 ? 0.35 : 0.9);
       if (boltAlpha > 0.02) {
-        ctx.strokeStyle = `rgba(245, 245, 255, ${boltAlpha.toFixed(3)})`;
-        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(this.bolt[0][0], this.bolt[0][1]);
-        for (let i = 1; i < this.bolt.length; i++) {
-          ctx.lineTo(this.bolt[i][0], this.bolt[i][1]);
+        let pen = false;
+        for (const [x, y] of this.bolt) {
+          if (Number.isNaN(x)) pen = false;
+          else if (pen) ctx.lineTo(x, y);
+          else {
+            ctx.moveTo(x, y);
+            pen = true;
+          }
         }
+        ctx.lineJoin = "round";
+        // Wide violet air glow, then the white-hot channel on top.
+        ctx.strokeStyle = `rgba(170, 180, 255, ${(boltAlpha * 0.16).toFixed(3)})`;
+        ctx.lineWidth = 9;
         ctx.stroke();
-        // Faint outer glow on the bolt
-        ctx.strokeStyle = `rgba(200, 210, 255, ${(boltAlpha * 0.35).toFixed(3)})`;
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(210, 215, 255, ${(boltAlpha * 0.45).toFixed(3)})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(250, 250, 255, ${boltAlpha.toFixed(3)})`;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
       }
     }
@@ -1019,6 +1177,7 @@ export class World {
     // speed in this.wind's amplitude, a blustery day visibly hurries them.
     // Prefer meteorological direction so banks march with the prevailing wind.
     const windNudge = this.wind * 0.035;
+    this.deckX += (0.004 + windNudge) * 0.35 * dt;
     for (const cloud of this.clouds) {
       // Front-layer clouds are pushed harder — parallax sells depth.
       const layerScale = cloud.layer === 0 ? 0.35 : cloud.layer === 1 ? 1.0 : 1.6;
@@ -1125,32 +1284,35 @@ export class World {
   }
 
   private regenClouds(): void {
-    const count = Math.max(6, Math.round(this.state.width / 180));
+    const count = Math.max(8, Math.round(this.state.width / 115));
     let seed = 7331;
     const rand = (): number => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
     this.clouds = [];
-    const skyBand = this.state.height * 0.42;
+    const skyH = this.state.height;
     for (let i = 0; i < count; i++) {
-      // Distribute across three depth layers. Distant clouds are smaller and
-      // higher in the frame; near clouds are larger and sit lower.
+      // Distribute across three depth layers with real perspective: distant
+      // clouds are small, flat and low over the ridge; near ones are big and
+      // high overhead.
       const layerRoll = rand();
       const layer: 0 | 1 | 2 = layerRoll < 0.35 ? 0 : layerRoll < 0.75 ? 1 : 2;
       const sizeMul = layer === 0 ? 0.55 : layer === 1 ? 1.0 : 1.35;
       const w = (90 + rand() * 130) * sizeMul;
       const yJitter =
         layer === 0
-          ? rand() * skyBand * 0.55
+          ? skyH * (0.34 + rand() * 0.12)
           : layer === 1
-          ? skyBand * 0.2 + rand() * skyBand * 0.6
-          : skyBand * 0.4 + rand() * skyBand * 0.6;
+          ? skyH * (0.18 + rand() * 0.18)
+          : skyH * (0.04 + rand() * 0.16);
       this.clouds.push({
         x: rand() * 1.3 - 0.15,
-        y: 30 + yJitter,
+        y: yJitter,
         width: w,
-        height: w * (0.34 + rand() * 0.16),
+        height: w * (0.34 + rand() * 0.16) * (layer ? 1 : 0.75),
+        // Golden-ratio spread so any cover level picks clouds from every layer.
+        rank: (i * 0.618034 + 0.12) % 1,
         // Base drift speed; tickClouds applies the per-layer parallax scale.
         // The intrinsic drift is extremely low; most movement comes from wind.
         drift: (rand() < 0.5 ? -1 : 1) * (0.001 + rand() * 0.003),
@@ -1277,10 +1439,15 @@ export class World {
       : Math.min(2.4, 0.45 + relief / 320);
     if (this.coastal) amp *= 0.55; // coasts read flat toward the water
     const seg = relief > 450 ? 30 : 22;
-    this.hillsFar = hillPath(7331, height * 0.62, height * 0.028 * amp, seg, width);
+    const alpine = relief > 550;
+    this.hillsFar = hillPath(7331, height * 0.62, height * 0.028 * amp, seg, width, alpine);
     this.hillsNear = hillPath(919, height * 0.74, height * 0.036 * amp, Math.max(16, seg - 6), width);
+    // The farthest range: ridged peaks in properly mountainous places, a
+    // low hazy line elsewhere — either way the eye gets three planes of depth.
     this.hillsPeaks =
-      relief > 420 ? hillPath(2718, height * 0.56, height * 0.05 * amp, 34, width) : [];
+      relief > 420
+        ? hillPath(2718, height * 0.56, height * 0.05 * amp, 34, width, true)
+        : hillPath(2718, height * 0.585, height * 0.018 * amp, 40, width);
   }
 
   private regenBirds(): void {
@@ -1321,36 +1488,58 @@ export class World {
     }
   }
 
-  private drawHills(ctx: CanvasRenderingContext2D, h: number, bottomRGB: RGB): void {
+  private drawHills(
+    ctx: CanvasRenderingContext2D,
+    h: number,
+    skyTop: RGB,
+    bottomRGB: RGB,
+    cloudAlpha: number,
+    wx: WeatherConditions | null
+  ): void {
     if (this.hillsFar.length === 0) return;
     const { width, height } = this.state;
-    // Hills live: deep meadow green in daylight, cool indigo at night, with
-    // the sky's horizon color bleeding in for atmospheric perspective.
-    const bg = lerpRGB([0x1e, 0x16, 0x2d], [0x2f, 0x6b, 0x40], daylight(h));
-    const farRGB = lerpRGB(bottomRGB, bg, 0.62);
-    const nearRGB = lerpRGB(bottomRGB, bg, 0.84);
-
-    if (this.hillsPeaks.length > 0) {
-      const peakGrad = ctx.createLinearGradient(0, height * 0.4, 0, height);
-      const c = lerpRGB(bottomRGB, bg, 0.45);
-      peakGrad.addColorStop(0, rgbToCss(c));
-      peakGrad.addColorStop(1, rgbToCss(lerpRGB(c, bottomRGB, 0.5)));
-      ctx.fillStyle = peakGrad;
-      fillHillPath(ctx, this.hillsPeaks, width, height);
+    // The land is lit by the same sky: meadow green in sun, cool indigo at
+    // night, dark at totality — and settled snow turns it white.
+    const day = daylight(h) * (1 - solarEclipseDark(wx));
+    let land = lerpRGB([0x0e, 0x0c, 0x1a], [0x2f, 0x6b, 0x40], day);
+    if (this.snowCover > 0.02) {
+      land = lerpRGB(land, lerpRGB([64, 70, 96], [214, 222, 236], day), this.snowCover * 0.85);
     }
-    
-    const farGrad = ctx.createLinearGradient(0, height * 0.5, 0, height);
-    farGrad.addColorStop(0, rgbToCss(farRGB));
-    farGrad.addColorStop(1, rgbToCss(lerpRGB(farRGB, bottomRGB, 0.3)));
-    ctx.fillStyle = farGrad;
-    fillHillPath(ctx, this.hillsFar, width, height);
-    
+    // Flat overcast light mutes the grass to olive-gray; a storm deck makes
+    // the whole landscape leaden. Wet ground reads darker still.
+    land = desatRGB(land, Math.min(0.7, cloudAlpha * 0.75));
+    const gloom =
+      cloudAlpha * (0.3 + (wx?.intensity ?? 0) * 0.25 + (wx?.thunder ? 0.15 : 0)) +
+      this.wetness * 0.08;
+    land = lerpRGB(land, [10, 12, 20], Math.min(0.6, gloom));
+    // What isn't lit by the sun is lit by the dome overhead: blue shade at
+    // noon, violet at dusk, navy at night.
+    land = lerpRGB(land, skyTop, 0.2);
+    // A low sun sits beyond the ranges, so the slopes facing the viewer fall
+    // into warm shadow — unless a deck has already flattened the light.
+    land = lerpRGB(land, [34, 22, 30], horizonGlowStrength(h) * (1 - cloudAlpha) * 0.55);
+
+    // Atmospheric perspective: each range further off sinks into the sky
+    // right behind it (not the brighter wash below the horizon, or a ridge
+    // would glow brighter than its own sky), and mist pools at every foot.
+    const haze = lerpRGB(skyTop, bottomRGB, 0.55);
+    const range = (pts: Array<[number, number]>, top: number, foot: number, k: number, mist: number): void => {
+      const c = lerpRGB(haze, land, k);
+      const g = ctx.createLinearGradient(0, height * top, 0, height * foot);
+      g.addColorStop(0, rgbToCss(c));
+      g.addColorStop(1, rgbToCss(lerpRGB(c, haze, mist)));
+      ctx.fillStyle = g;
+      fillHillPath(ctx, pts, width, height);
+    };
+    range(this.hillsPeaks, 0.44, 0.66, 0.42, 0.45);
+    range(this.hillsFar, 0.54, 0.76, 0.62, 0.38);
     if (this.coastal) drawSeaBand(ctx, width, height);
-    
-    const nearGrad = ctx.createLinearGradient(0, height * 0.6, 0, height);
-    nearGrad.addColorStop(0, rgbToCss(nearRGB));
-    nearGrad.addColorStop(1, rgbToCss(lerpRGB(nearRGB, bottomRGB, 0.2)));
-    ctx.fillStyle = nearGrad;
+    // The foreground darkens toward the viewer instead of hazing out.
+    const near = lerpRGB(haze, land, 0.86);
+    const g = ctx.createLinearGradient(0, height * 0.66, 0, height);
+    g.addColorStop(0, rgbToCss(near));
+    g.addColorStop(1, rgbToCss(lerpRGB(near, [6, 8, 14], 0.22)));
+    ctx.fillStyle = g;
     fillHillPath(ctx, this.hillsNear, width, height);
   }
 

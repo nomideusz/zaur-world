@@ -870,7 +870,9 @@ function updateStatus(): void {
 	} else {
 		const h = effectiveHour();
 		const inWindow = h >= 19.5 || h < 3;
-		if (!inWindow) parts.push("Fireflies: appear after dusk — try Night on the strip");
+		const wx = sky.conditions();
+		if (wx && wx.temperatureC < 12) parts.push("Fireflies: too cold to fly tonight");
+		else if (!inWindow) parts.push("Fireflies: appear after dusk — try Night on the strip");
 	}
 
 	if (selectedQuality() === "low") parts.push("Quality: low (grid off, ½ particles)");

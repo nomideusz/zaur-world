@@ -66,7 +66,8 @@ export function hazeFactor(
 export function godRayFactor(cloudAlpha: number, h: number): number {
 	if (h <= SUN_RISE || h >= SUN_SET) return 0;
 	const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-	const gaps = Math.max(0, 1 - Math.abs(cloudAlpha - 0.42) / 0.42);
+	// A sealed deck (≥ ~0.7, i.e. overcast) has no gaps for shafts to pass.
+	const gaps = Math.max(0, 1 - Math.abs(cloudAlpha - 0.42) / 0.28);
 	if (gaps <= 0) return 0;
 	// 0 at noon, 1 at sunrise/sunset — low sun throws the longest shafts.
 	const low = Math.abs(t - 0.5) * 2;

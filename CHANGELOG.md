@@ -5,6 +5,40 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Ridgelines are fractal value noise instead of straight segments; alpine
+  places get ridged crests over shallow saddles, and every place gets a third,
+  hazier range. Ranges fade toward the sky right behind them (blue by day,
+  dusky at sunset, dark silhouettes at night), and a low sun leaves the
+  facing slopes in warm shadow
+- Cumulus are baked as one body: flat condensation base, domes rising to the
+  middle with knobbly cauliflower tops, lit on the side facing the sun or
+  moon. At sunset their bases glow rose-gold from below. Under rain and
+  snow they flatten into low nimbostratus banks, while thunderstorms keep
+  their towers. Clouds are opaque and denser, and at partial cover whole
+  clouds appear rather than every cloud turning ghostly
+- The overcast deck carries a drifting stratocumulus texture (one baked,
+  palette-free sprite) instead of a flat band
+- Moon: its real near-side maria, softly blended and multiplied so they read
+  faintly in earthshine, at about the sun's apparent size. Sun and moon glows
+  are smooth radial falloffs; a low sun throws a broad warm aureole; totality
+  shows a soft corona with tapered streamers and prominences, and its 360°
+  sunset ring now sits on the ridge line instead of behind the hills
+- Sun colour follows how low the disc actually sits (air mass), not the
+  clock, so a 10 am sun is white. An unobstructed disc stays solid under a
+  broken sky, and a sealed overcast hides it
+- God rays appear only while a cloud crosses the sun, and never under a
+  sealed deck
+- Lightning is a midpoint-displaced channel with side branches and a
+  return-stroke flicker; rain falls in two depths
+- The aurora is a rayed curtain rising from behind the ranges, brightening
+  and fading along its length, not a band across the sky
+- Stars twinkle more and dim with extinction near the horizon
+- Fireflies stay away on nights below ~12 °C (the demo status says so)
+
 ## [1.1.1] - 2026-09-17
 
 ### Fixed

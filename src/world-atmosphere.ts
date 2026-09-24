@@ -190,32 +190,38 @@ export function drawAurora(
   height: number,
   alpha: number
 ): void {
+  // Rayed curtains, not a band: a sharp green lower hem where the rays hit
+  // the thicker air, fading up into a faint violet crown. The hem folds
+  // slowly, the rays shimmer along it, and the curtain brightens and fades
+  // along its length, so it never rules a line across the sky that reads as
+  // a horizon.
   const t = performance.now() / 1000;
-  const bands: Array<[number, number, number]> = [
-    [120, 200, 180],
-    [100, 180, 210],
-    [180, 140, 200],
-  ];
-  for (let band = 0; band < bands.length; band++) {
-    const [r, g, b] = bands[band];
-    const peak = (0.1 + 0.04 * Math.sin(t * 0.5 + band)) * alpha;
-    const grad = ctx.createLinearGradient(0, height * 0.1, 0, height * 0.5);
-    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
-    grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${peak.toFixed(3)})`);
-    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    const baseY = height * 0.12 + band * Math.max(18, height * 0.04);
-    ctx.moveTo(0, baseY);
-    for (let x = 0; x <= width; x += 20) {
-      const y = baseY + Math.sin(x * 0.012 + t * 0.3 + band) * 22;
-      ctx.lineTo(x, y);
+  const grad = ctx.createLinearGradient(0, height * 0.14, 0, height * 0.5);
+  grad.addColorStop(0, "rgba(190, 80, 160, 0)");
+  grad.addColorStop(0.45, "rgba(170, 90, 170, 0.2)");
+  grad.addColorStop(0.8, "rgba(90, 230, 150, 0.75)");
+  grad.addColorStop(1, "rgba(130, 255, 190, 1)");
+  ctx.fillStyle = grad;
+  const step = Math.max(4, width / 180);
+  for (let x = 0; x < width; x += step) {
+    const u = x / width;
+    const e = 0.5 + 0.5 * Math.sin(u * 4.4 + t * 0.03 + Math.sin(u * 2 - t * 0.02));
+    if (e < 0.1) continue;
+    const fold = Math.sin(u * 6.3 + t * 0.11) * 0.6 + Math.sin(u * 15.7 - t * 0.17) * 0.4;
+    const ray = 0.5 + 0.5 * Math.sin(u * 95 + t * 0.8 + Math.sin(u * 11 + t * 0.25) * 3);
+    // Low over the ranges, as seen from mid-latitudes; the hem dips behind them.
+    const hem = height * (0.47 - fold * 0.03);
+    const len = height * (0.08 + ray * 0.1 + Math.max(0, fold) * 0.04);
+    const a = alpha * e * e * (0.14 + ray * 0.22) * (0.6 + 0.4 * Math.abs(fold));
+    ctx.globalAlpha = a;
+    ctx.fillRect(x, hem - len, step + 0.5, len);
+    // The hem glows down into the air below instead of ending on a hard edge.
+    for (let k = 0; k < 4; k++) {
+      ctx.globalAlpha = a * (0.4 - k * 0.1);
+      ctx.fillRect(x, hem + k * height * 0.01, step + 0.5, height * 0.01);
     }
-    ctx.lineTo(width, height * 0.5);
-    ctx.lineTo(0, height * 0.5);
-    ctx.closePath();
-    ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
 /**
