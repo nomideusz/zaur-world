@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The moon's lit part is one shape instead of stacked half-discs, so a moon
+  veiled by cloud or haze (most often low, rising or setting) no longer shows
+  seams and bands. The unlit side is no longer painted darker than the sky in
+  front of it; a crescent only gains faint earthshine, stars behind the disc
+  stay hidden, and the halo centres on the lit part. The dark limb ring is
+  gone: the real full Moon is flat-lit to the edge
+
 ## [1.2.0] - 2026-09-24
 
 ### Changed

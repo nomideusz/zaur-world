@@ -14,10 +14,13 @@ export function drawStars(
   ctx: CanvasRenderingContext2D,
   stars: readonly Star[],
   alpha: number,
-  height: number
+  height: number,
+  /** The moon's disc [x, y, r]: stars behind it are occulted. */
+  moon?: readonly [number, number, number] | null
 ): void {
   const t = performance.now() / 1000;
   for (const s of stars) {
+    if (moon && (s.x - moon[0]) ** 2 + (s.y - moon[1]) ** 2 < moon[2] ** 2) continue;
     // Low stars shine through more air: dimmer (extinction) and twinkling
     // harder and faster than the steady ones overhead.
     const low = Math.min(1, s.y / (height * 0.7));
@@ -245,7 +248,7 @@ function drawMoon(
 ): void {
   // Atmospheric refraction: moon appears larger near the horizon (Moon Illusion)
   // Near the sun's size: both span the same half-degree of real sky.
-  const r = 20 + 12 * horizonness;
+  const r = moonRadius(horizonness);
   const phase = lunarPhase(date);
 
   // During a lunar eclipse, the moon is full (illum = 1)
@@ -271,9 +274,10 @@ function drawMoon(
   const litCss = rgbToCss([litR, litG, litB]);
 
   // Moonlight halo — one smooth falloff that grows with the phase, widens
-  // in low-horizon haze, and spreads into a soft patch behind cloud.
+  // in low-horizon haze, and spreads into a soft patch behind cloud. It
+  // centres on the lit part, so a crescent's dark side isn't outlined.
   glow(
-    ctx, x, y, r * 0.9, r * (2.6 + illum * 2.4) * (1 + horizonness * 0.2 + (1 - disc) * 0.8),
+    ctx, x + (waxing ? r : -r) * 0.6 * (1 - illum), y, r * 0.9, r * (2.6 + illum * 2.4) * (1 + horizonness * 0.2 + (1 - disc) * 0.8),
     `${clampByte(220 + 35 * ease)}, ${clampByte(228 - 10 * ease)}, ${clampByte(245 - 65 * ease)}`,
     ((0.06 + 0.14 * illum) * (1 + horizonness * 0.3) + (1 - disc) * 0.08) * (1 - eclipseProgress * 0.7)
   );
@@ -281,57 +285,67 @@ function drawMoon(
   ctx.globalAlpha *= disc;
   if (disc < 0.02) return;
 
+  // The unlit side is never darker than the sky in front of it, so it is
+  // not painted — only a young or old crescent's earthshine is added on.
+  // (Stars behind it are skipped in drawStars.)
   const earthshine = Math.max(0, 0.28 - illum) / 0.28;
-
   ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.clip();
-
-  const darkR = clampByte(36 + 18 * earthshine + 20 * ease);
-  const darkG = clampByte(38 + 18 * earthshine + 10 * ease);
-  const darkB = clampByte(54 + 22 * earthshine);
-  const darkCss = rgbToCss([darkR, darkG, darkB]);
-  ctx.fillStyle = darkCss;
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
-
-  ctx.fillStyle = litCss;
-  if (waxing) {
-    ctx.fillRect(x, y - r, r, r * 2);
-  } else {
-    ctx.fillRect(x - r, y - r, r, r * 2);
-  }
-
-  const ellipseRx = r * Math.abs(1 - 2 * illum);
-  if (illum < 0.5) {
-    ctx.fillStyle = darkCss;
+  if (earthshine > 0.02) {
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(40, 46, 70, ${(0.2 * earthshine).toFixed(3)})`;
     ctx.beginPath();
-    ctx.ellipse(x, y, ellipseRx, r, 0, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
-  } else if (illum > 0.5) {
-    ctx.fillStyle = litCss;
-    ctx.beginPath();
-    ctx.ellipse(x, y, ellipseRx, r, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Multiplied, so the maria darken the earthshine side too, faintly — just
-  // like the real one — instead of lightening it.
-  const face = moonFace();
-  if (face) {
-    ctx.globalCompositeOperation = "multiply";
-    ctx.drawImage(face, x - r, y - r, r * 2, r * 2);
     ctx.globalCompositeOperation = "source-over";
   }
 
-  // Simpler limb darkening shadow to make it a sphere
-  const limbGrad = ctx.createRadialGradient(x, y, r * 0.85, x, y, r);
-  limbGrad.addColorStop(0, "rgba(0,0,0,0)");
-  limbGrad.addColorStop(1, `rgba(20, 18, 28, ${0.4 + ease * 0.2})`);
-  ctx.fillStyle = limbGrad;
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  // The lit part as one path — the bright limb, then back along the
+  // terminator — so a veiled moon fades as a single shape, with no seams
+  // where stacked half-discs overlap.
+  const xt = r * (1 - 2 * illum) * (waxing ? 1 : -1);
+  ctx.beginPath();
+  ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2, !waxing);
+  ctx.ellipse(x, y, Math.abs(xt), r, 0, Math.PI / 2, -Math.PI / 2, xt > 0);
+  ctx.fillStyle = litCss;
+  ctx.fill();
 
+  // No limb darkening: the real full Moon is famously flat-lit to the edge.
+  const face = moonFace();
+  if (face) {
+    ctx.clip();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.drawImage(face, x - r, y - r, r * 2, r * 2);
+  }
   ctx.restore();
+}
+
+const moonRadius = (horizonness: number): number => 20 + 12 * horizonness;
+
+/** Where the sun or moon stands on its arc: x, y, and how low it sits. */
+function arcPoint(width: number, height: number, h: number): [number, number, number] {
+  let t: number;
+  if (h >= SUN_RISE && h <= SUN_SET) {
+    t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+  } else {
+    let moonH = h - SUN_SET;
+    if (moonH < 0) moonH += 24;
+    t = moonH / (24 - SUN_SET + SUN_RISE);
+  }
+  const riseY = height * 0.68;
+  const topY = height * 0.09;
+  return [
+    width * (0.08 + t * 0.84),
+    riseY - Math.sin(t * Math.PI) * (riseY - topY),
+    // Air mass, not clock time, reddens and swells the disc.
+    1 - Math.sin(t * Math.PI),
+  ];
+}
+
+/** The moon's disc [x, y, r] at night, for occulting the stars behind it. */
+export function moonDisc(width: number, height: number, h: number): [number, number, number] | null {
+  if (h >= SUN_RISE && h <= SUN_SET) return null;
+  const [x, y, horizonness] = arcPoint(width, height, h);
+  return [x, y, moonRadius(horizonness)];
 }
 
 export function drawCelestial(
@@ -346,29 +360,13 @@ export function drawCelestial(
   if (dim < 0.02) return;
 
   const isSun = h >= SUN_RISE && h <= SUN_SET;
-
-  let t: number;
-  if (isSun) {
-    t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-  } else {
-    let moonH = h - SUN_SET;
-    if (moonH < 0) moonH += 24;
-    const moonSpan = 24 - SUN_SET + SUN_RISE;
-    t = moonH / moonSpan;
-  }
-
-  const x = width * (0.08 + t * 0.84);
-  const riseY = height * 0.68;
-  const topY = height * 0.09;
-  const y = riseY - Math.sin(t * Math.PI) * (riseY - topY);
+  const [x, y, horizonness] = arcPoint(width, height, h);
 
   ctx.save();
   // A broken sky dims the light on average, but an unobstructed disc stays
   // solid: only a real deck (dim well under ~0.8) starts to veil it.
   ctx.globalAlpha = Math.max(0, Math.min(1, dim / 0.8));
 
-  // How low the disc actually sits — air mass, not clock time, reddens it.
-  const horizonness = 1 - Math.sin(t * Math.PI);
   // Thick cloud hides the disc long before it hides the light.
   const disc = Math.max(0, Math.min(1, (dim - 0.5) / 0.25));
   const progress = (type: "solar" | "lunar"): number =>

@@ -57,6 +57,7 @@ import {
 import {
   drawCelestial,
   drawStars,
+  moonDisc,
   drawVenus,
   type Star,
 } from "./world-celestial.js";
@@ -687,7 +688,7 @@ export class World {
       Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
     if (sa > 0.01) {
       this.updateRealStars(date);
-      drawStars(ctx, this.stars, sa, height);
+      drawStars(ctx, this.stars, sa, height, moonDisc(width, height, h));
     }
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
