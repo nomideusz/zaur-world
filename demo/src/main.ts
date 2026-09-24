@@ -245,9 +245,19 @@ function backToLive(): void {
 
 liveBtn.addEventListener("click", backToLive);
 
+const tweaksEl = document.querySelector(".tweaks") as HTMLDetailsElement;
+
+// Esc peels one layer at a time: an open popover or panel closes before the
+// scene resets, so closing Tweaks never throws away the preview just picked.
 window.addEventListener("keydown", (e) => {
-	if (e.key === "Escape" && locPopOpen()) closeLocPop();
-	else if (e.key === "Escape" && hasOverrides()) backToLive();
+	if (e.key !== "Escape") return;
+	if (locPopOpen()) {
+		closeLocPop();
+		placeBtn.focus();
+	} else if (tweaksEl.open) {
+		tweaksEl.open = false;
+		tweaksEl.querySelector("summary")!.focus();
+	} else if (hasOverrides()) backToLive();
 });
 
 // ── 24-hour tour ───────────────────────────────────────────────────────
@@ -282,7 +292,7 @@ function updateWx(): void {
 	)}°`;
 	if (wx.windSpeed >= 20) s += ` · wind ${Math.round(wx.windSpeed)}`;
 	if (wx.precipProbability != null && wx.precipProbability >= 20) {
-		s += ` · ${Math.round(wx.precipProbability)}%`;
+		s += ` · ${Math.round(wx.precipProbability)}% precip`;
 	}
 	wxEl.hidden = false;
 	if (wxEl.textContent !== s) wxEl.textContent = s;
@@ -503,6 +513,10 @@ function highlightStripHour(hour: number | null): void {
 	const target = hour === null ? null : String(((Math.floor(hour) % 24) + 24) % 24);
 	for (const cell of cells) {
 		const on = target !== null && cell.dataset.hour === target;
+		// Keep the tour / pinned hour in view on a narrow strip.
+		if (on && !cell.classList.contains("is-active")) {
+			cell.scrollIntoView({ block: "nearest", inline: "nearest" });
+		}
 		cell.classList.toggle("is-active", on);
 		cell.setAttribute("aria-selected", on ? "true" : "false");
 	}
@@ -549,6 +563,19 @@ stripCellsEl.addEventListener("click", (e) => {
 	}
 	if (scrubHour !== null && Math.floor(scrubHour) === h) clearScrub(true);
 	else setScrub(h);
+});
+
+// ←/→ step through the hours, as a horizontal listbox should.
+stripCellsEl.addEventListener("keydown", (e) => {
+	if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+	const cell = (e.target as HTMLElement).closest<HTMLElement>(".ds-cell");
+	const next = (
+		e.key === "ArrowLeft" ? cell?.previousElementSibling : cell?.nextElementSibling
+	) as HTMLElement | null;
+	if (!next?.classList.contains("ds-cell")) return;
+	e.preventDefault();
+	next.focus();
+	setScrub(Number(next.dataset.hour));
 });
 
 // Drag across the strip to sweep the day — mobile-friendly scrubbing. A tap and
@@ -638,6 +665,7 @@ function syncUrl(): void {
 	if (q !== "auto") p.set("q", q);
 	const eclipseMode = selectedEclipse();
 	if (eclipseMode !== "none") p.set("eclipse", eclipseMode);
+	if (scrubHour !== null) p.set("h", String(Math.round(scrubHour * 100) / 100));
 	if (document.body.dataset.ui === "full") p.set("ui", "1");
 	if (manualLocation && manualGeo) {
 		p.set("lat", String(Math.round(manualGeo.lat * 100) / 100));
@@ -660,7 +688,9 @@ function openLocPop(): void {
 	locPop.hidden = false;
 	placeBtn.setAttribute("aria-expanded", "true");
 	syncLocChrome();
-	cityInput.focus();
+	// On touch, focusing the input would throw the keyboard over the sky before
+	// the visitor has chosen between search, a preset and GPS.
+	(matchMedia("(pointer: coarse)").matches ? locateBtn : cityInput).focus();
 }
 
 function closeLocPop(): void {

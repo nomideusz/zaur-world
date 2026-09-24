@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and fading along its length, not a band across the sky
 - Stars twinkle more and dim with extinction near the horizon
 - Fireflies stay away on nights below ~12 °C (the demo status says so)
+- Demo: Share and the address bar keep a pinned hour (`?h=`); the day strip
+  scrolls to the pinned or touring hour and steps with ←/→; Esc closes an open
+  panel before it resets the scene; weather presets fit one row and PNG/Share
+  sit beside Quality; on touch the location popover no longer pops the
+  keyboard (or zooms iOS), and segmented controls get finger-sized targets
 
 ## [1.1.1] - 2026-09-17
 
