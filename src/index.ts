@@ -203,7 +203,11 @@ export interface WorldHandle {
   setWeatherCard(visible: boolean): void;
   /** Toggle the foreground dot grid. */
   setGrid(enabled: boolean): void;
-  /** Override the wall clock, or pass undefined to use real time again. */
+  /**
+   * Override the wall clock, or pass undefined to use real time again. The
+   * sky glides to the new time (a quick time-lapse for long jumps), so a
+   * capture straight after a jump shows the glide mid-way.
+   */
   setTime(fn?: () => Date): void;
   /**
    * Current decimal hour at the forecast location (browser clock before

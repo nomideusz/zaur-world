@@ -163,10 +163,15 @@ function terrainLabel(t: TerrainProfile): string {
 	return `plains · ${Math.round(t.relief)} m relief`;
 }
 
+/** The next time the forecast-location clock reads `h` — the strip runs now
+ *  → +24 h, so an hour already gone today is tomorrow's (right moon, and a
+ *  scrub across midnight glides forward instead of a day back). */
 function dateAtHour(h: number): Date {
 	const d = new Date();
-	d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
-	return d;
+	const off = sky.utcOffsetSeconds() ?? -d.getTimezoneOffset() * 60;
+	if (Math.floor(h) < Number(isoInUtcOffset(d, off).slice(11, 13))) d.setDate(d.getDate() + 1);
+	d.setHours(Math.floor(h), 0, 0, 0);
+	return new Date(d.getTime() + (h % 1) * 3_600_000);
 }
 
 function formatHour(h: number): string {
@@ -329,7 +334,10 @@ function startTour(): void {
 	tourProgress = 0;
 	tourPaused = false;
 	tourToggleBtn.textContent = "Pause";
-	sky.setTime(() => dateAtHour(tourHour));
+	// One continuous clock for the whole loop: no minute steps, no date
+	// snapping back a day at midnight.
+	const t0 = dateAtHour(tourStartHour).getTime();
+	sky.setTime(() => new Date(t0 + tourProgress * 86_400_000));
 	// Storm/Snow/Fog/Gray presets stay in charge; only live weather follows
 	// the hourly forecast around the clock.
 	const followForecast = selectedWx() === null;
@@ -531,7 +539,8 @@ function syncStripHighlight(): void {
 function setScrub(hour: number): void {
 	if (tourRaf !== 0) stopTour();
 	scrubHour = hour;
-	sky.setTime(() => dateAtHour(hour));
+	const at = dateAtHour(hour);
+	sky.setTime(() => at);
 	if (selectedWx() === null) sky.setForecastHour(hour);
 	syncStripHighlight();
 	updateClock();

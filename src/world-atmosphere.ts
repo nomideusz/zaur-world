@@ -403,39 +403,71 @@ export function drawGodRays(
  * a downpour visibly marching in the distance behind the foreground
  * streaks. Slant follows the wind; shafts slowly cross the sky.
  */
+let shaftSprite: HTMLCanvasElement | null | undefined;
+
+/** One rain shaft, baked once: fibrous streaks that fade out at every edge. */
+function rainShaft(): HTMLCanvasElement | null {
+  if (shaftSprite !== undefined) return shaftSprite;
+  shaftSprite = null;
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = 32;
+  c.height = 64;
+  const m = c.getContext("2d");
+  if (!m) return null;
+  m.fillStyle = "rgb(148, 162, 188)";
+  m.fillRect(0, 0, 32, 64);
+  // Thin the sheet into strands where the rain falls heavier and lighter.
+  m.globalCompositeOperation = "destination-out";
+  for (let i = 0; i < 14; i++) {
+    m.fillStyle = `rgba(0, 0, 0, ${0.3 + ((i * 7) % 5) / 10})`;
+    m.fillRect((i * 23) % 32, 0, 1 + (i % 3), 64);
+  }
+  m.globalCompositeOperation = "destination-in";
+  const across = m.createLinearGradient(0, 0, 32, 0);
+  across.addColorStop(0, "rgba(0, 0, 0, 0)");
+  across.addColorStop(0.3, "#000");
+  across.addColorStop(0.7, "#000");
+  across.addColorStop(1, "rgba(0, 0, 0, 0)");
+  m.fillStyle = across;
+  m.fillRect(0, 0, 32, 64);
+  // Out of the cloud base, thinning as it nears the ground.
+  const down = m.createLinearGradient(0, 0, 0, 64);
+  down.addColorStop(0, "rgba(0, 0, 0, 0)");
+  down.addColorStop(0.2, "#000");
+  down.addColorStop(0.8, "rgba(0, 0, 0, 0.5)");
+  down.addColorStop(1, "rgba(0, 0, 0, 0)");
+  m.fillStyle = down;
+  m.fillRect(0, 0, 32, 64);
+  return (shaftSprite = c);
+}
+
 export function drawRainCurtain(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   intensity: number,
-  wind: number
+  wind: number,
+  light: number
 ): void {
   const k = Math.min(1, (intensity - 0.45) / 0.55);
-  if (k <= 0) return;
+  const img = rainShaft();
+  if (k <= 0 || !img) return;
   const t = performance.now() / 1000;
-  const slant = wind * width * 0.05;
   const top = height * 0.24;
   const bottom = height * 0.74;
+  const lean = (wind * width * 0.05) / (bottom - top);
   for (let i = 0; i < 3; i++) {
     const w = width * (0.18 + ((i * 37) % 20) / 100);
     const cx =
       width * ((((((i * 53 + 17) % 100) / 100 + t * 0.008 * (1 + i * 0.35)) % 1.3) + 1.3) % 1.3) -
       width * 0.15;
     const a = (0.06 + k * 0.1) * (0.7 + ((i * 13) % 40) / 100);
-    const grad = ctx.createLinearGradient(0, top, 0, bottom);
-    // Fade in at the top so there's no hard square edge under the clouds
-    grad.addColorStop(0, "rgba(148, 162, 188, 0)");
-    grad.addColorStop(0.2, `rgba(148, 162, 188, ${a.toFixed(3)})`);
-    grad.addColorStop(0.8, `rgba(148, 162, 188, ${(a * 0.5).toFixed(3)})`);
-    grad.addColorStop(1, "rgba(148, 162, 188, 0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(cx - w / 2, top);
-    ctx.lineTo(cx + w / 2, top);
-    ctx.lineTo(cx + w / 2 + slant, bottom);
-    ctx.lineTo(cx - w / 2 + slant, bottom);
-    ctx.closePath();
-    ctx.fill();
+    ctx.save();
+    ctx.globalAlpha *= Math.min(1, a * 1.3 * light);
+    ctx.transform(1, 0, lean, 1, cx - w / 2 - lean * top, 0);
+    ctx.drawImage(img, 0, top, w, bottom - top);
+    ctx.restore();
   }
 }
 

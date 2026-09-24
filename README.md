@@ -258,7 +258,7 @@ The weather fetch also brings back ~48 hours of hourly forecast. Pair
 bring — the demo's "Play 24 hours" tour is exactly this:
 
 ```ts
-sky.setTime(() => hourAsDate(18));  // jump the clock to 18:00…
+sky.setTime(() => hourAsDate(18));  // glide the clock to 18:00…
 sky.setForecastHour(18);            // …and the sky rains if 18:00 will rain
 sky.setForecastHour(null);          // back to current conditions
 sky.forecast();                     // raw ForecastHour[] for your own UI

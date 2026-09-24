@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHourlyForecast, forecastConditionsAt } from "../dist/weather-logic.js";
+import {
+	buildHourlyForecast,
+	deriveConditions,
+	forecastConditionsAt,
+} from "../dist/weather-logic.js";
 
 /** 48 hourly slots starting 2026-07-14T00:00 — clear, then evening rain. */
 function sampleHourly() {
@@ -112,6 +116,21 @@ describe("forecastConditionsAt", () => {
 		assert.ok(wx.intensity > at17.intensity);
 		assert.ok(wx.intensity < at18.intensity);
 		assert.equal(wx.cloudCover, (40 + 95) / 2);
+	});
+
+	it("lifts dry cloudy hours like live conditions do", () => {
+		// 14:00 is dry under 40% cover — a tour starting from "now" must not
+		// jump from the live sky's lifted intensity to a flat forecast one.
+		const wx = forecastConditionsAt(forecast, 14, now, base);
+		const live = deriveConditions({
+			weather_code: 0,
+			precipitation: 0,
+			cloud_cover: 40,
+			temperature_2m: 24,
+			is_day: 1,
+		});
+		assert.ok(wx.intensity > 0);
+		assert.equal(wx.intensity, live.intensity);
 	});
 
 	it("returns null without forecast coverage", () => {

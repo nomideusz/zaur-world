@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Time changes glide instead of cutting: after `setTime` the drawn clock
+  eases from where it was (the short way round midnight), at up to 10 sky
+  hours a second and slower through dawn and dusk, so a long jump plays as
+  a quick time-lapse. Weather eases too: cover, intensity, the overcast
+  deck, fog, haze and falling rain/snow fade between forecast hours instead
+  of switching on the hour
+- Cloud shading crossfades as the light moves, instead of re-baking in
+  visible steps during tours and scrubs
+- Rain and snow keep their flakes in place when intensity changes, rather
+  than reshuffling the whole field
+- Rain reads as rain, not lines: streaks fade from tail to drop and fall at
+  three depths (fine and dim far off, long and soft up close); they take
+  their color from the sky and the light (silver by day, faint after dark,
+  white in a lightning flash); splashes throw droplets and land at different
+  distances; the distant shafts of a downpour are soft and streaky instead
+  of hard-edged bands
+
+### Fixed
+
+- Forecast hours get the same dry-overcast intensity lift as live
+  conditions, so starting or stopping a tour no longer jumps between a gray
+  "now" and a flatter forecast sky
+
 ## [1.3.0] - 2026-09-24
 
 ### Added

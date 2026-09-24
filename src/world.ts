@@ -158,9 +158,60 @@ interface Cloud {
   /** Cached soft-cloud sprite — cheap to stamp, rebuilt when the key moves. */
   sprite?: HTMLCanvasElement;
   spriteKey?: string;
+  /** Mid-relight: the image fading out, the blend on screen, progress 0..1. */
+  prev?: HTMLCanvasElement;
+  blend?: HTMLCanvasElement;
+  fade?: number;
 }
 
 const CLOUD_SPRITE_RES = 0.5;
+/** Seconds a cloud takes to crossfade into a new lighting bake. */
+const CLOUD_RELIGHT_S = 0.5;
+/** Time constants (s) for easing the clock after setTime, and the weather dials. */
+const CLOCK_GLIDE_S = 0.3;
+/** Top glide speed, sky-ms per real second (10 h/s): a long jump plays as a
+ *  quick time-lapse rather than flashing through dawn in a frame or two. */
+const CLOCK_GLIDE_MAX = 10 * 3_600_000;
+const WEATHER_GLIDE_S = 0.6;
+const DAY_MS = 86_400_000;
+/** Continuous weather fields the renderer eases (the categorical ones get dials). */
+const GLIDE_FIELDS = [
+  "intensity",
+  "cloudCover",
+  "cloudCoverHigh",
+  "visibilityM",
+  "temperatureC",
+  "dewPointC",
+  "humidity",
+] as const;
+
+/**
+ * A relighting cloud: the new bake laid over the old one inside the old
+ * silhouette (source-atop), so only the light moves — the outline never
+ * thickens mid-fade the way two stacked translucent stamps would.
+ */
+function blendSprites(
+  from: HTMLCanvasElement,
+  to: HTMLCanvasElement,
+  f: number,
+  out: HTMLCanvasElement | undefined
+): HTMLCanvasElement | undefined {
+  const c = out ?? document.createElement("canvas");
+  if (c.width !== to.width || c.height !== to.height) {
+    c.width = to.width;
+    c.height = to.height;
+  }
+  const g = c.getContext("2d");
+  if (!g) return undefined;
+  g.globalCompositeOperation = "source-over";
+  g.globalAlpha = 1;
+  g.clearRect(0, 0, c.width, c.height);
+  g.drawImage(from, (to.width - from.width) / 2, (to.height - from.height) / 2);
+  g.globalCompositeOperation = "source-atop";
+  g.globalAlpha = f;
+  g.drawImage(to, 0, 0);
+  return c;
+}
 
 /** Paint one soft cloud into an offscreen sprite (at reduced resolution). */
 function renderCloudSprite(
@@ -321,7 +372,7 @@ interface Drop {
   /** Sideways drift amplitude in pixels (snow only). */
   sway: number;
   swayPhase: number;
-  /** Snow only: per-flake size class (0 = tiny, 1 = small, 2 = medium). */
+  /** Snow: flake size class (0 = tiny … 2 = medium). Rain: depth (0 = far … 2 = near). */
   size: 0 | 1 | 2;
 }
 
@@ -330,6 +381,8 @@ interface Splash {
   y: number;
   /** 0..1 — life progress; visual fades with progress. */
   age: number;
+  /** Size — farther splashes land higher up the ground and smaller. */
+  s: number;
 }
 
 interface Bird {
@@ -430,6 +483,22 @@ export class World {
   private readonly terrainFn: () => TerrainProfile | null;
   private readonly satFn: () => SatellitePass | null;
   private timeFn: () => Date;
+  /** ms the drawn clock is off from timeFn — a setTime jump glides out, not cuts. */
+  private clockLag = 0;
+  /** Clock of the last drawn frame: where a setTime jump glides from. */
+  private shownMs: number | null = null;
+  /**
+   * Eased weather (cloudA -1 = not yet sampled): the GLIDE_FIELDS, plus
+   * dials for cloudAlphaFor, the cloudiness/thunder parts of cloud heaviness
+   * and deck cover, fog and falling precip — the categorical fields that
+   * otherwise cut.
+   */
+  private glided: Partial<Record<(typeof GLIDE_FIELDS)[number], number | null>> = {};
+  private cloudA = -1;
+  private heavyBase = 0;
+  private deckBase = 0;
+  private fogA = 0;
+  private precipA = 0;
   private particleScale: number;
   private ambientEffects: number;
   private showGrid: boolean;
@@ -512,6 +581,10 @@ export class World {
   /** Override the wall clock, or pass undefined to use real time again. */
   setTime(fn?: () => Date): void {
     this.timeFn = fn ?? (() => new Date());
+    if (this.shownMs === null) return;
+    // Take the short way round the dial: 23:00 → 01:00 runs forward 2 h.
+    const d = (this.shownMs - this.timeFn().getTime()) % DAY_MS;
+    this.clockLag = ((d + DAY_MS * 1.5) % DAY_MS) - DAY_MS / 2;
   }
 
   /** Update particle density, ambient effect scaling, and grid visibility. */
@@ -545,6 +618,7 @@ export class World {
   update(dtMs: number): void {
     const wx = this.weatherFn();
     const dt = dtMs / 1000;
+    this.glideWeather(wx, this.cloudA < 0 ? Infinity : dt);
     this.tickWind(wx, dt);
     this.tickClouds(wx, dt);
     this.tickDrops(wx, dt);
@@ -553,6 +627,13 @@ export class World {
     if (this.birdsEnabled) this.tickBirds(dt);
     const date = this.now();
     const h = this.currentHour(wx, date);
+    if (this.clockLag !== 0) {
+      // Slow down through dawn and dusk, where the sky changes most per hour.
+      const cap = CLOCK_GLIDE_MAX * dt * (1 - 0.7 * Math.sqrt(horizonGlowStrength(h)));
+      const step = this.clockLag * (1 - Math.exp(-dt / CLOCK_GLIDE_S));
+      this.clockLag -= Math.sign(step) * Math.min(Math.abs(step), cap);
+      if (Math.abs(this.clockLag) < 1000) this.clockLag = 0;
+    }
     this.tickShootingStar(dt, starAlpha(h), date);
     this.tickWetness(wx, dt);
     this.tickSnowCover(wx, dt);
@@ -592,7 +673,31 @@ export class World {
   }
 
   private now(): Date {
-    return this.timeFn();
+    const t = this.timeFn().getTime() + this.clockLag;
+    this.shownMs = t;
+    return new Date(t);
+  }
+
+  /**
+   * Ease the sky-wide weather dials toward `wx` (dt = Infinity snaps): a
+   * forecast hour ticking over, a scrub or a live refresh fades the deck,
+   * cover and color in instead of cutting to them.
+   */
+  private glideWeather(wx: WeatherConditions | null, dt: number): void {
+    const k = 1 - Math.exp(-dt / WEATHER_GLIDE_S);
+    const storm = !!wx && (wx.thunder || wx.cloudiness === 2);
+    const thunder = wx?.thunder ? 0.15 : 0;
+    for (const f of GLIDE_FIELDS) {
+      const v = wx?.[f];
+      const cur = this.glided[f];
+      this.glided[f] = v == null ? null : cur == null ? v : cur + (v - cur) * k;
+    }
+    this.cloudA += ((wx ? cloudAlphaFor(wx) : 0) - this.cloudA) * k;
+    this.heavyBase +=
+      ((storm ? 0.35 : wx?.cloudiness === 1 ? 0.12 : 0) + thunder - this.heavyBase) * k;
+    this.deckBase += ((wx?.cloudiness === 2 ? 0.85 : 0) + thunder - this.deckBase) * k;
+    this.fogA += ((wx?.fog ? 1 : 0) - this.fogA) * k;
+    this.precipA += ((wx && wx.precipitation !== "none" ? 1 : 0) - this.precipA) * k;
   }
 
   /** The canonical (sun-warped) hour — see warpHour. */
@@ -605,13 +710,19 @@ export class World {
   draw(ctx: CanvasRenderingContext2D): void {
     const { width, height } = this.state;
     const date = this.now();
-    const wx = this.weatherFn();
+    const live = this.weatherFn();
+    if (this.cloudA < 0) this.glideWeather(live, Infinity);
+    // Everything drawn reads the eased fields; particles stay on the live ones.
+    const wx: WeatherConditions | null = live && {
+      ...live,
+      ...(this.glided as Partial<WeatherConditions>),
+    };
     // All drawing below runs on the warped (canonical) clock — see warpHour.
     const h = this.currentHour(wx, date);
 
     // Sky gradient. Overcast pulls the colors toward gray, so a clear day is
     // genuinely blue and a stormy one genuinely leaden — weather owns the mood.
-    const cloudAlpha = wx ? cloudAlphaFor(wx) : 0;
+    const cloudAlpha = this.cloudA;
     const intensity = wx?.intensity ?? 0;
     let [topRGB, bottomRGB] = this.skyAt(h);
     const warmth = solsticeWarmth(date, wx?.latitude ?? 50);
@@ -764,9 +875,15 @@ export class World {
     const rainbowA = this.rainbowAlpha(wx, cloudAlpha, h);
     if (rainbowA > 0.02) drawRainbow(ctx, width, height, h, rainbowA);
 
+    // Rain shows by the light it catches: silver-gray under a day sky, faint
+    // after dark, tinted at sunset, and white for the instant of a flash.
+    const flash = Math.min(1, this.lightningIntensity * 1.2);
+    const rainLit = Math.min(1.6, 0.5 + 0.5 * daylight(h) + flash);
+    const rainRGB = lerpRGB(lerpRGB(bottomRGB, [226, 232, 244], 0.55), [255, 255, 255], flash);
+
     // Distant rain shafts under the deck give a heavy downpour depth.
     if (wx?.precipitation === "rain" && intensity > 0.45) {
-      drawRainCurtain(ctx, width, height, intensity, this.wind);
+      drawRainCurtain(ctx, width, height, intensity, this.wind, rainLit);
     }
 
     // Mid + near cloud layers in front of the celestial body.
@@ -807,14 +924,22 @@ export class World {
     if (batA > 0.05) this.drawBats(ctx, batA);
 
     // Fog haze — gradient overlay denser near the ground.
-    if (wx?.fog) drawFog(ctx, width, height);
+    if (this.fogA > 0.02) {
+      ctx.globalAlpha = this.fogA;
+      drawFog(ctx, width, height);
+      ctx.globalAlpha = 1;
+    }
 
     // Visibility-driven haze / morning mist, distinct from the thick fog above.
     if (haze > 0.02) drawHaze(ctx, width, height, haze, h);
 
     // Rain / snow particles in front of the clouds.
-    if (this.drops.length > 0) this.drawDrops(ctx);
-    if (this.splashes.length > 0) this.drawSplashes(ctx);
+    if (this.drops.length > 0) {
+      ctx.globalAlpha = this.precipA;
+      this.drawDrops(ctx, rainRGB, rainLit);
+      ctx.globalAlpha = 1;
+    }
+    if (this.splashes.length > 0) this.drawSplashes(ctx, rainRGB, rainLit);
 
     // Lightning: brief screen-wide flash + procedural bolt during thunder.
     if (this.lightningIntensity > 0) this.drawLightning(ctx);
@@ -872,15 +997,8 @@ export class World {
     h: number
   ): { i: number; heaviness: number; glow: number; top: RGB; bot: RGB; cloudEclipseDark: number } {
     const i = Math.max(0, Math.min(1, wx?.intensity ?? 0));
-    const stormBase = !!(wx && (wx.thunder || wx.cloudiness === 2));
     // Heaviness drives color: light scattered puffs → charcoal storm bank.
-    const heaviness = Math.min(
-      1,
-      (stormBase ? 0.35 : wx?.cloudiness === 1 ? 0.12 : 0) +
-        i * 0.35 +
-        i * i * 0.55 +
-        (wx?.thunder ? 0.15 : 0)
-    );
+    const heaviness = Math.min(1, this.heavyBase + i * 0.35 + i * i * 0.55);
     let top = lerpRGB([236, 238, 244], [72, 74, 90], heaviness);
     let bot = lerpRGB([150, 156, 176], [26, 26, 38], heaviness);
     // Clouds have no light of their own: after dark they are slate shapes
@@ -937,10 +1055,7 @@ export class World {
     cloudAlpha: number
   ): void {
     const { i, heaviness, top, bot } = this.cloudPalette(wx, h);
-    const cover = Math.min(
-      1,
-      (wx.cloudiness === 2 ? 0.85 : 0) + i * 0.5 + (wx.thunder ? 0.15 : 0)
-    );
+    const cover = Math.min(1, this.deckBase + i * 0.5);
     const a = cover * cloudAlpha;
     if (a < 0.05) return;
     const { width, height } = this.state;
@@ -1030,22 +1145,33 @@ export class World {
       )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}|${Math.round(rimK * 10)}`;
       if (cloud.spriteKey !== key) {
         cloud.spriteKey = key;
+        // Relight by crossfading from whatever is on screen — mid-fade that's
+        // the blend — so fast time glides through the buckets, never pops.
+        cloud.prev = cloud.prev && cloud.blend ? cloud.blend : cloud.sprite;
+        cloud.blend = undefined;
+        cloud.fade = 0;
         cloud.sprite = renderCloudSprite(cloud.seed, lobes, w, ch, toward, layer, {
           top, bot, rim, shade, rimK, under: glow * glow * (1 - heaviness * 0.6),
         });
       }
-      if (cloud.sprite) {
-        const dw = cloud.sprite.width / CLOUD_SPRITE_RES;
-        const dh = cloud.sprite.height / CLOUD_SPRITE_RES;
+      let img = cloud.sprite;
+      if (cloud.prev && img && (cloud.fade ?? 1) < 1) {
+        img = cloud.blend = blendSprites(cloud.prev, img, cloud.fade ?? 1, cloud.blend) ?? img;
+      } else {
+        cloud.prev = cloud.blend = undefined;
+      }
+      if (img) {
+        const dw = img.width / CLOUD_SPRITE_RES;
+        const dh = img.height / CLOUD_SPRITE_RES;
         ctx.globalAlpha = baseAlpha * formed;
-        ctx.drawImage(cloud.sprite, cx - dw / 2, cy - dh / 2, dw, dh);
+        ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
         ctx.globalAlpha = 1;
       }
     }
   }
 
 
-  private drawDrops(ctx: CanvasRenderingContext2D): void {
+  private drawDrops(ctx: CanvasRenderingContext2D, light: RGB, lit: number): void {
     const i = Math.max(0, this.dropsIntensity);
     const windK = Math.min(1.5, this.dropsWind / 40);
     if (this.dropsKind === "rain") {
@@ -1055,23 +1181,29 @@ export class World {
       // Light intensity = fine drizzle threads; heavy = longer driving streaks.
       const drizzle = i < 0.38;
       const len = drizzle ? 3.5 + i * 8 : 6 + i * 16 + windK * 4;
-      const alpha = drizzle ? 0.28 + i * 0.35 : 0.38 + i * 0.5;
-      // Two depths from one field: the faster half is rain close to the eye —
-      // longer, brighter, thicker — the rest falls further off, fine and dim.
-      // Median of the vy spread in regenDrops.
-      const nearVy = (drizzle ? 240 : 320) + i * (drizzle ? 360 : 480);
-      for (let pass = 0; pass < 2; pass++) {
-        const k = pass ? 1 : 0.55;
-        ctx.strokeStyle = `rgba(170, 190, 220, ${(alpha * k).toFixed(3)})`;
-        ctx.lineWidth = (i > 0.75 ? 1.35 : drizzle ? 0.85 : 1) * (pass ? 1.15 : 0.75);
-        ctx.beginPath();
-        for (const d of this.drops) {
-          if (d.vy > nearVy !== !!pass) continue;
-          const l = len * (pass ? 1.2 : 0.65);
-          ctx.moveTo(d.x, d.y);
-          ctx.lineTo(d.x + (tilt * 0.85 * l) / len, d.y + l);
+      const alpha = (drizzle ? 0.32 + i * 0.4 : 0.44 + i * 0.56) * lit;
+      const weight = i > 0.75 ? 1.25 : drizzle ? 0.85 : 1;
+      const rgba = (a: number): string =>
+        `rgba(${light[0] | 0}, ${light[1] | 0}, ${light[2] | 0}, ${Math.min(1, a).toFixed(3)})`;
+      // Three depths (see regenDrops): far rain is short, fine and dim; the
+      // middle is the crisp bulk; near drops streak long and soft, out of focus.
+      for (let depth = 0; depth < 3; depth++) {
+        const l = len * (depth === 0 ? 0.55 : depth === 1 ? 1 : 1.7);
+        const dx = (tilt * 0.85 * l) / len;
+        ctx.lineWidth = weight * (depth === 0 ? 0.7 : depth === 1 ? 1 : 1.7);
+        const a = alpha * (depth === 0 ? 0.5 : depth === 1 ? 1 : 0.6);
+        // Motion blur: each streak brightens from its tail to the leading
+        // drop, in three butted segments — one batched path per step.
+        for (let seg = 0; seg < 3; seg++) {
+          ctx.strokeStyle = rgba(a * (seg === 0 ? 0.22 : seg === 1 ? 0.55 : 1));
+          ctx.beginPath();
+          for (const d of this.drops) {
+            if (d.size !== depth) continue;
+            ctx.moveTo(d.x + (dx * seg) / 3, d.y + (l * seg) / 3);
+            ctx.lineTo(d.x + (dx * (seg + 1)) / 3, d.y + (l * (seg + 1)) / 3);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
       }
     } else if (this.dropsKind === "snow") {
       const alpha = 0.75 + i * 0.2;
@@ -1106,17 +1238,22 @@ export class World {
     }
   }
 
-  private drawSplashes(ctx: CanvasRenderingContext2D): void {
-    ctx.strokeStyle = "rgba(170, 190, 220, 0.5)";
+  private drawSplashes(ctx: CanvasRenderingContext2D, light: RGB, lit: number): void {
     ctx.lineWidth = 1;
-    for (const s of this.splashes) {
-      const a = (1 - s.age) * 0.6;
-      const w = 2 + s.age * 4;
-      ctx.strokeStyle = `rgba(170, 190, 220, ${a.toFixed(3)})`;
+    for (const sp of this.splashes) {
+      const a = (1 - sp.age) * 0.6 * Math.min(1, lit);
+      const c = `rgba(${light[0] | 0}, ${light[1] | 0}, ${light[2] | 0}, ${a.toFixed(3)})`;
+      const w = (2 + sp.age * 4) * sp.s;
+      ctx.strokeStyle = c;
       ctx.beginPath();
       // A short flat arc — looks like water bouncing off the surface.
-      ctx.ellipse(s.x, s.y, w, 1, 0, Math.PI, 0);
+      ctx.ellipse(sp.x, sp.y, w, sp.s, 0, Math.PI, 0);
       ctx.stroke();
+      // Two droplets thrown up and out of the crown.
+      const up = Math.sin(sp.age * Math.PI) * 4 * sp.s;
+      ctx.fillStyle = c;
+      ctx.fillRect(sp.x - w * 0.8, sp.y - up, 1, 1);
+      ctx.fillRect(sp.x + w * 0.7, sp.y - up * 0.8, 1, 1);
     }
   }
 
@@ -1180,9 +1317,12 @@ export class World {
   }
 
   private tickClouds(wx: WeatherConditions | null, dt: number): void {
+    for (const cloud of this.clouds) {
+      if (cloud.fade != null && cloud.fade < 1) cloud.fade = Math.min(1, cloud.fade + dt / CLOUD_RELIGHT_S);
+    }
     // Move whenever the sky is cloudy enough to draw — including precip
     // that forced cloudAlpha up while cloudiness was still catching up.
-    if (!wx || cloudAlphaFor(wx) < 0.05) return;
+    if (!wx || this.cloudA < 0.05) return;
     // A wind nudge on top of each cloud's intrinsic drift — with real wind
     // speed in this.wind's amplitude, a blustery day visibly hurries them.
     // Prefer meteorological direction so banks march with the prevailing wind.
@@ -1203,7 +1343,13 @@ export class World {
     const wantIntensity = wx?.intensity ?? 0;
     const wantCode = wx?.weatherCode ?? null;
     this.dropsWind = wx?.windSpeed ?? 0;
-    if (
+    if (wantKind === "none") {
+      // The last of it fades out with precipA (see draw) instead of vanishing.
+      if (this.precipA < 0.02) {
+        this.drops = [];
+        this.dropsKind = "none";
+      }
+    } else if (
       wantKind !== this.dropsKind ||
       wantCode !== this.dropsCode ||
       Math.abs(wantIntensity - this.dropsIntensity) > 0.04
@@ -1213,16 +1359,17 @@ export class World {
       this.dropsCode = wantCode;
       this.regenDrops(wx);
     }
-    if (this.drops.length === 0 || wantKind === "none") return;
+    if (this.drops.length === 0) return;
     const { width, height } = this.state;
-    const i = wantIntensity;
+    const kind = this.dropsKind;
+    const i = this.dropsIntensity;
     const windK = Math.min(1.5, this.dropsWind / 40);
     const drift =
-      this.wind * (wantKind === "snow" ? 55 + i * 80 : 35 + i * 55) +
-      Math.sign(this.wind || 1) * windK * (wantKind === "snow" ? 140 : 95);
+      this.wind * (kind === "snow" ? 55 + i * 80 : 35 + i * 55) +
+      Math.sign(this.wind || 1) * windK * (kind === "snow" ? 140 : 95);
     for (const d of this.drops) {
       d.y += d.vy * dt;
-      if (wantKind === "snow") {
+      if (kind === "snow") {
         d.swayPhase += dt * (1.4 + i);
         d.x += (drift + Math.sin(d.swayPhase) * d.sway * 8) * dt;
       } else {
@@ -1231,9 +1378,12 @@ export class World {
       if (d.y > height + 8) {
         // Rain occasionally spawns a splash where it lands. Throttled by chance
         // and a hard cap — splashes are cheap, but a few hundred would chew CPU.
+        // Far drops are too fine to see land; mid ones land a little up the
+        // ground (further off), near ones at the bottom edge.
         const splashChance = 0.15 + i * 0.45;
-        if (wantKind === "rain" && this.splashes.length < 30 + i * 50 && Math.random() < splashChance) {
-          this.splashes.push({ x: d.x, y: height - 2, age: 0 });
+        if (kind === "rain" && d.size > 0 && this.splashes.length < 30 + i * 50 && Math.random() < splashChance) {
+          const far = d.size === 1 ? Math.random() : 0;
+          this.splashes.push({ x: d.x, y: height - 2 - far * height * 0.06, age: 0, s: 1 - far * 0.5 });
         }
         d.y = -8;
         d.x = Math.random() * width;
@@ -1350,19 +1500,24 @@ export class World {
       (this.state.width * this.state.height) / (isRain ? (drizzle ? 16_000 : 12_000) : 7_000)
     );
     const count = Math.round(baseCount * dens * this.particleScale);
+    // Keep the flakes already in flight where they are — a regen retunes the
+    // field, it shouldn't reshuffle it.
+    const old = this.drops;
     this.drops = [];
     for (let n = 0; n < count; n++) {
       // Snow flake size distribution: lots of tiny, few medium — feels natural.
       // Heavy snow skews larger.
+      // Rain: the roll is depth too — the fastest drops are the nearest.
       const sizeRoll = Math.random();
       const bigBias = i * 0.45;
-      const size: 0 | 1 | 2 =
-        sizeRoll < 0.55 - bigBias ? 0 : sizeRoll < 0.9 - bigBias * 0.8 ? 1 : 2;
+      const size: 0 | 1 | 2 = isRain
+        ? sizeRoll < 0.45 ? 0 : sizeRoll < 0.85 ? 1 : 2
+        : sizeRoll < 0.55 - bigBias ? 0 : sizeRoll < 0.9 - bigBias * 0.8 ? 1 : 2;
       this.drops.push({
-        x: Math.random() * this.state.width,
-        y: Math.random() * this.state.height,
+        x: old[n]?.x ?? Math.random() * this.state.width,
+        y: old[n]?.y ?? Math.random() * this.state.height,
         vy: isRain
-          ? (drizzle ? 160 : 240) + i * (drizzle ? 220 : 340) + Math.random() * (160 + i * 280)
+          ? (drizzle ? 160 : 240) + i * (drizzle ? 220 : 340) + sizeRoll * (160 + i * 280)
           : 22 + i * 45 + Math.random() * (35 + i * 50),
         sway: isRain ? 0 : 0.6 + Math.random() * (1.6 + i),
         swayPhase: Math.random() * Math.PI * 2,

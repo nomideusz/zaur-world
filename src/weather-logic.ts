@@ -204,6 +204,17 @@ function skyFromCode(
 	};
 }
 
+/** Dry overcast still reads heavy: cloud cover lifts intensity up to 0.35. */
+function coverLift(
+	intensity: number,
+	precipitation: Precipitation,
+	cover: number | null | undefined
+): number {
+	return precipitation === "none" && cover != null
+		? Math.max(intensity, Math.min(0.35, (cover / 100) * 0.35))
+		: intensity;
+}
+
 /** Real cloud-cover % can promote the code-derived bucket (never demote). */
 function refineCloudiness(base: Cloudiness, cover: number | null | undefined): Cloudiness {
 	if (cover == null || !Number.isFinite(cover)) return base;
@@ -221,10 +232,7 @@ export function deriveConditions(
 		cloudiness: refineCloudiness(sky.cloudiness, c.cloud_cover),
 		// Cloud cover also lifts dry-overcast intensity slightly so a sealed
 		// gray sky feels heavier than a clear day with the same code.
-		intensity:
-			sky.precipitation === "none" && c.cloud_cover != null
-				? Math.max(sky.intensity, Math.min(0.35, (c.cloud_cover / 100) * 0.35))
-				: sky.intensity,
+		intensity: coverLift(sky.intensity, sky.precipitation, c.cloud_cover),
 		isDay: c.is_day !== 0,
 		windSpeed: c.wind_speed_10m ?? 0,
 		temperatureC: c.temperature_2m,
@@ -335,9 +343,7 @@ export function refineWithMinutely(
 	};
 	// Dry sky: keep the cloud-cover intensity lift from deriveConditions so a
 	// sealed overcast doesn't flatten to zero when the slot has no precip.
-	if (next.precipitation === "none" && base.cloudCover != null) {
-		next.intensity = Math.max(next.intensity, Math.min(0.35, (base.cloudCover / 100) * 0.35));
-	}
+	next.intensity = coverLift(next.intensity, next.precipitation, base.cloudCover);
 	if (
 		next.cloudiness === base.cloudiness &&
 		next.precipitation === base.precipitation &&
@@ -429,8 +435,13 @@ export function forecastConditionsAt(
 		? skyFromCode(next.weatherCode, next.precipMm, next.precipProbability)
 		: null;
 	const windSpeed = slot.windSpeed ?? base?.windSpeed ?? 0;
+	// Same dry-overcast lift as live conditions, or every tour/scrub would
+	// jump between a gray "now" and a flat forecast hour.
+	const i0 = coverLift(sky.intensity, sky.precipitation, slot.cloudCover);
 	const intensity =
-		nextSky && frac > 0 ? lerp(sky.intensity, nextSky.intensity, frac) : sky.intensity;
+		next && nextSky && frac > 0
+			? lerp(i0, coverLift(nextSky.intensity, nextSky.precipitation, next.cloudCover), frac)
+			: i0;
 	const cloudCover =
 		next && slot.cloudCover != null && next.cloudCover != null && frac > 0
 			? lerp(slot.cloudCover, next.cloudCover, frac)
