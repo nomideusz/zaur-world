@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-24
+
 ### Fixed
 
 - The moon's lit part is one shape instead of stacked half-discs, so a moon
