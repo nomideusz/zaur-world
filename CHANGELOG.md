@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-24
+
 ### Added
 
 - Earth's shadow and the Belt of Venus: on clear evenings a slate-blue
