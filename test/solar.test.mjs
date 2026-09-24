@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { warpHour, auroraLatFactor, meteorRate, venusState, lunarPhase } from "../dist/solar.js";
+import { warpHour, auroraLatFactor, meteorRate, venusState, jupiterState, lunarPhase } from "../dist/solar.js";
 
 describe("warpHour", () => {
 	it("maps real sunrise and sunset onto the canonical window", () => {
@@ -36,6 +36,14 @@ describe("venusState", () => {
 		const v = venusState(new Date("2026-07-12T20:00:00Z"));
 		assert.ok(v.elong >= 0);
 		assert.equal(typeof v.evening, "boolean");
+	});
+});
+
+describe("jupiterState", () => {
+	it("opposes the sun at the 2026 and 2027 oppositions, joins it at conjunction", () => {
+		assert.ok(jupiterState(new Date("2026-01-10T12:00:00Z")).elong > 175);
+		assert.ok(jupiterState(new Date("2027-02-11T12:00:00Z")).elong > 175);
+		assert.ok(jupiterState(new Date("2026-07-29T12:00:00Z")).elong < 5);
 	});
 });
 

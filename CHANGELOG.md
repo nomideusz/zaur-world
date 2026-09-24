@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Earth's shadow and the Belt of Venus: on clear evenings a slate-blue
+  dome climbs the eastern horizon under a pink band, and dissolves into the
+  night; mirrored in the west before sunrise
+- Ice haloes: under a cirrus veil (`cloudCoverHigh`, Open-Meteo's
+  `cloud_cover_high`, now fetched for current and hourly conditions) the
+  sun wears a 22° ring with a reddish inner edge, flanked by sun dogs when
+  it is low; a bright moon gets a silver ring
+- Jupiter, at its real elongation (`jupiterState`): it crosses the sky all
+  night near opposition and is gone near conjunction
+
+### Changed
+
+- The sun behaves like the real one: overhead its limb dissolves into a
+  tight white bloom; once low enough to look at, the limb shows darker and
+  redder than the middle, the lower limb is redder than the upper (more air),
+  and refraction squashes the disc into an oval on the ridge line
+- The moon keeps its real hours: it rides the sun's arc a phase late, so a
+  full moon rises at sunset, a first quarter hangs pale in the afternoon sky
+  and a last quarter in the morning. Its lit limb faces the sun, tilting
+  as it rises and sets, and clouds are moonlit only while it is up
+- Venus rides the same arc, late by its elongation, instead of a fixed spot
+  low in the west — so it sets as many hours after the sun as the real one
+
+### Fixed
+
+- A partial solar eclipse no longer turns the sun salmon-red at midday —
+  the uncovered crescent stays white-hot; only the glare around it fades
+
 ## [1.2.1] - 2026-09-24
 
 ### Fixed

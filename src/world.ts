@@ -42,6 +42,7 @@ import {
   drawAurora,
   drawCirrus,
   drawCityGlow,
+  drawEarthShadow,
   drawFog,
   drawFrost,
   drawGodRays,
@@ -58,7 +59,7 @@ import {
   drawCelestial,
   drawStars,
   moonDisc,
-  drawVenus,
+  drawPlanets,
   type Star,
 } from "./world-celestial.js";
 import { STAR_CATALOG } from "./star-catalog.js";
@@ -638,7 +639,8 @@ export class World {
     // A lunar eclipse takes that silver away as the moon goes blood-red.
     const lunarEclipse = wx?.eclipse?.type === "lunar" ? wx.eclipse.progress : 0;
     const moonIllum = (1 - Math.cos(lunarPhase(date) * Math.PI * 2)) / 2;
-    if (moonIllum > 0.85 && daylight(h) < 0.2) {
+    const moon = moonDisc(width, height, h, date, lunarEclipse > 0);
+    if (moon && moonIllum > 0.85 && daylight(h) < 0.2) {
       const lift =
         ((moonIllum - 0.85) / 0.15) * 0.12 * (1 - cloudAlpha * 0.6) * (1 - lunarEclipse * 0.85);
       topRGB = lerpRGB(topRGB, [40, 48, 78], lift);
@@ -664,6 +666,7 @@ export class World {
     // Horizon glow at sunrise/sunset — soft warm wash low on the screen.
     // Gone under a solid overcast.
     if (cloudAlpha < 0.92) drawHorizonGlow(ctx, width, height, h);
+    if (cloudAlpha < 0.5) drawEarthShadow(ctx, width, height, h, (1 - cloudAlpha / 0.5) * (1 - haze));
 
     // Deep solar eclipse: the famous 360° sunset ring low on the horizon.
     if (eclipseDark > 0.45 && cloudAlpha < 0.92) {
@@ -688,7 +691,7 @@ export class World {
       Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
     if (sa > 0.01) {
       this.updateRealStars(date);
-      drawStars(ctx, this.stars, sa, height, moonDisc(width, height, h));
+      drawStars(ctx, this.stars, sa, height, moon);
     }
     if (this.shooting) this.drawShootingStar(ctx, sa);
     if (this.train && sa > 0.3) this.drawTrain(ctx, sa);
@@ -698,8 +701,8 @@ export class World {
       if (issA > 0.2) this.drawIss(ctx, issPass.progress, issA);
     }
 
-    // Venus — evening or morning star per its real 584-day cycle.
-    drawVenus(ctx, width, height, h, date, cloudAlpha);
+    // Venus and Jupiter at their real elongations.
+    drawPlanets(ctx, width, height, h, date, cloudAlpha);
 
     // High thin cirrus for lightly veiled skies — real cover % that is
     // too sparse for the puffy buckets. Fades out as those take over.
@@ -727,7 +730,12 @@ export class World {
       0,
       1 - cloudAlpha * (0.75 + intensity * intensity * 0.5)
     );
-    drawCelestial(ctx, width, height, h, celestialDim, date, wx?.eclipse ?? undefined);
+    // Ice haloes need a cirrostratus veil and no weather falling out of it.
+    const halo =
+      wx?.cloudCoverHigh != null && wx.precipitation === "none" && !wx.fog
+        ? Math.min(1, Math.max(0, (wx.cloudCoverHigh - 30) / 40))
+        : 0;
+    drawCelestial(ctx, width, height, h, celestialDim, date, wx?.eclipse ?? undefined, halo);
 
     // Warm dome of city light beyond the ridge — the visitor's IP resolved
     // to a town, after all. Overcast makes it stronger: clouds bounce the
@@ -983,21 +991,22 @@ export class World {
     // Directional light: the sun by day, the moon by night. Clouds are lit
     // from wherever the celestial body sits, so a morning bank glows on its
     // east edge and an evening one on the west. Mirrors drawCelestial's arc.
+    // With the moon down, the night has no light to rim them with.
     const isDay = h >= SUN_RISE && h <= SUN_SET;
-    let lt: number;
-    if (isDay) {
-      lt = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-    } else {
-      let moonH = h - SUN_SET;
-      if (moonH < 0) moonH += 24;
-      lt = moonH / (24 - SUN_SET + SUN_RISE);
-    }
-    const lightX = this.state.width * (0.08 + lt * 0.84);
+    const date = this.now();
+    const moon = isDay
+      ? null
+      : moonDisc(this.state.width, this.state.height, h, date, wx?.eclipse?.type === "lunar");
+    const lightX = moon
+      ? moon[0]
+      : this.state.width * (0.08 + ((h - SUN_RISE) / (SUN_SET - SUN_RISE)) * 0.84);
     // Rim tint: white at midday, ember at golden hour, silver by moonlight.
     const rim: RGB = isDay
       ? lerpRGB([255, 255, 255], [255, 205, 150], Math.min(1, glow * 1.4))
       : [205, 218, 245];
-    const rimK = (isDay ? 1 : 0.4) * (1 - heaviness * 0.65);
+    const rimK =
+      (isDay ? 1 : moon ? 0.4 * (1 - Math.cos(lunarPhase(date) * Math.PI * 2)) / 2 : 0) *
+      (1 - heaviness * 0.65);
     const shade = lerpRGB(bot, [10, 10, 20], 0.35);
 
     for (const cloud of this.clouds) {
@@ -1018,7 +1027,7 @@ export class World {
       // frame a cloud costs one drawImage.
       const key = `${layer}|${lobes}|${toward}|${Math.round(w / 8)}|${Math.round(ch / 8)}|${Math.round(
         heaviness * 8
-      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}`;
+      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}|${Math.round(rimK * 10)}`;
       if (cloud.spriteKey !== key) {
         cloud.spriteKey = key;
         cloud.sprite = renderCloudSprite(cloud.seed, lobes, w, ch, toward, layer, {

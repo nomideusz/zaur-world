@@ -53,20 +53,40 @@ export function meteorRate(date: Date): number {
 	return 1;
 }
 
-export function venusState(date: Date): { elong: number; evening: boolean } {
+/**
+ * A planet's elongation from the sun as seen from Earth: circular orbits
+ * from mean longitudes (J2000), plus the equation of centre `ec` (radians)
+ * about perihelion `peri` where the orbit is eccentric enough to matter.
+ */
+function elongation(
+	date: Date,
+	L0: number,
+	rate: number,
+	a: number,
+	ec = 0,
+	peri = 0
+): { elong: number; evening: boolean } {
 	const d = (date.getTime() - Date.UTC(2000, 0, 1, 12)) / 86_400_000;
 	const LE = ((100.46 + 0.9856474 * d) * Math.PI) / 180;
-	const LV = ((181.98 + 1.6021302 * d) * Math.PI) / 180;
+	let LP = ((L0 + rate * d) * Math.PI) / 180;
+	LP += ec * Math.sin(LP - peri);
 	const ex = Math.cos(LE);
 	const ey = Math.sin(LE);
-	const gx = 0.723 * Math.cos(LV) - ex;
-	const gy = 0.723 * Math.sin(LV) - ey;
+	const gx = a * Math.cos(LP) - ex;
+	const gy = a * Math.sin(LP) - ey;
 	const sunLon = Math.atan2(-ey, -ex);
-	const venLon = Math.atan2(gy, gx);
-	let diff = venLon - sunLon;
+	let diff = Math.atan2(gy, gx) - sunLon;
 	while (diff > Math.PI) diff -= Math.PI * 2;
 	while (diff < -Math.PI) diff += Math.PI * 2;
 	return { elong: Math.abs((diff * 180) / Math.PI), evening: diff > 0 };
+}
+
+export function venusState(date: Date): { elong: number; evening: boolean } {
+	return elongation(date, 181.98, 1.6021302, 0.723);
+}
+
+export function jupiterState(date: Date): { elong: number; evening: boolean } {
+	return elongation(date, 34.4, 0.0830853, 5.203, 0.0968, 0.25);
 }
 
 /** Lunar phase fraction in [0, 1): 0 = new, 0.5 = full. */

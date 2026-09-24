@@ -51,6 +51,8 @@ export interface WeatherConditions {
   humidity?: number | null;
   /** Total cloud cover, % — smooths the three-bucket cloudiness. */
   cloudCover?: number | null;
+  /** High (cirrus-level) cloud cover, % — its ice crystals draw halos. */
+  cloudCoverHigh?: number | null;
   /** Mean sea-level pressure, hPa. */
   pressureMsl?: number | null;
   /** Direction the wind blows *from*, degrees (0 = north). */
@@ -471,13 +473,13 @@ export class WeatherClient {
         "current",
         "temperature_2m,apparent_temperature,weather_code,is_day,precipitation," +
           "wind_speed_10m,wind_direction_10m,wind_gusts_10m," +
-          "relative_humidity_2m,cloud_cover,pressure_msl,visibility,dew_point_2m,snowfall"
+          "relative_humidity_2m,cloud_cover,cloud_cover_high,pressure_msl,visibility,dew_point_2m,snowfall"
       );
       url.searchParams.set("daily", "sunrise,sunset,temperature_2m_max,temperature_2m_min");
       url.searchParams.set(
         "hourly",
         "temperature_2m,weather_code,precipitation,precipitation_probability," +
-          "cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day," +
+          "cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day," +
           "visibility,dew_point_2m,snowfall"
       );
       // Near-term 15-minute series (natively modelled in Europe/North
@@ -682,6 +684,7 @@ function conditionsEqual(a: WeatherConditions, b: WeatherConditions): boolean {
     a.weatherCode === b.weatherCode &&
     a.humidity === b.humidity &&
     a.cloudCover === b.cloudCover &&
+    a.cloudCoverHigh === b.cloudCoverHigh &&
     a.pressureMsl === b.pressureMsl &&
     a.windDirection === b.windDirection &&
     a.windGusts === b.windGusts &&

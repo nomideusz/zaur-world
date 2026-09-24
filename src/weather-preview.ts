@@ -53,6 +53,7 @@ export function applyWeatherPreview(
         ...base,
         cloudiness: 0,
         cloudCover: 0,
+        cloudCoverHigh: 0,
         precipitation: "none",
         intensity: 0,
         thunder: false,

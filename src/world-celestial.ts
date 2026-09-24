@@ -1,7 +1,8 @@
-/** Sun, moon, stars, and Venus — celestial drawing helpers. */
+/** Sun, moon, stars, and planets — celestial drawing helpers. */
 
 import { rgbToCss, clampByte } from "./color.js";
-import { lunarPhase, venusState, SUN_RISE, SUN_SET } from "./solar.js";
+import { lunarPhase, venusState, jupiterState, SUN_RISE, SUN_SET } from "./solar.js";
+import { daylight } from "./sky-math.js";
 
 export interface Star {
   x: number;
@@ -85,24 +86,25 @@ function drawSun(
   eclipseProgress: number,
   disc: number
 ): void {
-  // Atmospheric refraction: sun appears significantly larger near the horizon
+  // Drawn larger low down, as the eye sees it (the Moon illusion works on the
+  // sun too) — refraction itself only squashes it, see below.
   const r = 24 + 16 * horizonness;
 
   const ease = horizonness * horizonness;
   const easeExp = ease * horizonness;
 
-  // During a solar eclipse, the sun dims
+  // A partial eclipse shrinks the sun, it doesn't tint it: what is left of
+  // the disc stays exactly as white-hot, only the glare around it fades.
   const eclipseDim = 1 - Math.min(1, eclipseProgress * 1.05);
 
   // Core colors shift from warm white at zenith to deep red-orange at sunset
   const discR = 255;
-  const discG = clampByte((248 - 120 * ease) * eclipseDim);
-  const discB = clampByte((220 - 180 * easeExp) * eclipseDim);
+  const discG = clampByte(248 - 120 * ease);
+  const discB = clampByte(220 - 180 * easeExp);
 
   // Outer glow matches but is even richer
-  const glowR = clampByte(255 * eclipseDim);
-  const glowG = clampByte((220 - 100 * ease) * eclipseDim);
-  const glowB = clampByte((180 - 150 * easeExp) * eclipseDim);
+  const glowG = clampByte(220 - 100 * ease);
+  const glowB = clampByte(180 - 150 * easeExp);
 
   // Glare: overhead a wide white-hot aureole; near the horizon extinction
   // shrinks it to a tight amber haze around a crisp disc you can look at.
@@ -111,7 +113,7 @@ function drawSun(
   const k = 1 - horizonness * 0.6;
   glow(
     ctx, x, y, r * 0.5, r * (2.4 + 4.5 * k) * (1 + veil * 0.9),
-    `${glowR}, ${glowG}, ${glowB}`,
+    `255, ${glowG}, ${glowB}`,
     (0.5 * k + veil * 0.3) * eclipseDim
   );
 
@@ -150,40 +152,62 @@ function drawSun(
     }
   }
 
+  // Overhead the disc is too bright to have an edge: a tight white bloom
+  // swallows the limb. It dies away as the sun lowers and dims.
+  glow(ctx, x, y, r, r * 2, "255, 253, 245", 0.5 * k * k * k * disc * eclipseDim);
+
   ctx.globalAlpha *= disc;
   if (disc < 0.02) return;
 
-  // Sun disc: white-hot center at zenith, but a rising/setting sun reads as
-  // a flat deep-orange disc — the hot core fades out with horizonness.
-  const coreR = clampByte((255 - (255 - discR) * ease) * eclipseDim);
-  const coreG = clampByte((255 - (255 - discG) * ease) * eclipseDim);
-  const coreB = clampByte((255 - (255 - discB) * ease) * eclipseDim);
-  const discGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-  discGrad.addColorStop(0, `rgba(${coreR}, ${coreG}, ${coreB}, 1)`);
-  discGrad.addColorStop(1, `rgba(${discR}, ${discG}, ${discB}, 1)`);
+  // Refraction lifts the lower limb more than the upper, so a sun on the
+  // ridge line is squashed into an oval.
+  const squash = 1 - 0.12 * Math.max(0, Math.min(1, (horizonness - 0.6) / 0.25));
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, squash);
 
+  // Sun disc: white-hot center at zenith, but a rising/setting sun reads as
+  // a deep-orange disc — the hot core fades out with horizonness. Once it
+  // is dim enough to look at, the limb shows darker and redder than the
+  // middle, as the real one does.
+  const coreR = clampByte(255 - (255 - discR) * ease);
+  const coreG = clampByte(255 - (255 - discG) * ease);
+  const coreB = clampByte(255 - (255 - discB) * ease);
+  const limb = 1 - 0.2 * ease;
+  const discGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  discGrad.addColorStop(0, `rgba(${coreR}, ${coreG}, ${coreB}, 1)`);
+  discGrad.addColorStop(0.6, `rgba(${discR}, ${discG}, ${discB}, 1)`);
+  discGrad.addColorStop(
+    1,
+    `rgba(${clampByte(discR * limb)}, ${clampByte(discG * limb * limb)}, ${clampByte(discB * limb * limb)}, 1)`
+  );
   ctx.fillStyle = discGrad;
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
+
+  // The lower limb looks through more air than the upper, so it is redder.
+  if (ease > 0.05) {
+    const air = ctx.createLinearGradient(0, -r, 0, r);
+    air.addColorStop(0, "rgba(220, 40, 20, 0)");
+    air.addColorStop(1, `rgba(220, 40, 20, ${(0.4 * ease).toFixed(3)})`);
+    ctx.fillStyle = air;
+    ctx.fill();
+  }
 
   // The eclipsing Moon (drawn as a dark circle moving across the sun).
   // Clipped to the sun disc: the real moon is invisible against the sky,
   // so only the overlapping bite should show.
   if (eclipseProgress > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.clip();
     ctx.fillStyle = "#0a0a0c";
     ctx.beginPath();
-    // Progress 0 -> 1 means moon moves from edge to center
-    // Let's sweep it from top-right to bottom-left
+    // Progress 0 -> 1 sweeps it from top-right to the centre.
     const offset = r * 2.2 * (1 - eclipseProgress);
-    ctx.arc(x + offset, y - offset, r * 1.01, 0, Math.PI * 2);
+    ctx.arc(offset, -offset, r * 1.01, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
   }
+  ctx.restore();
 }
 
 /**
@@ -239,22 +263,22 @@ function moonFace(): HTMLCanvasElement | null {
 
 function drawMoon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  date: Date,
-  horizonness: number,
+  [x, y, horizonness, tilt]: readonly number[],
+  phase: number,
   eclipseProgress: number,
-  disc: number
+  disc: number,
+  day: number
 ): void {
   // Atmospheric refraction: moon appears larger near the horizon (Moon Illusion)
   // Near the sun's size: both span the same half-degree of real sky.
   const r = moonRadius(horizonness);
-  const phase = lunarPhase(date);
 
   // During a lunar eclipse, the moon is full (illum = 1)
   const isEclipse = eclipseProgress > 0;
   const illum = isEclipse ? 1 : (1 - Math.cos(phase * Math.PI * 2)) / 2;
   const waxing = phase < 0.5;
+  // A day-old moon is lost in the sun's glare.
+  if (illum < 0.02) return;
 
   const ease = horizonness * horizonness;
 
@@ -273,13 +297,22 @@ function drawMoon(
 
   const litCss = rgbToCss([litR, litG, litB]);
 
+  // The moon's east-west axis lies along its arc — the ecliptic — so the
+  // lit limb faces the sun: up as it rises in daylight, down toward the set
+  // sun as an evening crescent. North tilts with it, maria and all.
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+  // In daylight it is a pale ghost: the blue sky shows through, and a thin
+  // crescent all but vanishes.
+  ctx.globalAlpha *= 1 - day * (0.75 - 0.35 * illum);
+
   // Moonlight halo — one smooth falloff that grows with the phase, widens
   // in low-horizon haze, and spreads into a soft patch behind cloud. It
   // centres on the lit part, so a crescent's dark side isn't outlined.
   glow(
-    ctx, x + (waxing ? r : -r) * 0.6 * (1 - illum), y, r * 0.9, r * (2.6 + illum * 2.4) * (1 + horizonness * 0.2 + (1 - disc) * 0.8),
+    ctx, (waxing ? r : -r) * 0.6 * (1 - illum), 0, r * 0.9, r * (2.6 + illum * 2.4) * (1 + horizonness * 0.2 + (1 - disc) * 0.8),
     `${clampByte(220 + 35 * ease)}, ${clampByte(228 - 10 * ease)}, ${clampByte(245 - 65 * ease)}`,
-    ((0.06 + 0.14 * illum) * (1 + horizonness * 0.3) + (1 - disc) * 0.08) * (1 - eclipseProgress * 0.7)
+    ((0.06 + 0.14 * illum) * (1 + horizonness * 0.3) + (1 - disc) * 0.08) * (1 - eclipseProgress * 0.7) * (1 - day)
   );
 
   ctx.globalAlpha *= disc;
@@ -288,13 +321,13 @@ function drawMoon(
   // The unlit side is never darker than the sky in front of it, so it is
   // not painted — only a young or old crescent's earthshine is added on.
   // (Stars behind it are skipped in drawStars.)
-  const earthshine = Math.max(0, 0.28 - illum) / 0.28;
-  ctx.save();
+  // Earthshine needs a dark sky: twilight drowns it well before the crescent.
+  const earthshine = (Math.max(0, 0.28 - illum) / 0.28) * Math.max(0, 1 - day * 2);
   if (earthshine > 0.02) {
     ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = `rgba(40, 46, 70, ${(0.2 * earthshine).toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-over";
   }
@@ -304,8 +337,8 @@ function drawMoon(
   // where stacked half-discs overlap.
   const xt = r * (1 - 2 * illum) * (waxing ? 1 : -1);
   ctx.beginPath();
-  ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2, !waxing);
-  ctx.ellipse(x, y, Math.abs(xt), r, 0, Math.PI / 2, -Math.PI / 2, xt > 0);
+  ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, !waxing);
+  ctx.ellipse(0, 0, Math.abs(xt), r, 0, Math.PI / 2, -Math.PI / 2, xt > 0);
   ctx.fillStyle = litCss;
   ctx.fill();
 
@@ -314,38 +347,111 @@ function drawMoon(
   if (face) {
     ctx.clip();
     ctx.globalCompositeOperation = "multiply";
-    ctx.drawImage(face, x - r, y - r, r * 2, r * 2);
+    ctx.drawImage(face, -r, -r, r * 2, r * 2);
   }
-  ctx.restore();
 }
 
 const moonRadius = (horizonness: number): number => 20 + 12 * horizonness;
 
-/** Where the sun or moon stands on its arc: x, y, and how low it sits. */
-function arcPoint(width: number, height: number, h: number): [number, number, number] {
-  let t: number;
-  if (h >= SUN_RISE && h <= SUN_SET) {
-    t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
-  } else {
-    let moonH = h - SUN_SET;
-    if (moonH < 0) moonH += 24;
-    t = moonH / (24 - SUN_SET + SUN_RISE);
+let dogSprite: HTMLCanvasElement | null | undefined;
+
+/** A sun dog, baked once: red on the sun's side, then white, then a pale tail. */
+function sunDog(): HTMLCanvasElement | null {
+  if (dogSprite !== undefined) return dogSprite;
+  dogSprite = null;
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 32;
+  const m = c.getContext("2d");
+  if (!m) return null;
+  m.filter = "blur(2.5px)";
+  const g = m.createLinearGradient(6, 0, 58, 0);
+  g.addColorStop(0, "rgba(255, 120, 90, 0)");
+  g.addColorStop(0.08, "rgba(255, 130, 90, 0.9)");
+  g.addColorStop(0.2, "rgba(255, 238, 196, 1)");
+  g.addColorStop(0.36, "rgba(214, 228, 255, 0.6)");
+  g.addColorStop(1, "rgba(230, 236, 255, 0)");
+  m.fillStyle = g;
+  m.beginPath();
+  m.ellipse(24, 16, 17, 10, 0, 0, Math.PI * 2);
+  m.fill();
+  return (dogSprite = c);
+}
+
+/**
+ * Ice-crystal optics in a cirrostratus veil: the 22° ring — sharp and
+ * reddish inside, fading white outward — and, with the sun low, the two
+ * sun dogs on the ring's level.
+ */
+function drawHalo(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  R: number,
+  a: number,
+  dogs: number,
+  inner: string
+): void {
+  if (a < 0.01) return;
+  const g = ctx.createRadialGradient(x, y, R * 0.85, x, y, R * 1.25);
+  g.addColorStop(0.2, `rgba(${inner}, 0)`);
+  g.addColorStop(0.3, `rgba(${inner}, ${(a * 0.7).toFixed(3)})`);
+  g.addColorStop(0.4, `rgba(250, 246, 240, ${a.toFixed(3)})`);
+  g.addColorStop(1, "rgba(235, 240, 255, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(x - R * 1.25, y - R * 1.25, R * 2.5, R * 2.5);
+  const dog = dogs > 0.02 && sunDog();
+  if (!dog) return;
+  const k = R / 100;
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.globalAlpha *= Math.min(1, a * 4) * dogs;
+    ctx.translate(x + side * R * (0.9 + 0.3 * (1 - dogs)), y);
+    ctx.scale(side * k, k);
+    ctx.drawImage(dog, 0, -16);
+    ctx.restore();
   }
+}
+
+/**
+ * Where the sun or moon stands on its arc at hour `h` of its own day: x, y,
+ * how low it sits, and the direction of travel (westward) as an angle.
+ */
+function arcPoint(width: number, height: number, h: number): [number, number, number, number] {
+  const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
   const riseY = height * 0.68;
-  const topY = height * 0.09;
+  const lift = riseY - height * 0.09;
   return [
     width * (0.08 + t * 0.84),
-    riseY - Math.sin(t * Math.PI) * (riseY - topY),
+    riseY - Math.sin(t * Math.PI) * lift,
     // Air mass, not clock time, reddens and swells the disc.
     1 - Math.sin(t * Math.PI),
+    Math.atan2(-lift * Math.PI * Math.cos(t * Math.PI), width * 0.84),
   ];
 }
 
-/** The moon's disc [x, y, r] at night, for occulting the stars behind it. */
-export function moonDisc(width: number, height: number, h: number): [number, number, number] | null {
-  if (h >= SUN_RISE && h <= SUN_SET) return null;
-  const [x, y, horizonness] = arcPoint(width, height, h);
-  return [x, y, moonRadius(horizonness)];
+/**
+ * The moon rides the sun's arc `phase` of a day late: a new moon rises with
+ * the sun, first quarter at noon, full at sunset, last quarter at midnight.
+ * Null while it is below the horizon.
+ */
+function moonArc(width: number, height: number, h: number, phase: number) {
+  const hm = (h + 24 - phase * 24) % 24;
+  return hm < SUN_RISE || hm > SUN_SET ? null : arcPoint(width, height, hm);
+}
+
+/** The moon's disc [x, y, r] when it is up — for occulting stars, lighting clouds. */
+export function moonDisc(
+  width: number,
+  height: number,
+  h: number,
+  date: Date,
+  /** A lunar eclipse is always at full moon. */
+  eclipsed = false
+): [number, number, number] | null {
+  const m = moonArc(width, height, h, eclipsed ? 0.5 : lunarPhase(date));
+  return m && [m[0], m[1], moonRadius(m[2])];
 }
 
 export function drawCelestial(
@@ -355,12 +461,11 @@ export function drawCelestial(
   h: number,
   dim: number,
   date: Date,
-  eclipse?: { type: "solar" | "lunar"; progress: number }
+  eclipse?: { type: "solar" | "lunar"; progress: number },
+  /** 0..1 cirrostratus veil for ice haloes. */
+  halo = 0
 ): void {
   if (dim < 0.02) return;
-
-  const isSun = h >= SUN_RISE && h <= SUN_SET;
-  const [x, y, horizonness] = arcPoint(width, height, h);
 
   ctx.save();
   // A broken sky dims the light on average, but an unobstructed disc stays
@@ -372,16 +477,36 @@ export function drawCelestial(
   const progress = (type: "solar" | "lunar"): number =>
     eclipse?.type === type ? eclipse.progress : 0;
 
-  if (isSun) {
+  const lunar = progress("lunar");
+  const phase = lunar > 0 ? 0.5 : lunarPhase(date);
+  const moon = moonArc(width, height, h, phase);
+  const day = daylight(h);
+  // A halo needs the veil lit and the disc visible through it.
+  halo *= disc;
+  const R = Math.max(110, Math.min(width, height) * 0.22);
+  if (moon) {
+    ctx.save();
+    // A bright moon rings itself too, colourless to the night eye.
+    drawHalo(ctx, moon[0], moon[1], R, 0.12 * halo * (1 - day) * (1 - Math.cos(phase * Math.PI * 2)) / 2, 0, "226, 230, 240");
+    drawMoon(ctx, moon, phase, lunar, disc, day);
+    ctx.restore();
+  }
+  if (h >= SUN_RISE && h <= SUN_SET) {
+    const [x, y, horizonness] = arcPoint(width, height, h);
+    drawHalo(ctx, x, y, R, 0.2 * halo, Math.min(1, horizonness * 1.8), "255, 190, 160");
     drawSun(ctx, x, y, horizonness, progress("solar"), disc);
-  } else {
-    drawMoon(ctx, x, y, date, horizonness, progress("lunar"), disc);
   }
 
   ctx.restore();
 }
 
-export function drawVenus(
+/**
+ * Venus and Jupiter keep their real places: like the moon, each rides the
+ * sun's arc late by its elongation, so an evening Venus sets hours after
+ * the sun and an opposition Jupiter crosses the sky all night. Neither
+ * twinkles; Venus pierces the twilight, Jupiter waits for a darker sky.
+ */
+export function drawPlanets(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
@@ -389,44 +514,26 @@ export function drawVenus(
   date: Date,
   cloudAlpha: number
 ): void {
-  const v = venusState(date);
-  if (v.elong < 12) return;
-  const visH = (v.elong / 47) * 3.0;
-  let p: number;
-  let x: number;
-  if (v.evening) {
-    const dt = h - SUN_SET;
-    if (dt < 0.15 || dt > visH) return;
-    p = dt / visH;
-    x = width * 0.88;
-  } else {
-    const dt = SUN_RISE - h;
-    if (dt < 0.15 || dt > visH) return;
-    p = dt / visH;
-    x = width * 0.12;
+  const day = daylight(h);
+  for (const venus of [true, false]) {
+    const p = (venus ? venusState : jupiterState)(date);
+    if (p.elong < 12) continue;
+    const pos = moonArc(width, height, h, p.evening ? p.elong / 360 : 1 - p.elong / 360);
+    if (!pos) continue;
+    const a =
+      Math.min(1, ((venus ? 0.75 : 0.45) - day) / 0.4) * (1 - pos[2] * 0.5) * (1 - cloudAlpha) * 0.95;
+    if (a < 0.03) continue;
+    const ix = pos[0] | 0;
+    const iy = pos[1] | 0;
+    ctx.fillStyle = `rgba(255, 250, 236, ${(a * 0.15).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(ix + 1, iy + 1, venus ? 6 : 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Bright cross — both outshine every star.
+    ctx.fillStyle = `rgba(255, 252, 240, ${(a * (venus ? 0.6 : 0.42)).toFixed(3)})`;
+    ctx.fillRect(ix - 2, iy, 6, 2);
+    ctx.fillRect(ix, iy - 2, 2, 6);
+    ctx.fillStyle = `rgba(255, ${venus ? 255 : 246}, ${venus ? 255 : 226}, ${a.toFixed(3)})`;
+    ctx.fillRect(ix, iy, 2, 2);
   }
-  const y = height * (0.4 + p * 0.22);
-  const twilight = Math.min(1, (v.evening ? h - SUN_SET : SUN_RISE - h) / 0.5);
-  const a = twilight * (1 - p * 0.5) * (1 - cloudAlpha) * 0.95;
-  if (a < 0.03) return;
-  const ix = x | 0;
-  const iy = y | 0;
-  
-  // Soft outer glow for Venus
-  ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.15).toFixed(3)})`;
-  ctx.beginPath();
-  ctx.arc(ix + 1, iy + 1, 6, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = `rgba(255, 252, 240, ${a.toFixed(3)})`;
-  ctx.fillRect(ix, iy, 2, 2);
-  
-  // Bright cross
-  ctx.fillStyle = `rgba(255, 252, 240, ${(a * 0.6).toFixed(3)})`;
-  ctx.fillRect(ix - 2, iy, 6, 2);
-  ctx.fillRect(ix, iy - 2, 2, 6);
-  
-  // Sharp center
-  ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
-  ctx.fillRect(ix, iy, 2, 2);
 }

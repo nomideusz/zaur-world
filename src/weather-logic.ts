@@ -11,6 +11,7 @@ export interface OpenMeteoCurrent {
 	wind_gusts_10m?: number;
 	relative_humidity_2m?: number;
 	cloud_cover?: number;
+	cloud_cover_high?: number;
 	pressure_msl?: number;
 	visibility?: number;
 	dew_point_2m?: number;
@@ -32,6 +33,7 @@ export interface OpenMeteoHourly {
 	precipitation?: number[];
 	precipitation_probability?: number[];
 	cloud_cover?: number[];
+	cloud_cover_high?: number[];
 	wind_speed_10m?: number[];
 	wind_direction_10m?: number[];
 	relative_humidity_2m?: number[];
@@ -52,6 +54,7 @@ export interface ForecastHour {
 	precipMm: number;
 	precipProbability: number | null;
 	cloudCover: number | null;
+	cloudCoverHigh?: number | null;
 	windSpeed: number | null;
 	/** Direction the wind blows *from*, degrees (0 = north). */
 	windDirection: number | null;
@@ -230,6 +233,7 @@ export function deriveConditions(
 		weatherCode: c.weather_code,
 		humidity: c.relative_humidity_2m ?? null,
 		cloudCover: c.cloud_cover ?? null,
+		cloudCoverHigh: c.cloud_cover_high ?? null,
 		pressureMsl: c.pressure_msl ?? null,
 		windDirection: c.wind_direction_10m ?? null,
 		windGusts: c.wind_gusts_10m ?? null,
@@ -366,6 +370,7 @@ export function buildHourlyForecast(hourly: OpenMeteoHourly | undefined): Foreca
 			precipMm: hourly.precipitation?.[i] ?? 0,
 			precipProbability: hourly.precipitation_probability?.[i] ?? null,
 			cloudCover: hourly.cloud_cover?.[i] ?? null,
+			cloudCoverHigh: hourly.cloud_cover_high?.[i] ?? null,
 			windSpeed: hourly.wind_speed_10m?.[i] ?? null,
 			windDirection: hourly.wind_direction_10m?.[i] ?? null,
 			humidity: hourly.relative_humidity_2m?.[i] ?? null,
@@ -466,6 +471,7 @@ export function forecastConditionsAt(
 		weatherCode: slot.weatherCode,
 		humidity,
 		cloudCover,
+		cloudCoverHigh: slot.cloudCoverHigh ?? null,
 		visibilityM,
 		dewPointC,
 		snowfallCm,

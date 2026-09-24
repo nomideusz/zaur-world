@@ -21,6 +21,38 @@ export function drawHorizonGlow(
   ctx.fillRect(0, 0, width, height);
 }
 
+/**
+ * Clear dusk and dawn: Earth's own shadow climbs the sky opposite the sun —
+ * a low slate-blue dome on the far horizon, capped by the pink Belt of
+ * Venus — and dissolves into the night as the sun sinks deeper.
+ */
+export function drawEarthShadow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  h: number,
+  clear: number
+): void {
+  const dusk = h > 12;
+  const dt = dusk ? h - SUN_SET : SUN_RISE - h;
+  if (dt < -0.15 || dt > 0.75) return;
+  const s = Math.sin(((dt + 0.15) / 0.9) * Math.PI) * clear;
+  if (s < 0.02) return;
+  // Centred on the anti-solar point: east at dusk, west at dawn.
+  const top = height * (0.12 + 0.14 * Math.max(0, dt) / 0.75);
+  ctx.save();
+  ctx.translate(width * (dusk ? 0.08 : 0.92), height * 0.6);
+  ctx.scale((width * 0.7) / top, 1);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, top);
+  g.addColorStop(0, `rgba(44, 50, 88, ${(0.42 * s).toFixed(3)})`);
+  g.addColorStop(0.3, `rgba(50, 54, 96, ${(0.32 * s).toFixed(3)})`);
+  g.addColorStop(0.58, `rgba(230, 150, 170, ${(0.16 * s).toFixed(3)})`);
+  g.addColorStop(1, "rgba(236, 156, 170, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(-top, -top, top * 2, top);
+  ctx.restore();
+}
+
 export function drawFog(ctx: CanvasRenderingContext2D, width: number, height: number): void {
   // Fog is milky air, not a gray sky: a light veil up high, and a dense
   // ground bank that genuinely swallows the hills — that loss of the

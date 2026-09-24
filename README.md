@@ -25,8 +25,12 @@ with the last sky still drawing when there is no network.
 
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
   (Open-Meteo), so summer evenings stay light late and winter days end early.
-  Sun arcs by day; a phase-accurate moon showing its real near-side maria,
-  with earthshine, by night. Fractal ridgelines fade range by range into
+  Sun arcs by day. The moon shows its real phase and near-side maria and
+  keeps its real hours — a full moon rising at sunset, a quarter moon pale
+  in the daytime sky — its lit limb turned toward the sun. At clear dusk
+  and dawn Earth's shadow and the pink Belt of Venus climb the sky opposite
+  the sun; under a cirrus veil the sun (or a bright moon) wears a 22° halo,
+  with sun dogs when it is low. Fractal ridgelines fade range by range into
   the sky behind them.
 - **The real night sky** — once location is known, the stars are the ~330
   brightest (Yale catalog, to magnitude 3.6) at their true positions for that
@@ -63,10 +67,10 @@ with the last sky still drawing when there is no network.
   crepuscular rays (god rays) fanning down while a cloud edge crosses the sun, and
   shooting-star rates that spike on real meteor-shower peaks
   (Perseids, Geminids, Quadrantids, Lyrids, Eta Aquariids, Orionids).
-- **The real Venus** — an evening or morning star tracking its actual
-  584-day cycle (computed from orbital elements, accurate to ~1°): bright
-  and steady low in the west after sunset, or ahead of the sunrise, and
-  gone near conjunction. Bats flit through the dusk on summer evenings,
+- **The real Venus and Jupiter** — tracked from orbital elements (to a
+  degree or two) at their true elongation from the sun: Venus bright and
+  steady in the west after sunset or ahead of the sunrise, Jupiter
+  crossing the sky all night near opposition, both gone near conjunction. Bats flit through the dusk on summer evenings,
   and a warm dome of city light sits beyond the ridge at night — brighter
   under overcast, the way clouds really bounce a town's light back down.
 
@@ -281,7 +285,7 @@ the sky to that hour:
 ![Day strip — the coming 24 hours as scrubbable cells with a temperature curve; the sky pinned to 18:00, golden hour](https://raw.githubusercontent.com/nomideusz/zaur-world/main/docs/daystrip.png)
 
 Current conditions carry detail too: `humidity`, `cloudCover`,
-`pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to
+`cloudCoverHigh`, `pressureMsl`, `windDirection`, `windGusts`, and `weatherCode` (feed it to
 `describeWeather()`). Intensity scales continuously from precip mm (and
 WMO code), and forecast hours interpolate intensity, cloud cover, humidity,
 and precip chance between slots.

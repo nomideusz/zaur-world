@@ -79,6 +79,7 @@ export { SatelliteWatcher, type SatellitePass } from "./satellites.js";
 export {
   warpHour,
   venusState,
+  jupiterState,
   lunarPhase,
   meteorRate,
   auroraLatFactor,
