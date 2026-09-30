@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The sun and moon are behind every cloud: the distant cloud layer used to
+  be drawn under them, so a low moon sat in front of the far puffs
+- The aurora keeps to high latitudes — full strength from ~67°, gone by
+  ~60° (it was fading in from 45°, so Poland had it every clear night) —
+  and is not drawn while the latitude is unknown
+- A sky clearing to 0% cover no longer holds one ghost cloud at part
+  opacity until the next reload
+- Zaur keeps his wet colouring across a resize while he is still dripping
+- Demo: the controls lift clear of Zaur's walking lane, so the buttons and
+  the 24-hour tour panel no longer cover all but his feet on a phone
+
 ## [1.4.1] - 2026-09-24
 
 ### Fixed

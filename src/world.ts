@@ -829,11 +829,6 @@ export class World {
     // Heavy weather: a full-width deck closes the sky behind the puffs.
     if (wx && cloudAlpha > 0.3) this.drawOvercastDeck(ctx, wx, h, cloudAlpha);
 
-    // Distant cloud layer sits *behind* the sun/moon for a sense of depth.
-    if (this.clouds.length > 0 && cloudAlpha > 0) {
-      this.drawCloudLayer(ctx, 0, cloudAlpha, wx, h);
-    }
-
     // Crepuscular rays fanning down from the sun through broken cloud.
     const godRays = godRayFactor(cloudAlpha, h) * this.sunOccluded(h, cloudAlpha);
     if (godRays > 0.02) drawGodRays(ctx, width, height, h, godRays);
@@ -849,6 +844,11 @@ export class World {
         ? Math.min(1, Math.max(0, (wx.cloudCoverHigh - 30) / 40))
         : 0;
     drawCelestial(ctx, width, height, h, celestialDim, date, wx?.eclipse ?? undefined, halo);
+
+    // Even the most distant cloud is in front of the sun and moon.
+    if (this.clouds.length > 0 && cloudAlpha > 0) {
+      this.drawCloudLayer(ctx, 0, cloudAlpha, wx, h);
+    }
 
     // Warm dome of city light beyond the ridge — the visitor's IP resolved
     // to a town, after all. Overcast makes it stronger: clouds bounce the
@@ -1097,8 +1097,10 @@ export class World {
     const layerOpacity = layer === 0 ? 0.6 : layer === 1 ? 0.85 : 1.0;
     const baseAlpha = Math.min(1, 0.82 + alpha * 0.3 + i * 0.2) * layerOpacity;
     // Cover decides how many clouds exist, not how ghostly each one is: a
-    // 20% sky has a few solid puffs, an overcast one all of them.
-    const cover = 0.12 + alpha * 1.5;
+    // 20% sky has a few solid puffs, an overcast one all of them. Under ~7%
+    // the head start tapers off, so a clearing sky thins its last puff out
+    // instead of holding it as a ghost (the eased alpha never reaches 0).
+    const cover = Math.min(0.12, alpha * 2.4) + alpha * 1.5;
     // Heavy weather swells the bank — same silhouettes, thicker coverage.
     const sizeMul = 1 + i * 0.8 + i * i * 1.8;
     // Rain and snow fall from a flat nimbostratus deck, so the clouds under it

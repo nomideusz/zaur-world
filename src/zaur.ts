@@ -188,7 +188,7 @@ class Body {
 		const newScale = Math.max(2, Math.min(4, Math.round(Math.min(worldW, floorY) / 240)));
 		if (newScale !== this.scale) {
 			this.scale = newScale;
-			this.frames = buildFrames(newScale, ZAUR_INK, { sweater: this.sweater, wet: this.wet > 0.5 });
+			this.frames = buildFrames(newScale, ZAUR_INK, { sweater: this.sweater, wet: this.wet > 0.3 });
 			this.caps = buildCaps(newScale);
 		}
 		// Floor moved (day strip toggled, window resized) — keep his feet on it.

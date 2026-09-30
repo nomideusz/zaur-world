@@ -149,7 +149,7 @@ body[data-ui="min"] .chrome {
    on a single row, and the heavier reference rows fall in underneath. */
 .chrome {
 	left: calc(var(--safe-left) + var(--gutter));
-	bottom: calc(var(--safe-bottom) + var(--gutter));
+	bottom: calc(var(--safe-bottom) + var(--gutter) + var(--zaur-lane, 0px));
 	display: flex;
 	flex-flow: row wrap;
 	align-items: center;
@@ -1111,7 +1111,20 @@ html[data-zw-moments~="meteor-shower"] .brand-world {
 
 /* Lift the rest of the chrome above the dock while it is visible. */
 body:has(.daystrip:not([hidden])) .chrome {
-	bottom: calc(var(--safe-bottom) + var(--gutter) + 4.9rem);
+	bottom: calc(var(--safe-bottom) + var(--gutter) + 4.9rem + var(--zaur-lane, 0px));
+}
+
+/* Zaur walks the ground line on a canvas below the chrome: keep a lane his
+   height clear, or the buttons and the tour panel cover all but his feet.
+   He is 18 cells at 2–4 px (mountZaur's scale): 72 px at most, 36 on a phone. */
+body.has-zaur {
+	--zaur-lane: 4.5rem;
+}
+
+@media (max-width: 480px) {
+	body.has-zaur {
+		--zaur-lane: 2.25rem;
+	}
 }
 
 .daystrip-head {

@@ -54,9 +54,9 @@ with the last sky still drawing when there is no network.
   backlit slopes falling into warm shadow, and cloud bases lit rose from
   beneath at sunrise and sunset.
 - **Seasons and small life** — birds by day (sheltering from rain, sparse in
-  winter), fireflies on summer nights, aurora veils in deep night, shooting
-  stars a few minutes apart, heat haze above 27 °C, visibility-driven mist
-  and haze that closes in on humid days, frost that forms as the air nears
+  winter), fireflies on summer nights, aurora veils in deep night at high
+  latitudes, shooting stars a few minutes apart, heat haze above 27 °C,
+  visibility-driven mist and haze that closes in on humid days, frost that forms as the air nears
   its dew point, ground that stays visibly wet after rain, and snow that
   accumulates from the real snowfall amount and lingers while the air stays
   cold. Seasons flip with the visitor's hemisphere.

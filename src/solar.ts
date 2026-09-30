@@ -21,13 +21,16 @@ export function warpHour(h: number, rise: number | null, set: number | null): nu
 	return (SUN_SET + (sinceSet / nightLen) * (24 - SUN_SET + SUN_RISE)) % 24;
 }
 
-/** Aurora strength by latitude — strongest above ~60°, fading below ~45°. */
+/**
+ * Aurora strength by latitude: a nightly sight only under the auroral oval
+ * (~67°+), gone by ~60° — and absent when the latitude is unknown.
+ * ponytail: geographic latitude and no storm data, so Canada (geomagnetically
+ * further north than Europe) is short-changed and rare mid-latitude storms
+ * never show. Upgrade: geomagnetic latitude (needs longitude) × live Kp.
+ */
 export function auroraLatFactor(lat: number | null | undefined): number {
-	if (lat == null) return 0.35;
-	const abs = Math.abs(lat);
-	if (abs >= 60) return 1;
-	if (abs >= 45) return (abs - 45) / 15;
-	return 0;
+	if (lat == null) return 0;
+	return Math.max(0, Math.min(1, (Math.abs(lat) - 60) / 7));
 }
 
 /**

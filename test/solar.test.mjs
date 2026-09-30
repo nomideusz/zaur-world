@@ -15,12 +15,19 @@ describe("warpHour", () => {
 
 describe("auroraLatFactor", () => {
 	it("is strongest at high latitudes", () => {
-		assert.equal(auroraLatFactor(65), 1);
+		assert.equal(auroraLatFactor(69.6), 1); // Tromsø
+		assert.equal(auroraLatFactor(-70), 1);
 		assert.equal(auroraLatFactor(20), 0);
 	});
 
-	it("ramps between 45° and 60°", () => {
-		assert.ok(auroraLatFactor(52) > 0.4);
+	it("stays dark at mid-latitudes and when the latitude is unknown", () => {
+		assert.equal(auroraLatFactor(52), 0); // Poland
+		assert.equal(auroraLatFactor(null), 0);
+	});
+
+	it("ramps between 60° and 67°", () => {
+		const reykjavik = auroraLatFactor(64.1);
+		assert.ok(reykjavik > 0.4 && reykjavik < 1);
 	});
 });
 

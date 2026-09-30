@@ -151,6 +151,8 @@ function syncZaur(): void {
 		zaur.destroy();
 		zaur = null;
 	}
+	// The chrome lifts clear of his walking lane (see .has-zaur in style.css).
+	document.body.classList.toggle("has-zaur", zaurToggle.checked);
 	localStorage.setItem("zw-zaur", zaurToggle.checked ? "1" : "0");
 }
 
