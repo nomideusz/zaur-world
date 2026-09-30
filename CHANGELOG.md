@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-30
+
 ### Fixed
 
 - The sun and moon are behind every cloud: the distant cloud layer used to
