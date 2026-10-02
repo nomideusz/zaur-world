@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-02
+
+### Added
+
+- `setTime(fn, { lapse: true })` plays a jump to another day as a
+  time-lapse of the real distance, forward or back (capped at one whole
+  day), instead of cutting there; the sky passes through each hour's
+  forecast on the way
+
 ## [1.5.0] - 2026-10-02
 
 ### Added

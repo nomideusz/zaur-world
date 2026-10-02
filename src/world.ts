@@ -27,6 +27,7 @@ import {
   duskAlpha,
   fireflyAlpha,
   horizonGlowStrength,
+  clockLagFor,
 } from "./sky-math.js";
 import {
   SUN_RISE,
@@ -173,7 +174,6 @@ const CLOCK_GLIDE_S = 0.3;
  *  quick time-lapse rather than flashing through dawn in a frame or two. */
 const CLOCK_GLIDE_MAX = 10 * 3_600_000;
 const WEATHER_GLIDE_S = 0.6;
-const DAY_MS = 86_400_000;
 /** Continuous weather fields the renderer eases (the categorical ones get dials). */
 const GLIDE_FIELDS = [
   "intensity",
@@ -487,6 +487,8 @@ export class World {
   private timeFn: () => Date;
   /** ms the drawn clock is off from timeFn — a setTime jump glides out, not cuts. */
   private clockLag = 0;
+  /** The current jump is a `lapse`: the weather follows the drawn clock. */
+  private lapsing = false;
   /** Clock of the last drawn frame: where a setTime jump glides from. */
   private shownMs: number | null = null;
   /**
@@ -580,13 +582,22 @@ export class World {
     this.regenGridPattern();
   }
 
-  /** Override the wall clock, or pass undefined to use real time again. */
-  setTime(fn?: () => Date): void {
+  /**
+   * Override the wall clock, or pass undefined to use real time again.
+   * `lapse`: a jump to another day plays as a time-lapse of the real
+   * distance — the sun and moon run round, forward or back — capped at one
+   * whole day however many days apart.
+   */
+  setTime(fn?: () => Date, lapse = false): void {
     this.timeFn = fn ?? (() => new Date());
+    this.lapsing = lapse;
     if (this.shownMs === null) return;
-    // Take the short way round the dial: 23:00 → 01:00 runs forward 2 h.
-    const d = (this.shownMs - this.timeFn().getTime()) % DAY_MS;
-    this.clockLag = ((d + DAY_MS * 1.5) % DAY_MS) - DAY_MS / 2;
+    this.clockLag = clockLagFor(this.shownMs - this.timeFn().getTime(), lapse);
+  }
+
+  /** The drawn clock while a `lapse` jump plays, else null. */
+  lapseTime(): Date | null {
+    return this.lapsing && this.clockLag !== 0 && this.shownMs !== null ? new Date(this.shownMs) : null;
   }
 
   /** Update particle density, ambient effect scaling, and grid visibility. */

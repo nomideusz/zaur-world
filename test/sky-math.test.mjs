@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { hazeFactor, godRayFactor } from "../dist/sky-math.js";
+import { hazeFactor, godRayFactor, clockLagFor } from "../dist/sky-math.js";
 
 describe("hazeFactor", () => {
 	it("stays clear when visibility is unknown", () => {
@@ -39,5 +39,23 @@ describe("godRayFactor", () => {
 	it("peaks around broken cloud at low sun", () => {
 		assert.ok(Math.abs(godRayFactor(0.42, 12) - 0.35) < 1e-9); // noon: subtle
 		assert.ok(godRayFactor(0.42, 5.9) > godRayFactor(0.42, 12)); // low sun: dramatic
+	});
+});
+
+describe("clockLagFor", () => {
+	const H = 3_600_000;
+	it("takes the short way round the dial for plain jumps", () => {
+		assert.equal(clockLagFor(22 * H, false), -2 * H);
+		assert.equal(clockLagFor(-24 * H, false), 0);
+	});
+	it("plays a lapse to another day as its real distance", () => {
+		assert.equal(clockLagFor(-24 * H, true), -24 * H);
+		assert.equal(clockLagFor(-23 * H, true), -23 * H);
+		assert.equal(clockLagFor(26 * H, true), 26 * H);
+		assert.equal(clockLagFor(2 * H, true), 2 * H);
+	});
+	it("caps a lapse of many days at one whole day", () => {
+		assert.equal(clockLagFor(-6 * 24 * H, true), -24 * H);
+		assert.equal(clockLagFor(-(6 * 24 + 3) * H, true), -27 * H);
 	});
 });

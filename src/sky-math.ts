@@ -110,3 +110,16 @@ export function horizonGlowStrength(h: number): number {
 	const t = 1 - d / 1.6;
 	return t * t * (0.85 + 0.15 * t);
 }
+
+const DAY_MS = 86_400_000;
+
+/**
+ * How far (ms) the drawn clock starts from a new time `raw` ms away
+ * (drawn − target). Plain jumps take the short way round the dial (23:00 →
+ * 01:00 runs forward 2 h); a `lapse` to another day plays the real
+ * distance, capped at one whole day.
+ */
+export function clockLagFor(raw: number, lapse: boolean): number {
+	const short = (((raw % DAY_MS) + DAY_MS * 1.5) % DAY_MS) - DAY_MS / 2;
+	return lapse && Math.abs(raw) > DAY_MS / 2 ? short + Math.sign(raw) * DAY_MS : short;
+}

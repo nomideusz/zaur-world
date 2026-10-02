@@ -211,9 +211,11 @@ export interface WorldHandle {
   /**
    * Override the wall clock, or pass undefined to use real time again. The
    * sky glides to the new time (a quick time-lapse for long jumps), so a
-   * capture straight after a jump shows the glide mid-way.
+   * capture straight after a jump shows the glide mid-way. `lapse: true`
+   * plays a jump to another day as a time-lapse of the real distance
+   * (capped at one day), the sky passing through each hour's forecast.
    */
-  setTime(fn?: () => Date): void;
+  setTime(fn?: () => Date, opts?: { lapse?: boolean }): void;
   /**
    * Current decimal hour at the forecast location (browser clock before
    * the first weather fetch). Use for 24h tours so the sweep matches
@@ -332,8 +334,10 @@ export function createWorld(
     evaluatingConditions = true;
     try {
       let wx = liveConditions();
-      if (forecastAt && client) {
-        wx = client.conditionsAt(forecastAt) ?? wx;
+      // A lapse plays the forecast of each hour it passes.
+      const at = (client && world.lapseTime()) || forecastAt;
+      if (at && client) {
+        wx = client.conditionsAt(at) ?? wx;
       } else if (forecastHour !== null && client) {
         wx = client.conditionsAtHour(forecastHour) ?? wx;
       }
@@ -600,11 +604,11 @@ export function createWorld(
     setGrid(enabled: boolean): void {
       world.setGrid(enabled);
     },
-    setTime(fn?: () => Date): void {
+    setTime(fn?: () => Date, timeOpts?: { lapse?: boolean }): void {
       timeOverride = fn;
       // Keep the World on resolveTime so clearing the override returns to
       // the forecast location clock (not the browser TZ).
-      world.setTime(resolveTime);
+      world.setTime(resolveTime, timeOpts?.lapse);
       publishAtmosphere(true);
     },
     localHour(date?: Date): number {
