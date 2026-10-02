@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-02
+
+### Added
+
+- `setForecastAt(date)` drives the sky from the forecast at an absolute
+  moment — a day next week, paired with `setTime` to the same moment —
+  instead of only the next occurrence of an hour
+- `forecastDays` option (1..16, default 2) to fetch the days that needs
+
 ## [1.4.2] - 2026-09-30
 
 ### Fixed

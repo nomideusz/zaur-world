@@ -130,6 +130,8 @@ export interface WeatherClientOptions {
    * Default false.
    */
   geolocation?: GeolocationMode;
+  /** Days of hourly forecast to fetch (1..16). Default 2. */
+  forecastDays?: number;
 }
 
 export class WeatherClient {
@@ -153,6 +155,7 @@ export class WeatherClient {
   private readonly card: WeatherCard | null;
   private readonly timers: number[] = [];
   private readonly cache: boolean;
+  private readonly forecastDays: number;
   private readonly onChange: ((conditions: WeatherConditions) => void) | null;
   private readonly geoMode: "off" | "prefer" | "fallback";
   /** Fixed location from createWorld({ geo }) — cleared only by setGeo(null). */
@@ -168,6 +171,7 @@ export class WeatherClient {
 
   constructor(opts: WeatherClientOptions = {}) {
     this.cache = opts.cache !== false;
+    this.forecastDays = Math.min(16, Math.max(1, Math.round(opts.forecastDays ?? 2)));
     this.onChange = opts.onConditionsChange ?? null;
     this.geoMode = resolveGeoMode(opts.geolocation);
     const cardOpts = opts.weatherCard ?? null;
@@ -257,6 +261,18 @@ export class WeatherClient {
    */
   conditionsAtHour(hour: number): WeatherConditions | null {
     return forecastConditionsAt(this.hourly, hour, this.nowISO(), this.state);
+  }
+
+  /**
+   * Forecast conditions at an absolute moment — any day the forecast
+   * covers (see `forecastDays`). Null until loaded or past its end.
+   */
+  conditionsAt(at: Date): WeatherConditions | null {
+    const iso = this.nowISO(at);
+    const hour = Number(iso.slice(11, 13)) + Number(iso.slice(14, 16)) / 60;
+    // With "now" set to the moment itself, the next occurrence of its hour
+    // is its own slot.
+    return forecastConditionsAt(this.hourly, hour, iso, this.state);
   }
 
   /** Today's forecast high/low °C, or null until known. */
@@ -486,7 +502,7 @@ export class WeatherClient {
       // America, interpolated elsewhere) — 8 slots ≈ the next 2 hours.
       url.searchParams.set("minutely_15", "precipitation,weather_code,lightning_potential");
       url.searchParams.set("forecast_minutely_15", "8");
-      url.searchParams.set("forecast_days", "2");
+      url.searchParams.set("forecast_days", String(this.forecastDays));
       url.searchParams.set("timezone", "auto");
       const res = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
       if (!res.ok) return;

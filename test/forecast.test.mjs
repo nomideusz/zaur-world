@@ -102,6 +102,16 @@ describe("forecastConditionsAt", () => {
 		assert.equal(wx.isDay, true);
 	});
 
+	it("reads a later day's own slot when now is that moment", () => {
+		// conditionsAt(date) passes the moment itself as now — tomorrow 18:00
+		// must read tomorrow's slot, here dry, not today's rain.
+		const later = forecast.map((s) =>
+			s.timeISO === "2026-07-15T18:00" ? { ...s, weatherCode: 0, precipMm: 0, precipProbability: 0 } : s
+		);
+		assert.equal(forecastConditionsAt(later, 18, now, base).precipitation, "rain");
+		assert.equal(forecastConditionsAt(later, 18, "2026-07-15T18:00", base).precipitation, "none");
+	});
+
 	it("interpolates temperature and wind between slots", () => {
 		const wx = forecastConditionsAt(forecast, 14.5, now, base);
 		assert.equal(wx.temperatureC, 24.5); // halfway 24 → 25

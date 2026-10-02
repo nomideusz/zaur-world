@@ -145,6 +145,11 @@ export interface CreateWorldOptions {
    * `"fallback"` keeps IP-first behavior. Default false.
    */
   geolocation?: GeolocationMode;
+  /**
+   * Days of hourly forecast to fetch (1..16). Default 2 — raise it to
+   * `setForecastAt` days further out.
+   */
+  forecastDays?: number;
   /** Called when live weather conditions change. */
   onConditionsChange?: (conditions: WeatherConditions) => void;
   /**
@@ -236,6 +241,15 @@ export interface WorldHandle {
    * the forecast has loaded, and with a custom `weather` source.
    */
   setForecastHour(hour: number | null): void;
+  /**
+   * Drive the sky from the forecast at an absolute moment — e.g. a day
+   * next week, paired with `setTime` to that same moment. Covers as many
+   * days as `forecastDays` fetched; past its end (or before load) the
+   * sky keeps current conditions. Takes precedence over
+   * `setForecastHour`; the weather card does not follow it. `null`
+   * returns to current conditions.
+   */
+  setForecastAt(at: Date | null): void;
   /** Hourly forecast for the next ~48 h (empty until loaded / custom source). */
   forecast(): ForecastHour[];
   /** Switch performance preset without remounting. */
@@ -303,12 +317,14 @@ export function createWorld(
         geo: opts.geo,
         cache: opts.cache,
         geolocation: opts.geolocation,
+        forecastDays: opts.forecastDays,
         onConditionsChange: opts.onConditionsChange,
       });
 
   let weatherPreview: WeatherPreview | null = null;
   let weatherOverride: WeatherOverride | null = null;
   let forecastHour: number | null = null;
+  let forecastAt: Date | null = null;
   const liveConditions = opts.weather ?? (() => client?.conditions() ?? null);
   let evaluatingConditions = false;
   const conditions = (): WeatherConditions | null => {
@@ -316,7 +332,9 @@ export function createWorld(
     evaluatingConditions = true;
     try {
       let wx = liveConditions();
-      if (forecastHour !== null && client) {
+      if (forecastAt && client) {
+        wx = client.conditionsAt(forecastAt) ?? wx;
+      } else if (forecastHour !== null && client) {
         wx = client.conditionsAtHour(forecastHour) ?? wx;
       }
       if (weatherPreview) wx = applyWeatherPreview(wx, weatherPreview);
@@ -620,6 +638,10 @@ export function createWorld(
       // 500 ms atmosphere cadence picks the change up.
       forecastHour = hour;
       client?.previewHour(hour);
+    },
+    setForecastAt(at: Date | null): void {
+      forecastAt = at;
+      publishAtmosphere(true);
     },
     forecast(): ForecastHour[] {
       return client?.forecast() ?? [];
