@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-18
+
+### Added
+
+- `landscape: false` draws the sky alone — no horizon ranges (nor
+  `terrain`), sea band, wet ground, settled snow or city glow — for a
+  page that wants the hour and the weather as a wash, not a scene
+
 ## [1.6.0] - 2026-10-02
 
 ### Added

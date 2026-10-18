@@ -339,6 +339,10 @@ createWorld(canvas, {
   bats: true,
   fireflies: true,
 
+  // The land under the sky — hills (and `terrain`), sea, wet ground, snow
+  // cover, city glow. false = the sky alone, a quiet wash behind a page.
+  landscape: true,
+
   // Prefer browser GPS over IP (real location under VPN). Opt-in.
   // Also: "fallback" (IP first), or sky.relocate() after mount.
   geolocation: "prefer",

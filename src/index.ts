@@ -176,6 +176,12 @@ export interface CreateWorldOptions {
   bats?: boolean;
   /** Summer-evening fireflies in the lower sky band. Default true. */
   fireflies?: boolean;
+  /**
+   * The land under the sky: the horizon ranges (and `terrain`), the sea
+   * band, wet ground, settled snow and the city glow beyond the ridge.
+   * `false` keeps the sky alone — a quiet wash behind a page. Default true.
+   */
+  landscape?: boolean;
 }
 
 export interface WorldHandle {
@@ -414,6 +420,7 @@ export function createWorld(
       birds: opts.birds !== false,
       bats: opts.bats !== false,
       fireflies: opts.fireflies !== false,
+      landscape: opts.landscape !== false,
     }
   );
 

@@ -100,6 +100,8 @@ export interface WorldOptions {
   bats?: boolean;
   /** Summer-evening fireflies in the lower sky band. Default true. */
   fireflies?: boolean;
+  /** The land: hills, sea, wet ground, snow cover, city glow. Default true. */
+  landscape?: boolean;
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
@@ -516,12 +518,14 @@ export class World {
   private birdsEnabled: boolean;
   private batsEnabled: boolean;
   private firefliesEnabled: boolean;
+  private readonly landscape: boolean;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
     this.birdsEnabled = opts.birds !== false;
     this.batsEnabled = opts.bats !== false;
     this.firefliesEnabled = opts.fireflies !== false;
+    this.landscape = opts.landscape !== false;
     const q = opts.quality;
     this.particleScale = q?.particleScale ?? 1;
     this.ambientEffects = q?.ambientEffects ?? 1;
@@ -864,17 +868,20 @@ export class World {
     // Warm dome of city light beyond the ridge — the visitor's IP resolved
     // to a town, after all. Overcast makes it stronger: clouds bounce the
     // light back down, exactly like a real city night.
-    drawCityGlow(ctx, width, height, h, cloudAlpha);
+    // All of the land goes with `landscape: false` — the sky alone, as a wash.
+    if (this.landscape) {
+      drawCityGlow(ctx, width, height, h, cloudAlpha);
 
-    // Distant horizon silhouettes — derived from the bottom sky color so they
-    // always sit *between* the sky and the foreground cloud band.
-    this.drawHills(ctx, h, topRGB, bottomRGB, cloudAlpha, wx);
+      // Distant horizon silhouettes — derived from the bottom sky color so they
+      // always sit *between* the sky and the foreground cloud band.
+      this.drawHills(ctx, h, topRGB, bottomRGB, cloudAlpha, wx);
 
-    // Rain-slicked ground: a low reflective sheen that lingers after a shower.
-    if (this.wetness > 0.02) drawWetSheen(ctx, width, height, this.wetness);
+      // Rain-slicked ground: a low reflective sheen that lingers after a shower.
+      if (this.wetness > 0.02) drawWetSheen(ctx, width, height, this.wetness);
 
-    // Settled snow — builds while it flakes, stays while the air stays cold.
-    if (this.snowCover > 0.02) drawSnowCover(ctx, width, height, this.snowCover);
+      // Settled snow — builds while it flakes, stays while the air stays cold.
+      if (this.snowCover > 0.02) drawSnowCover(ctx, width, height, this.snowCover);
+    }
 
     // Hard frost sparkle on cold, humid, clear nights — the dew point decides.
     const frost = frostFactor(wx, h);
