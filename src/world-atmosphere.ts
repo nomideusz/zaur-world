@@ -7,9 +7,10 @@ export function drawHorizonGlow(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  h: number
+  h: number,
+  boost = 1
 ): void {
-  const strength = horizonGlowStrength(h);
+  const strength = horizonGlowStrength(h) * boost;
   if (strength <= 0.02) return;
   // A flat band hugging the horizon — real dawn/dusk glow has no bright
   // center; it's a wash that fades evenly with altitude.

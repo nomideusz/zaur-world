@@ -102,6 +102,12 @@ export interface WorldOptions {
   fireflies?: boolean;
   /** The land: hills, sea, wet ground, snow cover, city glow. Default true. */
   landscape?: boolean;
+  /**
+   * Paint the weather as it is: leaden overcast, a sun lost behind cloud.
+   * Default false — the enchanted palette: the same sky and the same
+   * weather, kept bright, colorful and full of life.
+   */
+  realistic?: boolean;
 }
 
 const DEFAULT_GRID = "rgba(232, 228, 216, 0.06)";
@@ -117,7 +123,7 @@ interface SkyKeyframe {
 
 // Sky color stops across a 24-hour day. The narrator interpolates between
 // adjacent keyframes so transitions are smooth, not steppy.
-const SKY: SkyKeyframe[] = [
+const SKY_REAL: SkyKeyframe[] = [
   { hour:  0,   top: rgb("#0d1026"), bottom: rgb("#1c2144") }, // deep night
   { hour:  5,   top: rgb("#2b2350"), bottom: rgb("#7a3d5e") }, // pre-dawn
   { hour:  6.5, top: rgb("#5f56a6"), bottom: rgb("#f0956a") }, // dawn
@@ -129,6 +135,22 @@ const SKY: SkyKeyframe[] = [
   { hour: 19.2, top: rgb("#3a2868"), bottom: rgb("#c45a4a") }, // civil dusk
   { hour: 20.5, top: rgb("#241d4e"), bottom: rgb("#64346a") }, // evening
   { hour: 22,   top: rgb("#12132e"), bottom: rgb("#1e2242") }, // night
+];
+
+// The enchanted day: the same hours, kept luminous — azure noons, peach
+// dawns, rose-and-violet dusks, and nights of deep sapphire, not black.
+const SKY_MAGIC: SkyKeyframe[] = [
+  { hour:  0,   top: rgb("#121a4c"), bottom: rgb("#2a3274") }, // sapphire night
+  { hour:  5,   top: rgb("#33296e"), bottom: rgb("#a4508a") }, // plum pre-dawn
+  { hour:  6.5, top: rgb("#6d6ad2"), bottom: rgb("#ffaa8c") }, // peach dawn
+  { hour:  9,   top: rgb("#3399f2"), bottom: rgb("#c6eeff") }, // morning
+  { hour: 13,   top: rgb("#2a8cf6"), bottom: rgb("#b6e8ff") }, // midday
+  { hour: 16,   top: rgb("#4392e6"), bottom: rgb("#ffdca4") }, // afternoon gold
+  { hour: 17.4, top: rgb("#7c5cc0"), bottom: rgb("#ffb060") }, // golden hour
+  { hour: 18.2, top: rgb("#6c40a6"), bottom: rgb("#ff6e58") }, // coral sunset
+  { hour: 19.2, top: rgb("#4c3496"), bottom: rgb("#e66a92") }, // rose dusk
+  { hour: 20.5, top: rgb("#2c2878"), bottom: rgb("#7c4294") }, // violet evening
+  { hour: 22,   top: rgb("#161d54"), bottom: rgb("#2a3070") }, // night
 ];
 
 // Canonical sun window — see solar.ts for SUN_RISE / SUN_SET and warpHour().
@@ -519,6 +541,7 @@ export class World {
   private batsEnabled: boolean;
   private firefliesEnabled: boolean;
   private readonly landscape: boolean;
+  private real: boolean;
 
   constructor(private state: WorldState, opts: WorldOptions = {}) {
     this.weatherFn = opts.weather ?? (() => null);
@@ -526,6 +549,7 @@ export class World {
     this.batsEnabled = opts.bats !== false;
     this.firefliesEnabled = opts.fireflies !== false;
     this.landscape = opts.landscape !== false;
+    this.real = opts.realistic === true;
     const q = opts.quality;
     this.particleScale = q?.particleScale ?? 1;
     this.ambientEffects = q?.ambientEffects ?? 1;
@@ -612,6 +636,11 @@ export class World {
       this.showGrid = q.showGrid;
       this.syncGridColor();
     }
+  }
+
+  /** Switch between the realistic and the (default) enchanted palette. */
+  setRealistic(on: boolean): void {
+    this.real = on;
   }
 
   /** Toggle day birds and migrating flocks without remounting. */
@@ -754,14 +783,17 @@ export class World {
         cloudAlpha * (0.55 + intensity * 0.2 + intensity * intensity * 0.25) +
           Math.max(0, cloudAlpha - 0.5) * 1.2
       );
-      topRGB = desatRGB(topRGB, Math.min(0.85, desat));
-      bottomRGB = desatRGB(bottomRGB, Math.min(0.85, desat));
+      // Enchanted: a cloudy sky stays pearly and blue-tinged, never leaden.
+      const d = this.real ? Math.min(0.85, desat) : Math.min(0.42, desat * 0.55);
+      topRGB = desatRGB(topRGB, d);
+      bottomRGB = desatRGB(bottomRGB, d);
     }
     // Reduced visibility veils the sky — hazy days read soft and milky.
     const haze = wx ? hazeFactor(wx.visibilityM, cloudAlpha) : 0;
     if (haze > 0.02) {
-      topRGB = desatRGB(topRGB, Math.min(0.6, haze * 0.55));
-      bottomRGB = desatRGB(bottomRGB, Math.min(0.6, haze * 0.55));
+      const d = Math.min(0.6, haze * 0.55) * (this.real ? 1 : 0.5);
+      topRGB = desatRGB(topRGB, d);
+      bottomRGB = desatRGB(bottomRGB, d);
     }
     // Full moon nights lift the whole sky a touch — you can feel the silver.
     // A lunar eclipse takes that silver away as the moon goes blood-red.
@@ -793,7 +825,7 @@ export class World {
 
     // Horizon glow at sunrise/sunset — soft warm wash low on the screen.
     // Gone under a solid overcast.
-    if (cloudAlpha < 0.92) drawHorizonGlow(ctx, width, height, h);
+    if (cloudAlpha < 0.92) drawHorizonGlow(ctx, width, height, h, this.real ? 1 : 1.5);
     if (cloudAlpha < 0.5) drawEarthShadow(ctx, width, height, h, (1 - cloudAlpha / 0.5) * (1 - haze));
 
     // Deep solar eclipse: the famous 360° sunset ring low on the horizon.
@@ -816,7 +848,7 @@ export class World {
     // Near solar totality the brightest come out in the midday sky.
     const sa =
       Math.max(starAlpha(h), eclipseDark > 0.55 ? (eclipseDark - 0.55) * 1.4 : 0) *
-      Math.max(0, 1 - cloudAlpha * (0.85 + intensity * 0.2));
+      Math.max(0, 1 - cloudAlpha * (this.real ? 0.85 + intensity * 0.2 : 0.6 + intensity * 0.3));
     if (sa > 0.01) {
       this.updateRealStars(date);
       drawStars(ctx, this.stars, sa, height, moon);
@@ -849,9 +881,10 @@ export class World {
     if (godRays > 0.02) drawGodRays(ctx, width, height, h, godRays);
 
     // Sun / moon: full intensity overcast blacks them out completely.
+    // Enchanted: the sun and moon shine through all but a real storm.
     const celestialDim = Math.max(
       0,
-      1 - cloudAlpha * (0.75 + intensity * intensity * 0.5)
+      1 - cloudAlpha * (this.real ? 0.75 + intensity * intensity * 0.5 : 0.3 + intensity * intensity * 0.5)
     );
     // Ice haloes need a cirrostratus veil and no weather falling out of it.
     const halo =
@@ -910,6 +943,9 @@ export class World {
     if (this.clouds.length > 0 && cloudAlpha > 0) {
       this.drawCloudLayer(ctx, 1, cloudAlpha, wx, h);
       this.drawCloudLayer(ctx, 2, cloudAlpha, wx, h);
+      // Enchanted: the sun's light bleeds through the clouds in front of it
+      // and gilds their edges — a silver lining instead of a lost sun.
+      if (!this.real) this.drawSunBleed(ctx, h, celestialDim * Math.min(1, cloudAlpha * 2));
     }
 
     // Pixel birds drifting across the upper sky on clear-ish days. They
@@ -923,17 +959,19 @@ export class World {
         ? 0
         : dayCreatureAlpha(h) * (1 - cloudAlpha * 0.6)
       : 0;
-    if (dayA > 0.05) this.drawBirds(ctx, dayA, winter ? 0.4 : 1);
+    if (dayA > 0.05) this.drawBirds(ctx, dayA, winter ? (this.real ? 0.4 : 0.7) : 1);
     if (this.flock && dayA > 0.05) this.drawFlock(ctx, dayA);
     if (this.plane) this.drawPlane(ctx, h);
 
     // Fireflies near the lower sky band on clear nights — May to September,
     // and only on warm ones: below ~12 °C they stop flashing, so a cold
     // September night stays dark.
-    const flySeason = month >= 4 && month <= 8 ? 1 : 0;
-    const flyWarm = Math.min(1, Math.max(0, ((wx?.temperatureC ?? 18) - 11) / 3));
+    // Enchanted: fireflies keep April to October and any mild dry night.
+    const flySeason = month >= 4 && month <= 8 ? 1 : !this.real && month >= 3 && month <= 9 ? 0.6 : 0;
+    const flyWarm = Math.min(1, Math.max(0, ((wx?.temperatureC ?? 18) - (this.real ? 11 : 6)) / 3));
     const flyA = this.firefliesEnabled
-      ? fireflyAlpha(h) * flySeason * flyWarm * (1 - cloudAlpha * 0.85)
+      ? fireflyAlpha(h) * flySeason * flyWarm * (1 - cloudAlpha * (this.real ? 0.85 : 0.5)) *
+        (sheltering && !this.real ? 0 : 1)
       : 0;
     if (flyA > 0.05) this.drawFireflies(ctx, flyA);
 
@@ -945,7 +983,7 @@ export class World {
 
     // Fog haze — gradient overlay denser near the ground.
     if (this.fogA > 0.02) {
-      ctx.globalAlpha = this.fogA;
+      ctx.globalAlpha = this.fogA * (this.real ? 1 : 0.7);
       drawFog(ctx, width, height);
       ctx.globalAlpha = 1;
     }
@@ -987,6 +1025,7 @@ export class World {
 
   /** Returns interpolated [top, bottom] sky colors for a given decimal hour. */
   private skyAt(h: number): [RGB, RGB] {
+    const SKY = this.real ? SKY_REAL : SKY_MAGIC;
     for (let i = 0; i < SKY.length; i++) {
       const next = SKY[i];
       if (next.hour > h) {
@@ -1018,24 +1057,31 @@ export class World {
   ): { i: number; heaviness: number; glow: number; top: RGB; bot: RGB; cloudEclipseDark: number } {
     const i = Math.max(0, Math.min(1, wx?.intensity ?? 0));
     // Heaviness drives color: light scattered puffs → charcoal storm bank.
-    const heaviness = Math.min(1, this.heavyBase + i * 0.35 + i * i * 0.55);
-    let top = lerpRGB([236, 238, 244], [72, 74, 90], heaviness);
-    let bot = lerpRGB([150, 156, 176], [26, 26, 38], heaviness);
+    const real = this.real;
+    // Enchanted clouds are lighter all round: white puffs with lavender
+    // bellies, and even a storm bank stays a soft blue-violet, not charcoal.
+    const heaviness = Math.min(1, this.heavyBase + i * 0.35 + i * i * 0.55) * (real ? 1 : 0.7);
+    let top = real
+      ? lerpRGB([236, 238, 244], [72, 74, 90], heaviness)
+      : lerpRGB([255, 253, 255], [150, 152, 186], heaviness);
+    let bot = real
+      ? lerpRGB([150, 156, 176], [26, 26, 38], heaviness)
+      : lerpRGB([200, 196, 232], [78, 76, 118], heaviness);
     // Clouds have no light of their own: after dark they are slate shapes
     // against the stars, faintly lifted by moon and town light.
     const night = 1 - daylight(h);
     if (night > 0) {
-      top = lerpRGB(top, [66, 70, 94], night * 0.88);
-      bot = lerpRGB(bot, [30, 30, 44], night * 0.88);
+      top = lerpRGB(top, real ? [66, 70, 94] : [104, 112, 168], night * 0.88);
+      bot = lerpRGB(bot, real ? [30, 30, 44] : [50, 50, 96], night * 0.88);
     }
     // Golden hour: the low sun lights clouds from below, so the shadowed
     // underside catches fire first and the top edge only blushes. Heavy
     // decks still glow, just ember-dim.
     const glow = horizonGlowStrength(h);
     if (glow > 0.02) {
-      const k = glow * (0.45 + (1 - heaviness) * 0.7);
-      bot = lerpRGB(bot, [255, 120, 55], Math.min(1, 0.85 * k));
-      top = lerpRGB(top, [255, 190, 130], Math.min(1, 0.55 * k));
+      const k = glow * (0.45 + (1 - heaviness) * 0.7) * (real ? 1 : 1.2);
+      bot = lerpRGB(bot, real ? [255, 120, 55] : [255, 112, 120], Math.min(1, 0.85 * k));
+      top = lerpRGB(top, real ? [255, 190, 130] : [255, 206, 150], Math.min(1, 0.55 * k));
     }
     // A deep solar eclipse takes the daylight off the clouds too.
     const cloudEclipseDark = solarEclipseDark(wx);
@@ -1051,6 +1097,26 @@ export class World {
    * rain falls out of cloud instead of out of open sky. Real storms are
    * overcast — no blue gaps between cumulus.
    */
+  /** Enchanted: sunlight glowing through the clouds that cross the sun. */
+  private drawSunBleed(ctx: CanvasRenderingContext2D, h: number, dim: number): void {
+    if (h < SUN_RISE || h > SUN_SET || dim < 0.05) return;
+    const { width, height } = this.state;
+    const t = (h - SUN_RISE) / (SUN_SET - SUN_RISE);
+    const sx = width * (0.08 + t * 0.84);
+    const sy = height * (0.68 - Math.sin(t * Math.PI) * 0.59);
+    const r = Math.min(width, height) * 0.16;
+    const warm = horizonGlowStrength(h);
+    const c = `255, ${(246 - warm * 50) | 0}, ${(214 - warm * 110) | 0}`;
+    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+    g.addColorStop(0, `rgba(${c}, ${(0.55 * dim).toFixed(3)})`);
+    g.addColorStop(0.25, `rgba(${c}, ${(0.22 * dim).toFixed(3)})`);
+    g.addColorStop(1, `rgba(${c}, 0)`);
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = g;
+    ctx.fillRect(sx - r, sy - r, r * 2, r * 2);
+    ctx.globalCompositeOperation = "source-over";
+  }
+
   /** How squarely a formed cloud sits across the sun (0–1): shafts need one. */
   private sunOccluded(h: number, cloudAlpha: number): number {
     const { width, height } = this.state;
@@ -1076,7 +1142,7 @@ export class World {
   ): void {
     const { i, heaviness, top, bot } = this.cloudPalette(wx, h);
     const cover = Math.min(1, this.deckBase + i * 0.5);
-    const a = cover * cloudAlpha;
+    const a = cover * cloudAlpha * (this.real ? 1 : 0.7);
     if (a < 0.05) return;
     const { width, height } = this.state;
     const depth = height * (0.32 + heaviness * 0.16 + i * 0.1);
@@ -1113,7 +1179,7 @@ export class World {
     const { i, heaviness, glow, top, bot, cloudEclipseDark } = this.cloudPalette(wx, h);
     // Distant clouds sink into the haze (atmospheric perspective).
     const layerOpacity = layer === 0 ? 0.6 : layer === 1 ? 0.85 : 1.0;
-    const baseAlpha = Math.min(1, 0.82 + alpha * 0.3 + i * 0.2) * layerOpacity;
+    const baseAlpha = Math.min(this.real ? 1 : 0.92, 0.82 + alpha * 0.3 + i * 0.2) * layerOpacity;
     // Cover decides how many clouds exist, not how ghostly each one is: a
     // 20% sky has a few solid puffs, an overcast one all of them. Under ~7%
     // the head start tapers off, so a clearing sky thins its last puff out
@@ -1164,7 +1230,7 @@ export class World {
       // frame a cloud costs one drawImage.
       const key = `${layer}|${lobes}|${toward}|${Math.round(w / 8)}|${Math.round(ch / 8)}|${Math.round(
         heaviness * 8
-      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}|${Math.round(rimK * 10)}`;
+      )}|${Math.round(glow * 6)}|${Math.round(cloudEclipseDark * 4)}|${Math.round(daylight(h) * 6)}|${isDay ? 1 : 0}|${Math.round(rimK * 10)}|${this.real ? 1 : 0}`;
       if (cloud.spriteKey !== key) {
         cloud.spriteKey = key;
         // Relight by crossfading from whatever is on screen — mid-fade that's
@@ -1688,17 +1754,20 @@ export class World {
     // The land is lit by the same sky: meadow green in sun, cool indigo at
     // night, dark at totality — and settled snow turns it white.
     const day = daylight(h) * (1 - solarEclipseDark(wx));
-    let land = lerpRGB([0x0e, 0x0c, 0x1a], [0x2f, 0x6b, 0x40], day);
+    const real = this.real;
+    let land = real
+      ? lerpRGB([0x0e, 0x0c, 0x1a], [0x2f, 0x6b, 0x40], day)
+      : lerpRGB([0x16, 0x18, 0x3a], [0x42, 0xa2, 0x4e], day);
     if (this.snowCover > 0.02) {
       land = lerpRGB(land, lerpRGB([64, 70, 96], [214, 222, 236], day), this.snowCover * 0.85);
     }
     // Flat overcast light mutes the grass to olive-gray; a storm deck makes
     // the whole landscape leaden. Wet ground reads darker still.
-    land = desatRGB(land, Math.min(0.7, cloudAlpha * 0.75));
+    land = desatRGB(land, Math.min(real ? 0.7 : 0.3, cloudAlpha * 0.75));
     const gloom =
       cloudAlpha * (0.3 + (wx?.intensity ?? 0) * 0.25 + (wx?.thunder ? 0.15 : 0)) +
       this.wetness * 0.08;
-    land = lerpRGB(land, [10, 12, 20], Math.min(0.6, gloom));
+    land = lerpRGB(land, [10, 12, 20], Math.min(real ? 0.6 : 0.25, gloom * (real ? 1 : 0.5)));
     // What isn't lit by the sun is lit by the dome overhead: blue shade at
     // noon, violet at dusk, navy at night.
     land = lerpRGB(land, skyTop, 0.2);
@@ -2000,7 +2069,7 @@ export class World {
     // Appears as the shower clears: ground still wet, rain stopped, sun out.
     if (!wx || wx.precipitation === "rain") return 0;
     if (h < SUN_RISE + 0.3 || h > SUN_SET - 0.3) return 0;
-    return this.wetness * Math.max(0, 1 - cloudAlpha * 1.6) * 0.5;
+    return this.wetness * Math.max(0, 1 - cloudAlpha * (this.real ? 1.6 : 1.1)) * (this.real ? 0.5 : 0.7);
   }
 
 

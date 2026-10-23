@@ -9,6 +9,11 @@ almost nothing.
 The wow is **truth wearing simple clothes**, not spectacle. WebGL always wins
 the spectacle fight; nothing else in this weight class wins the truth fight.
 
+Since 1.8 the clothes are **enchanted** by default (user decision,
+2026-10-23): the truth is unchanged, but the paint is a fairy-tale one —
+bright, colorful, a world you'd want to live in. `realistic: true` keeps
+the true-to-life palette.
+
 Two first-class uses, one package:
 
 - **Ambient background** with live weather (zaur.app).

@@ -29,6 +29,7 @@ const locateBtn = document.getElementById("btn-locate") as HTMLButtonElement;
 const birdsToggle = document.getElementById("opt-birds") as HTMLInputElement;
 const batsToggle = document.getElementById("opt-bats") as HTMLInputElement;
 const firefliesToggle = document.getElementById("opt-fireflies") as HTMLInputElement;
+const realToggle = document.getElementById("opt-real") as HTMLInputElement;
 const wxRadios = document.querySelectorAll('input[name="wx"]') as NodeListOf<HTMLInputElement>;
 const eclipseRadios = document.querySelectorAll(
 	'input[name="eclipse-mode"]'
@@ -84,6 +85,7 @@ if (params.get("grid") === "1") gridToggle.checked = true;
 if (params.get("birds") === "0") birdsToggle.checked = false;
 if (params.get("bats") === "0") batsToggle.checked = false;
 if (params.get("fly") === "0") firefliesToggle.checked = false;
+if (params.get("real") === "1") realToggle.checked = true;
 if (params.get("strip") === "0") stripToggle.checked = false;
 // Zaur: URL wins, then the visitor's saved choice, default on.
 if (params.get("zaur") === "0") zaurToggle.checked = false;
@@ -123,6 +125,7 @@ const sky: WorldHandle = createWorld(canvas, {
 	birds: birdsToggle.checked,
 	bats: batsToggle.checked,
 	fireflies: firefliesToggle.checked,
+	realistic: realToggle.checked,
 	quality: selectedQuality(),
 	onAtmosphereChange: updatePlace,
 });
@@ -669,6 +672,7 @@ function syncUrl(): void {
 	if (!birdsToggle.checked) p.set("birds", "0");
 	if (!batsToggle.checked) p.set("bats", "0");
 	if (!firefliesToggle.checked) p.set("fly", "0");
+	if (realToggle.checked) p.set("real", "1");
 	if (!stripToggle.checked) p.set("strip", "0");
 	const wx = selectedWx();
 	if (wx) p.set("wx", wx);
@@ -1008,6 +1012,8 @@ batsToggle.addEventListener("change", () => {
 	sky.setBats(batsToggle.checked);
 	updateStatus();
 });
+
+realToggle.addEventListener("change", () => sky.setRealistic(realToggle.checked));
 
 firefliesToggle.addEventListener("change", () => {
 	sky.setFireflies(firefliesToggle.checked);

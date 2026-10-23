@@ -23,6 +23,12 @@ with the last sky still drawing when there is no network.
 
 ## What it renders
 
+By default the sky is **enchanted**: every position, phase and forecast is
+real, but the paint is a fairy-tale one — luminous blues, peach dawns,
+rose-and-violet dusks, sapphire nights, white clouds with lavender bellies
+and a sun that shines through them. Pass `realistic: true` for the
+true-to-life palette.
+
 - **A real day** — sky colors keyed to the visitor's actual sunrise and sunset
   (Open-Meteo), so summer evenings stay light late and winter days end early.
   Sun arcs by day. The moon shows its real phase and near-side maria and
@@ -342,6 +348,12 @@ createWorld(canvas, {
   // The land under the sky — hills (and `terrain`), sea, wet ground, snow
   // cover, city glow. false = the sky alone, a quiet wash behind a page.
   landscape: true,
+
+  // Enchanted by default: the same real sky and weather, painted bright —
+  // pearly clouds, a sun that glows through them, lusher hills, longer
+  // firefly seasons. true = the weather as it really looks (leaden
+  // overcast, a sun lost behind cloud). Switch live with sky.setRealistic().
+  realistic: false,
 
   // Prefer browser GPS over IP (real location under VPN). Opt-in.
   // Also: "fallback" (IP first), or sky.relocate() after mount.

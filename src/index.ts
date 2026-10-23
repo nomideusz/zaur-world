@@ -182,6 +182,12 @@ export interface CreateWorldOptions {
    * `false` keeps the sky alone — a quiet wash behind a page. Default true.
    */
   landscape?: boolean;
+  /**
+   * Paint the weather as it really looks — leaden overcast, a sun lost
+   * behind cloud. Default false: the enchanted palette keeps the same
+   * real sky bright, colorful and full of life.
+   */
+  realistic?: boolean;
 }
 
 export interface WorldHandle {
@@ -286,6 +292,8 @@ export interface WorldHandle {
   setBats(enabled: boolean): void;
   /** Toggle summer-evening fireflies in the lower sky band. */
   setFireflies(enabled: boolean): void;
+  /** Switch between the realistic and the (default) enchanted palette. */
+  setRealistic(on: boolean): void;
   /** Current terrain profile, or null while loading / disabled. */
   terrainProfile(): TerrainProfile | null;
   /**
@@ -421,6 +429,7 @@ export function createWorld(
       bats: opts.bats !== false,
       fireflies: opts.fireflies !== false,
       landscape: opts.landscape !== false,
+      realistic: opts.realistic === true,
     }
   );
 
@@ -701,6 +710,9 @@ export function createWorld(
     },
     setFireflies(enabled: boolean): void {
       world.setFireflies(enabled);
+    },
+    setRealistic(on: boolean): void {
+      world.setRealistic(on);
     },
     setBirds(enabled: boolean): void {
       world.setBirds(enabled);

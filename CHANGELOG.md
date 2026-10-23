@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-23
+
+### Changed
+
+- The sky is enchanted by default: the same real sky and weather, painted
+  bright and full of life — luminous azure days, peach dawns, coral and
+  rose dusks, sapphire nights instead of near-black; clouds stay white with
+  lavender bellies (a storm bank is soft blue-violet, not charcoal) and
+  glow pink at sunset; overcast keeps a pearly blue instead of going gray;
+  the sun and moon shine through all but a real storm, and sunlight bleeds
+  through the clouds that cross the sun; hills stay green; fog is lighter;
+  rainbows come more readily, birds stay in winter, fireflies fly April to
+  October on any mild dry night
+
+### Added
+
+- `realistic: true` (and `sky.setRealistic(on)`) keeps the true-to-life
+  palette — leaden overcast, a sun lost behind cloud — exactly as in 1.7
+- Demo: a **Realistic** chip (and `?real=1`)
+
 ## [1.7.0] - 2026-10-18
 
 ### Added
