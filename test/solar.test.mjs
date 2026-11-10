@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { warpHour, auroraLatFactor, meteorRate, venusState, jupiterState, lunarPhase } from "../dist/solar.js";
+import { warpHour, auroraLatFactor, meteorRate, venusState, jupiterState, lunarPhase, moonPhaseName } from "../dist/solar.js";
 
 describe("warpHour", () => {
 	it("maps real sunrise and sunset onto the canonical window", () => {
@@ -58,5 +58,26 @@ describe("lunarPhase", () => {
 	it("returns a fraction between 0 and 1", () => {
 		const p = lunarPhase(new Date());
 		assert.ok(p >= 0 && p < 1);
+	});
+});
+
+describe("moonPhaseName", () => {
+	const DAY = 86_400_000;
+	const NEW_MOON = Date.UTC(2000, 0, 6, 18, 14);
+	const at = (days) => moonPhaseName(new Date(NEW_MOON + days * DAY));
+
+	it("names the four principal phases", () => {
+		assert.equal(at(0), "new");
+		assert.equal(at(7.38), "first quarter");
+		assert.equal(moonPhaseName(new Date(Date.UTC(2000, 0, 21, 4, 40))), "full"); // total lunar eclipse
+		assert.equal(at(22.15), "last quarter");
+	});
+
+	it("names the phases in between, and wraps back to new", () => {
+		assert.equal(at(3.7), "waxing crescent");
+		assert.equal(at(11), "waxing gibbous");
+		assert.equal(at(18.5), "waning gibbous");
+		assert.equal(at(25.8), "waning crescent");
+		assert.equal(at(29), "new");
 	});
 });

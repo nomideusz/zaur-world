@@ -98,6 +98,37 @@ export function lunarPhase(date: Date): number {
 	return (((elapsed % MOON_SYNODIC_MS) + MOON_SYNODIC_MS) % MOON_SYNODIC_MS) / MOON_SYNODIC_MS;
 }
 
+/** The eight named phases, in the order the moon passes through them. */
+export type MoonPhaseName =
+	| "new"
+	| "waxing crescent"
+	| "first quarter"
+	| "waxing gibbous"
+	| "full"
+	| "waning gibbous"
+	| "last quarter"
+	| "waning crescent";
+
+const MOON_PHASE_NAMES: readonly MoonPhaseName[] = [
+	"new",
+	"waxing crescent",
+	"first quarter",
+	"waxing gibbous",
+	"full",
+	"waning gibbous",
+	"last quarter",
+	"waning crescent",
+];
+
+/**
+ * The moon the sky is drawing, in words — for a caption beside it. Eight
+ * equal slices of the cycle, each centred on its phase, so "full" covers
+ * about 1.8 days either side of the exact moment.
+ */
+export function moonPhaseName(date: Date): MoonPhaseName {
+	return MOON_PHASE_NAMES[Math.round(lunarPhase(date) * 8) % 8];
+}
+
 /**
  * Subtle golden warmth on summer-afternoon skies within ~15 days of solstice.
  * Hemisphere-aware via latitude sign.

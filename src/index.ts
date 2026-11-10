@@ -81,6 +81,8 @@ export {
   venusState,
   jupiterState,
   lunarPhase,
+  moonPhaseName,
+  type MoonPhaseName,
   meteorRate,
   auroraLatFactor,
   solsticeWarmth,

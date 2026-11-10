@@ -419,6 +419,14 @@ import { deriveConditions } from "@nomideusz/zaur-world/weather";
 import { warpHour, solsticeWarmth } from "@nomideusz/zaur-world/solar";
 ```
 
+`/solar` also names tonight's moon, for a caption beside the sky:
+
+```ts
+import { moonPhaseName } from "@nomideusz/zaur-world/solar";
+
+moonPhaseName(new Date()); // "waxing gibbous"
+```
+
 ### Snapshot
 
 ```ts

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-10
+
+### Added
+
+- `moonPhaseName(date)` (main entry and `/solar`): the moon the sky is drawing, in words — `"new"`, `"waxing crescent"`, `"first quarter"`, `"waxing gibbous"`, `"full"`, `"waning gibbous"`, `"last quarter"`, `"waning crescent"` — for a caption beside the sky. Type `MoonPhaseName`.
+
 ### Changed
 
 - The live demo's address is [zaur-world.netlify.app](https://zaur-world.netlify.app); `dino.zaur.app` is retired, and every link here points at the new address.
