@@ -5,10 +5,10 @@ A living ambient sky for any web page, on a single `<canvas>`.
 **~25 kB min+gzip · zero dependencies · no API keys · no build step required.**
 
 Born as a page backdrop; now a small weather product of its own at
-[dino.zaur.app](https://dino.zaur.app), where a pixel dinosaur named Zaur
+[zaur-world.netlify.app](https://zaur-world.netlify.app), where a pixel dinosaur named Zaur
 walks beneath it.
 
-**[Live demo](https://dino.zaur.app)** — opens on a clear, unobstructed sky
+**[Live demo](https://zaur-world.netlify.app)** — opens on a clear, unobstructed sky
 with a small toggle in the corner to reveal the controls. Hit **▶ Play 24
 hours** for a 30-second tour through dawn, golden hour, dusk, and the night
 sky, with the hourly forecast riding along beside the clock — or scrub the

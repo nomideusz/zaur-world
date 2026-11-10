@@ -63,7 +63,7 @@
 		"type": "git",
 		"url": "git+https://github.com/nomideusz/zaur-world.git"
 	},
-	"homepage": "https://dino.zaur.app",
+	"homepage": "https://zaur-world.netlify.app",
 	"publishConfig": {
 		"access": "public"
 	},

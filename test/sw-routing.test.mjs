@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // global rather than imported. Only strategyFor is exercised; the cache plumbing
 // around it is browser-side and verified by actually installing the demo.
 const swPath = fileURLToPath(new URL("../demo/public/sw.js", import.meta.url));
-const origin = "https://dino.zaur.app";
+const origin = "https://zaur-world.netlify.app";
 
 const context = createContext({
 	URL,

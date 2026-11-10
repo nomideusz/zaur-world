@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The live demo's address is [zaur-world.netlify.app](https://zaur-world.netlify.app); `dino.zaur.app` is retired, and every link here points at the new address.
+
 ## [1.8.0] - 2026-10-23
 
 ### Changed
@@ -266,14 +270,14 @@ follow semver — breaking changes require a major version.
 
 ### Changed
 
-- npm homepage now points at the live sky: [dino.zaur.app](https://dino.zaur.app)
+- npm homepage now points at the live sky: [zaur-world.netlify.app](https://zaur-world.netlify.app)
 
 ## [0.14.0] - 2026-07-27
 
 ### Added
 
 - Solar eclipses now darken the world, not just the sun: ambient sky/cloud/hill light plunges quartically toward twilight-dark near totality, the brightest stars come out, and a 360° sunset-colored ring hugs the horizon at deep eclipse. Lunar eclipses remove the full-moon silver lift as the moon goes blood-red
-- Demo is now the product page for dino.zaur.app: Zaur the pixel dinosaur walks the bottom of the page (ambient routines driven by the sky's hour — he gets sleepy when you scrub to night; on by default, Tweaks → Zaur or `?zaur=0` to hide, remembered per visitor), the header place name is the single location control (popover with GPS, city search, presets), one global "Back to live" reset (also Esc), Golden/Night one-click moments on the day strip, tour speeds ¼×–4×, and a Share button (native share sheet / link copy)
+- Demo is now the product page for zaur-world.netlify.app: Zaur the pixel dinosaur walks the bottom of the page (ambient routines driven by the sky's hour — he gets sleepy when you scrub to night; on by default, Tweaks → Zaur or `?zaur=0` to hide, remembered per visitor), the header place name is the single location control (popover with GPS, city search, presets), one global "Back to live" reset (also Esc), Golden/Night one-click moments on the day strip, tour speeds ¼×–4×, and a Share button (native share sheet / link copy)
 
 ### Changed
 

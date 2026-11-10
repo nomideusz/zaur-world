@@ -17,7 +17,7 @@ the true-to-life palette.
 Two first-class uses, one package:
 
 - **Ambient background** with live weather (zaur.app).
-- **24-hour forecast scrubbing** — the sky *is* the forecast UI (dino.zaur.app).
+- **24-hour forecast scrubbing** — the sky *is* the forecast UI (zaur-world.netlify.app).
 
 Zaur the dinosaur is part of the package — it is zaur-world — but **off by
 default**: the sky ships alone unless the host opts him in.
@@ -48,7 +48,7 @@ Polish and freeze — mostly not adding.
       rain, storm, snow, gray/overcast, fog (`?wx=` + `?h=` demo params
       make each reproducible).
 - [x] **Forecast mode first-class**: `setForecastHour` / `forecast()` /
-      scrub / tour documented in README — the dino.zaur.app contract.
+      scrub / tour documented in README — the zaur-world.netlify.app contract.
 - [x] **Zaur in the package**: `@nomideusz/zaur-world/zaur`, off by
       default, weather reactions included, ~5 KB opt-in entry.
 - [x] **Perf statement we can print**: bounded per-frame work by design
